@@ -88,7 +88,9 @@ jQuery(async () => {
         lastFeedTime: Date.now(),
         lastPlayTime: Date.now(),
         lastSleepTime: Date.now(),
-        created: Date.now()
+        lastUpdateTime: Date.now(),
+        created: Date.now(),
+        dataVersion: 2.0 // 数据版本标记
     };
     
     // ----------------------------------------------------------------- 
@@ -102,10 +104,45 @@ jQuery(async () => {
         const saved = localStorage.getItem(STORAGE_KEY_PET_DATA);
         if (saved) {
             try {
-                petData = { ...petData, ...JSON.parse(saved) };
+                const savedData = JSON.parse(saved);
+
+                // 检查是否需要数据迁移（版本2.0 - 新的数值平衡）
+                const needsMigration = !savedData.dataVersion || savedData.dataVersion < 2.0;
+
+                if (needsMigration) {
+                    console.log(`[${extensionName}] 检测到旧数据，执行数据迁移...`);
+
+                    // 保留用户的自定义设置
+                    const migratedData = {
+                        ...petData, // 使用新的默认值
+                        name: savedData.name || petData.name, // 保留自定义名字
+                        type: savedData.type || petData.type, // 保留宠物类型
+                        level: savedData.level || petData.level, // 保留等级
+                        experience: savedData.experience || petData.experience, // 保留经验
+                        created: savedData.created || petData.created, // 保留创建时间
+                        lastFeedTime: savedData.lastFeedTime || petData.lastFeedTime,
+                        lastPlayTime: savedData.lastPlayTime || petData.lastPlayTime,
+                        lastSleepTime: savedData.lastSleepTime || petData.lastSleepTime,
+                        lastUpdateTime: savedData.lastUpdateTime || petData.lastUpdateTime,
+                        dataVersion: 2.0 // 标记为新版本数据
+                    };
+
+                    petData = migratedData;
+                    savePetData(); // 保存迁移后的数据
+
+                    console.log(`[${extensionName}] 数据迁移完成！新的初始数值已应用`);
+                    console.log(`健康: ${petData.health}, 快乐: ${petData.happiness}, 饱食: ${petData.hunger}, 精力: ${petData.energy}`);
+                } else {
+                    // 数据版本正确，直接加载
+                    petData = { ...petData, ...savedData };
+                }
             } catch (error) {
                 console.error(`[${extensionName}] Error loading pet data:`, error);
             }
+        } else {
+            // 没有保存的数据，添加版本标记
+            petData.dataVersion = 2.0;
+            savePetData();
         }
     }
     
@@ -987,7 +1024,8 @@ jQuery(async () => {
             lastPlayTime: Date.now(),
             lastSleepTime: Date.now(),
             created: Date.now(),
-            lastUpdateTime: Date.now()
+            lastUpdateTime: Date.now(),
+            dataVersion: 2.0 // 数据版本标记
         };
 
         savePetData();
@@ -2485,6 +2523,46 @@ jQuery(async () => {
         }, 100);
     };
 
+    // 强制清理旧数据并应用新数值
+    window.forceDataMigration = function() {
+        console.log("🔄 强制执行数据迁移...");
+
+        // 清理localStorage中的旧数据
+        localStorage.removeItem(STORAGE_KEY_PET_DATA);
+
+        // 重置为新的初始数值
+        petData = {
+            name: petData.name || "小宠物", // 保留当前名字
+            type: "cat",
+            level: 1,
+            experience: 0,
+            health: 40,
+            happiness: 30,
+            hunger: 50,
+            energy: 60,
+            lastFeedTime: Date.now(),
+            lastPlayTime: Date.now(),
+            lastSleepTime: Date.now(),
+            lastUpdateTime: Date.now(),
+            created: Date.now(),
+            dataVersion: 2.0
+        };
+
+        // 保存新数据
+        savePetData();
+
+        // 更新UI
+        updateUnifiedUIStatus();
+
+        console.log("✅ 数据迁移完成！新的初始数值:");
+        console.log(`健康: ${petData.health}/100`);
+        console.log(`快乐度: ${petData.happiness}/100`);
+        console.log(`饱食度: ${petData.hunger}/100`);
+        console.log(`精力: ${petData.energy}/100`);
+
+        alert("数据迁移完成！新的初始数值已应用。");
+    };
+
     // 测试新的数值平衡
     window.testNewBalance = function() {
         console.log("🎯 测试新的数值平衡系统...");
@@ -2605,6 +2683,66 @@ jQuery(async () => {
 
         console.log("数值变化:", changes);
         updateUnifiedUIStatus();
+    };
+
+    // 验证数值修复效果
+    window.verifyInitialValues = function() {
+        console.log("🔍 验证初始数值修复效果...");
+
+        // 检查当前数值
+        console.log("\n📊 当前宠物数值:");
+        console.log(`健康: ${petData.health}/100 ${petData.health === 40 ? '✅' : '❌ 应为40'}`);
+        console.log(`快乐度: ${petData.happiness}/100 ${petData.happiness === 30 ? '✅' : '❌ 应为30'}`);
+        console.log(`饱食度: ${petData.hunger}/100 ${petData.hunger === 50 ? '✅' : '❌ 应为50'}`);
+        console.log(`精力: ${petData.energy}/100 ${petData.energy === 60 ? '✅' : '❌ 应为60'}`);
+        console.log(`数据版本: ${petData.dataVersion} ${petData.dataVersion === 2.0 ? '✅' : '❌ 应为2.0'}`);
+
+        // 检查UI显示
+        console.log("\n🖥️ UI显示检查:");
+        const healthDisplay = $('.status-item').find('span').filter(function() {
+            return $(this).text().includes('健康');
+        }).next().text();
+
+        const happinessDisplay = $('.status-item').find('span').filter(function() {
+            return $(this).text().includes('快乐');
+        }).next().text();
+
+        console.log(`UI健康显示: ${healthDisplay}`);
+        console.log(`UI快乐显示: ${happinessDisplay}`);
+
+        // 检查是否需要迁移
+        const needsMigration = petData.health === 100 || petData.happiness === 100;
+
+        if (needsMigration) {
+            console.log("\n⚠️ 检测到旧数值，建议执行数据迁移:");
+            console.log("请运行: forceDataMigration()");
+            return false;
+        } else {
+            console.log("\n✅ 数值修复成功！新的初始数值已正确应用。");
+            return true;
+        }
+    };
+
+    // 检查localStorage中的数据
+    window.checkStoredData = function() {
+        console.log("💾 检查localStorage中的数据...");
+
+        const stored = localStorage.getItem(STORAGE_KEY_PET_DATA);
+        if (stored) {
+            try {
+                const data = JSON.parse(stored);
+                console.log("存储的数据:", data);
+                console.log(`数据版本: ${data.dataVersion || '未设置'}`);
+                console.log(`健康: ${data.health}`);
+                console.log(`快乐度: ${data.happiness}`);
+                console.log(`饱食度: ${data.hunger}`);
+                console.log(`精力: ${data.energy}`);
+            } catch (e) {
+                console.error("解析存储数据失败:", e);
+            }
+        } else {
+            console.log("没有找到存储的数据");
+        }
     };
 
     // 测试头像功能

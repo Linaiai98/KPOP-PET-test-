@@ -42,7 +42,8 @@
                 0 0 0 1px rgba(0,0,0,0.5) !important;
     transition: transform 0.2s ease-out,
                 box-shadow 0.2s ease-out,
-                color 0.2s ease-out !important;
+                color 0.2s ease-out,
+                opacity 0.2s ease-out !important;
     user-select: none !important;
     /* 确保可见性和正确定位 */
     opacity: 1 !important;
@@ -58,6 +59,30 @@
     left: 20px !important;
     bottom: auto !important;
     right: auto !important;
+}
+
+/* 拖动状态样式 */
+#virtual-pet-button:active,
+#virtual-pet-button.dragging {
+    cursor: grabbing !important;
+    opacity: 0.8 !important;
+    transform: scale(1.05) !important;
+    box-shadow: 0 6px 12px rgba(0,0,0,0.4),
+                inset 0 2px 2px rgba(255,255,255,0.05),
+                0 0 0 1px rgba(0,0,0,0.5) !important;
+}
+
+/* 确保拖动时的样式优先级最高 */
+#virtual-pet-button[style*="grabbing"] {
+    cursor: grabbing !important;
+}
+
+#virtual-pet-button[style*="opacity: 0.8"] {
+    opacity: 0.8 !important;
+}
+
+#virtual-pet-button[style*="scale(1.05)"] {
+    transform: scale(1.05) !important;
 }
 
 #virtual-pet-button:hover {

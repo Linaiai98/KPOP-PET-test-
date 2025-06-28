@@ -491,6 +491,89 @@ jQuery(async () => {
     };
 
     /**
+     * 编辑宠物名字
+     */
+    window.editPetName = function() {
+        const currentName = petData.name;
+        const newName = prompt('请输入新的宠物名字:', currentName);
+
+        if (newName && newName.trim() && newName.trim() !== currentName) {
+            const trimmedName = newName.trim();
+            if (trimmedName.length > 20) {
+                alert('宠物名字不能超过20个字符！');
+                return;
+            }
+
+            petData.name = trimmedName;
+            savePetData();
+
+            // 更新所有UI中的名字显示
+            updateUnifiedUIStatus();
+
+            // 显示成功消息
+            if (typeof toastr !== 'undefined') {
+                toastr.success(`宠物名字已更改为 "${trimmedName}"`);
+            } else {
+                alert(`宠物名字已更改为 "${trimmedName}"`);
+            }
+        }
+    };
+
+    /**
+     * 更新统一UI中的状态显示
+     */
+    function updateUnifiedUIStatus() {
+        // 更新移动端和桌面端UI中的状态条
+        const healthBars = $('.status-item').find('div[style*="background: ' + candyColors.health + '"]');
+        const hungerBars = $('.status-item').find('div[style*="background: ' + candyColors.warning + '"]');
+        const happinessBars = $('.status-item').find('div[style*="background: ' + candyColors.happiness + '"]');
+
+        // 更新健康状态
+        healthBars.each(function() {
+            $(this).css('width', petData.health + '%');
+        });
+
+        // 更新饱食度状态
+        hungerBars.each(function() {
+            $(this).css('width', petData.hunger + '%');
+        });
+
+        // 更新快乐度状态
+        happinessBars.each(function() {
+            $(this).css('width', petData.happiness + '%');
+        });
+
+        // 更新数值显示
+        $('.status-item').each(function() {
+            const $item = $(this);
+            const label = $item.find('span').first().text();
+
+            if (label.includes('健康')) {
+                $item.find('span').last().text(Math.round(petData.health) + '/100');
+            } else if (label.includes('饱食度')) {
+                $item.find('span').last().text(Math.round(petData.hunger) + '/100');
+            } else if (label.includes('快乐度')) {
+                $item.find('span').last().text(Math.round(petData.happiness) + '/100');
+            }
+        });
+
+        // 更新宠物名字和等级
+        $('.pet-name').each(function() {
+            $(this).text(petData.name);
+            // 确保点击事件仍然存在
+            if (!$(this).attr('onclick')) {
+                $(this).attr('onclick', 'editPetName()');
+                $(this).attr('title', '点击编辑宠物名字');
+                $(this).css({
+                    'cursor': 'pointer',
+                    'text-decoration': 'underline'
+                });
+            }
+        });
+        $('.pet-level').text('Lv.' + petData.level);
+    }
+
+    /**
      * 显示头像右键菜单
      */
     window.showAvatarContextMenu = function(event) {
@@ -2273,6 +2356,135 @@ jQuery(async () => {
         return true;
     };
 
+    // 测试所有修复的功能
+    window.testAllFixedFeatures = function() {
+        console.log("🎯 开始测试所有修复的功能...");
+
+        // 1. 测试玩耍图标
+        console.log("\n1. 测试玩耍图标:");
+        const playButtons = $('.play-btn span').first();
+        const playIconText = playButtons.text();
+        const playIconCorrect = playIconText.includes('🎮') && !playIconText.includes('�');
+        console.log(`玩耍图标: ${playIconCorrect ? '✅ 正确显示🎮' : '❌ 显示异常: ' + playIconText}`);
+
+        // 2. 测试宠物名字功能
+        console.log("\n2. 测试宠物名字功能:");
+        const petNameElements = $('.pet-name');
+        const hasNameElements = petNameElements.length > 0;
+        const hasClickEvent = petNameElements.first().attr('onclick') === 'editPetName()';
+        const hasEditFunction = typeof window.editPetName === 'function';
+        console.log(`名字元素: ${hasNameElements ? '✅ 找到' : '❌ 未找到'} (${petNameElements.length}个)`);
+        console.log(`点击事件: ${hasClickEvent ? '✅ 已绑定' : '❌ 未绑定'}`);
+        console.log(`编辑函数: ${hasEditFunction ? '✅ 存在' : '❌ 不存在'}`);
+        console.log(`当前名字: "${petData.name}"`);
+
+        // 3. 测试按钮功能
+        console.log("\n3. 测试按钮功能:");
+        const feedBtn = $('.feed-btn');
+        const playBtn = $('.play-btn');
+        const sleepBtn = $('.sleep-btn');
+
+        console.log(`喂食按钮: ${feedBtn.length > 0 ? '✅ 存在' : '❌ 不存在'}`);
+        console.log(`玩耍按钮: ${playBtn.length > 0 ? '✅ 存在' : '❌ 不存在'}`);
+        console.log(`睡觉按钮: ${sleepBtn.length > 0 ? '✅ 存在' : '❌ 不存在'}`);
+
+        // 4. 测试状态数值
+        console.log("\n4. 测试状态数值:");
+        console.log(`健康: ${Math.round(petData.health)}/100`);
+        console.log(`饱食度: ${Math.round(petData.hunger)}/100`);
+        console.log(`快乐度: ${Math.round(petData.happiness)}/100`);
+        console.log(`精力: ${Math.round(petData.energy)}/100`);
+        console.log(`等级: ${petData.level}`);
+
+        // 5. 测试糖果色主题
+        console.log("\n5. 测试糖果色主题:");
+        const hasCandy = typeof candyColors !== 'undefined';
+        console.log(`糖果色配置: ${hasCandy ? '✅ 已加载' : '❌ 未加载'}`);
+        if (hasCandy) {
+            console.log(`主色调: ${candyColors.primary}`);
+            console.log(`背景: ${candyColors.background}`);
+        }
+
+        // 6. 测试UI更新函数
+        console.log("\n6. 测试UI更新函数:");
+        const hasUpdateFunction = typeof updateUnifiedUIStatus === 'function';
+        console.log(`更新函数: ${hasUpdateFunction ? '✅ 存在' : '❌ 不存在'}`);
+
+        // 总结
+        const allTests = [playIconCorrect, hasNameElements, hasClickEvent, hasEditFunction,
+                         feedBtn.length > 0, playBtn.length > 0, sleepBtn.length > 0, hasCandy, hasUpdateFunction];
+        const passedTests = allTests.filter(test => test).length;
+        const totalTests = allTests.length;
+
+        console.log(`\n🎯 测试总结: ${passedTests}/${totalTests} 项通过`);
+
+        if (passedTests === totalTests) {
+            console.log("🎉 所有功能测试通过！");
+        } else {
+            console.log("⚠️ 部分功能需要检查");
+        }
+
+        return {
+            passed: passedTests,
+            total: totalTests,
+            success: passedTests === totalTests
+        };
+    };
+
+    // 模拟按钮点击测试
+    window.testButtonClicks = function() {
+        console.log("🎯 测试按钮点击功能...");
+
+        const initialHealth = petData.health;
+        const initialHunger = petData.hunger;
+        const initialHappiness = petData.happiness;
+        const initialEnergy = petData.energy;
+
+        console.log("初始状态:", {
+            health: Math.round(initialHealth),
+            hunger: Math.round(initialHunger),
+            happiness: Math.round(initialHappiness),
+            energy: Math.round(initialEnergy)
+        });
+
+        // 模拟喂食
+        console.log("\n模拟喂食...");
+        feedPet();
+
+        setTimeout(() => {
+            console.log("喂食后状态:", {
+                health: Math.round(petData.health),
+                hunger: Math.round(petData.hunger),
+                happiness: Math.round(petData.happiness),
+                energy: Math.round(petData.energy)
+            });
+
+            const hungerChanged = petData.hunger !== initialHunger;
+            console.log(`饱食度变化: ${hungerChanged ? '✅ 正常' : '❌ 无变化'}`);
+
+            // 模拟玩耍
+            console.log("\n模拟玩耍...");
+            playWithPet();
+
+            setTimeout(() => {
+                console.log("玩耍后状态:", {
+                    health: Math.round(petData.health),
+                    hunger: Math.round(petData.hunger),
+                    happiness: Math.round(petData.happiness),
+                    energy: Math.round(petData.energy)
+                });
+
+                const happinessChanged = petData.happiness !== initialHappiness;
+                console.log(`快乐度变化: ${happinessChanged ? '✅ 正常' : '❌ 无变化'}`);
+
+                // 更新UI显示
+                updateUnifiedUIStatus();
+                console.log("✅ UI状态已更新");
+
+            }, 100);
+        }, 100);
+    };
+
     // 测试头像功能
     window.testAvatarFunction = function() {
         console.log("🎯 测试头像功能...");
@@ -2327,11 +2539,21 @@ jQuery(async () => {
 
         if (allFunctionsExist) {
             console.log("📋 使用说明:");
-            console.log("  - 点击弹窗中的圆形头像框可以更换头像");
-            console.log("  - 右键点击头像框可以重置为默认头像");
-            console.log("  - 自定义头像会同时显示在弹窗和悬浮按钮中");
-            console.log("  - 头像图片会自动裁剪为圆形并完全填充");
-            console.log("  - 界面简洁，无多余按钮");
+            console.log("  🎨 头像功能:");
+            console.log("    - 点击圆形头像框可以更换头像");
+            console.log("    - 右键点击头像框可以重置为默认头像");
+            console.log("    - 自定义头像会同时显示在弹窗和悬浮按钮中");
+            console.log("  📝 名字功能:");
+            console.log("    - 点击宠物名字可以编辑修改");
+            console.log("    - 支持最多20个字符的自定义名字");
+            console.log("  🎮 交互功能:");
+            console.log("    - 🍖 喂食：增加饱食度和快乐度");
+            console.log("    - 🎮 玩耍：增加快乐度，消耗精力");
+            console.log("    - 😴 睡觉：恢复精力和健康");
+            console.log("  🎨 界面特色:");
+            console.log("    - 糖果色主题，明亮清新");
+            console.log("    - 无背景框架，元素融入背景");
+            console.log("    - 实时数值更新，状态条动画");
         }
 
         return allFunctionsExist;
@@ -2898,28 +3120,28 @@ jQuery(async () => {
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
                                 <span style="color: ${candyColors.textSecondary} !important; font-size: 0.8em !important;">❤️ 健康</span>
-                                <span style="color: ${candyColors.health} !important; font-size: 0.8em !important;">85/100</span>
+                                <span style="color: ${candyColors.health} !important; font-size: 0.8em !important;">${Math.round(petData.health)}/100</span>
                             </div>
                             <div style="background: ${candyColors.border} !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: ${candyColors.health} !important; height: 100% !important; width: 85% !important; transition: width 0.3s ease !important;"></div>
+                                <div style="background: ${candyColors.health} !important; height: 100% !important; width: ${petData.health}% !important; transition: width 0.3s ease !important;"></div>
                             </div>
                         </div>
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
                                 <span style="color: ${candyColors.textSecondary} !important; font-size: 0.8em !important;">🍖 饱食度</span>
-                                <span style="color: ${candyColors.warning} !important; font-size: 0.8em !important;">60/100</span>
+                                <span style="color: ${candyColors.warning} !important; font-size: 0.8em !important;">${Math.round(petData.hunger)}/100</span>
                             </div>
                             <div style="background: ${candyColors.border} !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: ${candyColors.warning} !important; height: 100% !important; width: 60% !important; transition: width 0.3s ease !important;"></div>
+                                <div style="background: ${candyColors.warning} !important; height: 100% !important; width: ${petData.hunger}% !important; transition: width 0.3s ease !important;"></div>
                             </div>
                         </div>
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
                                 <span style="color: ${candyColors.textSecondary} !important; font-size: 0.8em !important;">😊 快乐度</span>
-                                <span style="color: ${candyColors.happiness} !important; font-size: 0.8em !important;">75/100</span>
+                                <span style="color: ${candyColors.happiness} !important; font-size: 0.8em !important;">${Math.round(petData.happiness)}/100</span>
                             </div>
                             <div style="background: ${candyColors.border} !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: ${candyColors.happiness} !important; height: 100% !important; width: 75% !important; transition: width 0.3s ease !important;"></div>
+                                <div style="background: ${candyColors.happiness} !important; height: 100% !important; width: ${petData.happiness}% !important; transition: width 0.3s ease !important;"></div>
                             </div>
                         </div>
                     </div>
@@ -3063,8 +3285,8 @@ jQuery(async () => {
                     " onclick="openAvatarSelector()" oncontextmenu="showAvatarContextMenu(event)" title="点击更换头像，右键重置">
                         ${getAvatarContent()}
                     </div>
-                    <div class="pet-name" style="font-size: 1.3em !important; font-weight: bold !important; margin-bottom: 4px !important; color: ${candyColors.textPrimary} !important;">小宠物</div>
-                    <div class="pet-level" style="color: ${candyColors.primary} !important; font-size: 1em !important;">Lv.1</div>
+                    <div class="pet-name" style="font-size: 1.3em !important; font-weight: bold !important; margin-bottom: 4px !important; color: ${candyColors.textPrimary} !important; cursor: pointer !important; text-decoration: underline !important;" onclick="editPetName()" title="点击编辑宠物名字">${petData.name}</div>
+                    <div class="pet-level" style="color: ${candyColors.primary} !important; font-size: 1em !important;">Lv.${petData.level}</div>
                 </div>
 
                 <!-- 宠物状态栏 -->
@@ -3076,28 +3298,28 @@ jQuery(async () => {
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
                                 <span style="color: ${candyColors.textSecondary} !important; font-size: 0.9em !important;">❤️ 健康</span>
-                                <span style="color: ${candyColors.health} !important; font-size: 0.9em !important;">85/100</span>
+                                <span style="color: ${candyColors.health} !important; font-size: 0.9em !important;">${Math.round(petData.health)}/100</span>
                             </div>
                             <div style="background: ${candyColors.border} !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: ${candyColors.health} !important; height: 100% !important; width: 85% !important; transition: width 0.3s ease !important;"></div>
+                                <div style="background: ${candyColors.health} !important; height: 100% !important; width: ${petData.health}% !important; transition: width 0.3s ease !important;"></div>
                             </div>
                         </div>
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
                                 <span style="color: ${candyColors.textSecondary} !important; font-size: 0.9em !important;">🍖 饱食度</span>
-                                <span style="color: ${candyColors.warning} !important; font-size: 0.9em !important;">60/100</span>
+                                <span style="color: ${candyColors.warning} !important; font-size: 0.9em !important;">${Math.round(petData.hunger)}/100</span>
                             </div>
                             <div style="background: ${candyColors.border} !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: ${candyColors.warning} !important; height: 100% !important; width: 60% !important; transition: width 0.3s ease !important;"></div>
+                                <div style="background: ${candyColors.warning} !important; height: 100% !important; width: ${petData.hunger}% !important; transition: width 0.3s ease !important;"></div>
                             </div>
                         </div>
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
                                 <span style="color: ${candyColors.textSecondary} !important; font-size: 0.9em !important;">😊 快乐度</span>
-                                <span style="color: ${candyColors.happiness} !important; font-size: 0.9em !important;">75/100</span>
+                                <span style="color: ${candyColors.happiness} !important; font-size: 0.9em !important;">${Math.round(petData.happiness)}/100</span>
                             </div>
                             <div style="background: ${candyColors.border} !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: ${candyColors.happiness} !important; height: 100% !important; width: 75% !important; transition: width 0.3s ease !important;"></div>
+                                <div style="background: ${candyColors.happiness} !important; height: 100% !important; width: ${petData.happiness}% !important; transition: width 0.3s ease !important;"></div>
                             </div>
                         </div>
                     </div>
@@ -3142,7 +3364,7 @@ jQuery(async () => {
                         gap: 6px !important;
                         transition: background 0.2s ease !important;
                     ">
-                        <span style="font-size: 1.1em !important;">�</span>
+                        <span style="font-size: 1.1em !important;">🎮</span>
                         <span>玩耍</span>
                     </button>
                     <button class="action-btn sleep-btn" style="
@@ -3205,24 +3427,33 @@ jQuery(async () => {
         $container.find(".feed-btn").on("click touchend", function(e) {
             e.preventDefault();
             console.log("🍖 喂食宠物");
-            // 这里可以添加喂食逻辑
-            showNotification("🍖 宠物吃得很开心！", "success");
+            feedPet();
+            // 更新UI显示
+            setTimeout(() => {
+                updateUnifiedUIStatus();
+            }, 100);
         });
 
         // 玩耍按钮
         $container.find(".play-btn").on("click touchend", function(e) {
             e.preventDefault();
             console.log("🎮 和宠物玩耍");
-            // 这里可以添加玩耍逻辑
-            showNotification("🎮 宠物玩得很开心！", "success");
+            playWithPet();
+            // 更新UI显示
+            setTimeout(() => {
+                updateUnifiedUIStatus();
+            }, 100);
         });
 
         // 休息按钮
         $container.find(".sleep-btn").on("click touchend", function(e) {
             e.preventDefault();
             console.log("😴 宠物休息");
-            // 这里可以添加休息逻辑
-            showNotification("😴 宠物正在休息...", "info");
+            petSleep();
+            // 更新UI显示
+            setTimeout(() => {
+                updateUnifiedUIStatus();
+            }, 100);
         });
 
         // 设置按钮
@@ -3230,6 +3461,12 @@ jQuery(async () => {
             e.preventDefault();
             console.log("⚙️ 打开设置");
             showNotification("⚙️ 设置功能开发中...", "info");
+        });
+
+        // 宠物名字点击事件（备用，主要通过onclick属性）
+        $container.find(".pet-name").on("click touchend", function(e) {
+            e.preventDefault();
+            editPetName();
         });
 
         console.log(`[${extensionName}] Unified UI events bound successfully`);

@@ -81,10 +81,10 @@ jQuery(async () => {
         type: "cat", // cat, dog, dragon, etc.
         level: 1,
         experience: 0,
-        health: 100,
-        happiness: 100,
+        health: 40,
+        happiness: 30,
         hunger: 50,
-        energy: 100,
+        energy: 60,
         lastFeedTime: Date.now(),
         lastPlayTime: Date.now(),
         lastSleepTime: Date.now(),
@@ -128,19 +128,19 @@ jQuery(async () => {
         const timeSinceLastUpdate = now - (petData.lastUpdateTime || now);
         const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
         
-        // 随时间降低的属性
-        if (hoursElapsed > 0.1) { // 每6分钟更新一次
-            petData.hunger = Math.max(0, petData.hunger - hoursElapsed * 2);
-            petData.energy = Math.max(0, petData.energy - hoursElapsed * 1.5);
-            
-            // 饥饿和疲劳影响健康和快乐
+        // 随时间降低的属性（减缓衰减速度）
+        if (hoursElapsed > 0.2) { // 每12分钟更新一次
+            petData.hunger = Math.max(0, petData.hunger - hoursElapsed * 0.8);
+            petData.energy = Math.max(0, petData.energy - hoursElapsed * 0.6);
+
+            // 饥饿和疲劳影响健康和快乐（减缓影响）
             if (petData.hunger < 20) {
-                petData.health = Math.max(0, petData.health - hoursElapsed * 3);
-                petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 2);
+                petData.health = Math.max(0, petData.health - hoursElapsed * 1);
+                petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 0.8);
             }
-            
+
             if (petData.energy < 20) {
-                petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 1);
+                petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 0.5);
             }
             
             petData.lastUpdateTime = now;
@@ -158,17 +158,17 @@ jQuery(async () => {
         const now = Date.now();
         const timeSinceLastFeed = now - petData.lastFeedTime;
         
-        if (timeSinceLastFeed < 30000) { // 30秒冷却
+        if (timeSinceLastFeed < 20000) { // 20秒冷却
             toastr.warning("宠物还不饿，等一会再喂吧！");
             return;
         }
         
-        petData.hunger = Math.min(100, petData.hunger + 30);
-        petData.happiness = Math.min(100, petData.happiness + 10);
+        petData.hunger = Math.min(100, petData.hunger + 15);
+        petData.happiness = Math.min(100, petData.happiness + 5);
         petData.lastFeedTime = now;
         
         // 获得经验
-        gainExperience(5);
+        gainExperience(3);
         
         toastr.success(`${petData.name} 吃得很开心！`);
         savePetData();
@@ -182,17 +182,17 @@ jQuery(async () => {
         const now = Date.now();
         const timeSinceLastPlay = now - petData.lastPlayTime;
         
-        if (timeSinceLastPlay < 60000) { // 1分钟冷却
+        if (timeSinceLastPlay < 40000) { // 40秒冷却
             toastr.warning("宠物需要休息一下！");
             return;
         }
         
-        petData.happiness = Math.min(100, petData.happiness + 25);
-        petData.energy = Math.max(0, petData.energy - 15);
+        petData.happiness = Math.min(100, petData.happiness + 12);
+        petData.energy = Math.max(0, petData.energy - 8);
         petData.lastPlayTime = now;
         
         // 获得经验
-        gainExperience(8);
+        gainExperience(4);
         
         toastr.success(`${petData.name} 玩得很开心！`);
         savePetData();
@@ -206,17 +206,17 @@ jQuery(async () => {
         const now = Date.now();
         const timeSinceLastSleep = now - petData.lastSleepTime;
         
-        if (timeSinceLastSleep < 120000) { // 2分钟冷却
+        if (timeSinceLastSleep < 80000) { // 80秒冷却
             toastr.warning("宠物还不困！");
             return;
         }
         
-        petData.energy = Math.min(100, petData.energy + 40);
-        petData.health = Math.min(100, petData.health + 10);
+        petData.energy = Math.min(100, petData.energy + 20);
+        petData.health = Math.min(100, petData.health + 5);
         petData.lastSleepTime = now;
         
         // 获得经验
-        gainExperience(3);
+        gainExperience(2);
         
         toastr.success(`${petData.name} 睡得很香！`);
         savePetData();
@@ -233,7 +233,7 @@ jQuery(async () => {
         if (petData.experience >= expNeeded) {
             petData.level++;
             petData.experience -= expNeeded;
-            petData.health = 100; // 升级恢复健康
+            petData.health = Math.min(100, petData.health + 30); // 升级恢复部分健康
             toastr.success(`🎉 ${petData.name} 升级了！现在是 ${petData.level} 级！`);
         }
     }
@@ -979,10 +979,10 @@ jQuery(async () => {
             type: "cat",
             level: 1,
             experience: 0,
-            health: 100,
-            happiness: 100,
+            health: 40,
+            happiness: 30,
             hunger: 50,
-            energy: 100,
+            energy: 60,
             lastFeedTime: Date.now(),
             lastPlayTime: Date.now(),
             lastSleepTime: Date.now(),
@@ -2485,6 +2485,128 @@ jQuery(async () => {
         }, 100);
     };
 
+    // 测试新的数值平衡
+    window.testNewBalance = function() {
+        console.log("🎯 测试新的数值平衡系统...");
+
+        // 显示当前数值
+        console.log("\n📊 当前状态:");
+        console.log(`健康: ${Math.round(petData.health)}/100`);
+        console.log(`饱食度: ${Math.round(petData.hunger)}/100`);
+        console.log(`快乐度: ${Math.round(petData.happiness)}/100`);
+        console.log(`精力: ${Math.round(petData.energy)}/100`);
+        console.log(`等级: ${petData.level}`);
+
+        // 测试操作效果
+        console.log("\n🧪 测试操作效果:");
+
+        const originalValues = {
+            health: petData.health,
+            hunger: petData.hunger,
+            happiness: petData.happiness,
+            energy: petData.energy
+        };
+
+        // 测试喂食
+        console.log("\n🍖 测试喂食效果:");
+        console.log(`喂食前 - 饱食度: ${Math.round(originalValues.hunger)}, 快乐度: ${Math.round(originalValues.happiness)}`);
+        feedPet();
+        console.log(`喂食后 - 饱食度: ${Math.round(petData.hunger)} (+${Math.round(petData.hunger - originalValues.hunger)}), 快乐度: ${Math.round(petData.happiness)} (+${Math.round(petData.happiness - originalValues.happiness)})`);
+
+        // 等待一下再测试玩耍
+        setTimeout(() => {
+            const beforePlay = {
+                happiness: petData.happiness,
+                energy: petData.energy
+            };
+
+            console.log("\n🎮 测试玩耍效果:");
+            console.log(`玩耍前 - 快乐度: ${Math.round(beforePlay.happiness)}, 精力: ${Math.round(beforePlay.energy)}`);
+            playWithPet();
+            console.log(`玩耍后 - 快乐度: ${Math.round(petData.happiness)} (+${Math.round(petData.happiness - beforePlay.happiness)}), 精力: ${Math.round(petData.energy)} (${Math.round(petData.energy - beforePlay.energy)})`);
+
+            // 等待一下再测试睡觉
+            setTimeout(() => {
+                const beforeSleep = {
+                    health: petData.health,
+                    energy: petData.energy
+                };
+
+                console.log("\n😴 测试睡觉效果:");
+                console.log(`睡觉前 - 健康: ${Math.round(beforeSleep.health)}, 精力: ${Math.round(beforeSleep.energy)}`);
+                petSleep();
+                console.log(`睡觉后 - 健康: ${Math.round(petData.health)} (+${Math.round(petData.health - beforeSleep.health)}), 精力: ${Math.round(petData.energy)} (+${Math.round(petData.energy - beforeSleep.energy)})`);
+
+                // 更新UI
+                updateUnifiedUIStatus();
+
+                console.log("\n📋 数值平衡总结:");
+                console.log("✅ 喂食: +15饱食度, +5快乐度, 20秒冷却");
+                console.log("✅ 玩耍: +12快乐度, -8精力, 40秒冷却");
+                console.log("✅ 睡觉: +20精力, +5健康, 80秒冷却");
+                console.log("✅ 时间衰减: 每12分钟更新，速度减缓60%");
+                console.log("✅ 初始数值: 健康40, 快乐30, 饱食50, 精力60");
+
+            }, 100);
+        }, 100);
+    };
+
+    // 重置为新的初始数值进行测试
+    window.resetToNewInitialValues = function() {
+        console.log("🔄 重置为新的初始数值...");
+
+        petData.health = 40;
+        petData.happiness = 30;
+        petData.hunger = 50;
+        petData.energy = 60;
+        petData.level = 1;
+        petData.experience = 0;
+
+        savePetData();
+        updateUnifiedUIStatus();
+
+        console.log("✅ 已重置为新的初始数值:");
+        console.log(`健康: ${petData.health}/100`);
+        console.log(`快乐度: ${petData.happiness}/100`);
+        console.log(`饱食度: ${petData.hunger}/100`);
+        console.log(`精力: ${petData.energy}/100`);
+        console.log("现在可以测试新的数值平衡了！");
+    };
+
+    // 模拟时间流逝测试
+    window.testTimeDecay = function() {
+        console.log("⏰ 测试时间衰减效果...");
+
+        const before = {
+            health: petData.health,
+            hunger: petData.hunger,
+            happiness: petData.happiness,
+            energy: petData.energy
+        };
+
+        console.log("衰减前状态:", before);
+
+        // 模拟1小时时间流逝
+        updatePetStatus();
+
+        console.log("衰减后状态:", {
+            health: Math.round(petData.health),
+            hunger: Math.round(petData.hunger),
+            happiness: Math.round(petData.happiness),
+            energy: Math.round(petData.energy)
+        });
+
+        const changes = {
+            health: Math.round(petData.health - before.health),
+            hunger: Math.round(petData.hunger - before.hunger),
+            happiness: Math.round(petData.happiness - before.happiness),
+            energy: Math.round(petData.energy - before.energy)
+        };
+
+        console.log("数值变化:", changes);
+        updateUnifiedUIStatus();
+    };
+
     // 测试头像功能
     window.testAvatarFunction = function() {
         console.log("🎯 测试头像功能...");
@@ -2547,13 +2669,17 @@ jQuery(async () => {
             console.log("    - 点击宠物名字可以编辑修改");
             console.log("    - 支持最多20个字符的自定义名字");
             console.log("  🎮 交互功能:");
-            console.log("    - 🍖 喂食：增加饱食度和快乐度");
-            console.log("    - 🎮 玩耍：增加快乐度，消耗精力");
-            console.log("    - 😴 睡觉：恢复精力和健康");
+            console.log("    - 🍖 喂食：+15饱食度, +5快乐度 (20秒冷却)");
+            console.log("    - 🎮 玩耍：+12快乐度, -8精力 (40秒冷却)");
+            console.log("    - 😴 睡觉：+20精力, +5健康 (80秒冷却)");
             console.log("  🎨 界面特色:");
             console.log("    - 糖果色主题，明亮清新");
             console.log("    - 无背景框架，元素融入背景");
             console.log("    - 实时数值更新，状态条动画");
+            console.log("  ⚖️ 数值平衡:");
+            console.log("    - 初始数值：健康40, 快乐30, 饱食50, 精力60");
+            console.log("    - 时间衰减：每12分钟更新，速度减缓");
+            console.log("    - 操作冷却：喂食20s, 玩耍40s, 睡觉80s");
         }
 
         return allFunctionsExist;

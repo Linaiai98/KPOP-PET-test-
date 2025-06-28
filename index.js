@@ -36,6 +36,44 @@ jQuery(async () => {
 
     // 自定义头像管理
     let customAvatarData = null;
+
+    // 糖果色配色方案
+    const candyColors = {
+        // 主色调 - 柔和的糖果色
+        primary: '#FF9EC7',      // 糖果粉
+        secondary: '#A8E6CF',    // 薄荷绿
+        accent: '#87CEEB',       // 天空蓝
+        warning: '#FFD93D',      // 柠檬黄
+        success: '#98FB98',      // 淡绿色
+
+        // 背景色
+        background: 'linear-gradient(135deg, #FFE5F1 0%, #E5F9F0 50%, #E5F4FF 100%)', // 糖果渐变
+        backgroundSolid: '#FFF8FC', // 纯色背景备选
+
+        // 文字色
+        textPrimary: '#2D3748',   // 深灰色文字
+        textSecondary: '#4A5568', // 中灰色文字
+        textLight: '#718096',     // 浅灰色文字
+        textWhite: '#FFFFFF',     // 白色文字
+
+        // 边框和阴影
+        border: '#E2E8F0',       // 浅边框
+        borderAccent: '#FF9EC7', // 强调边框
+        shadow: 'rgba(255, 158, 199, 0.2)', // 粉色阴影
+        shadowLight: 'rgba(255, 158, 199, 0.1)', // 浅粉色阴影
+
+        // 按钮色
+        buttonPrimary: '#FF9EC7',
+        buttonSecondary: '#A8E6CF',
+        buttonAccent: '#87CEEB',
+        buttonHover: '#FF7FB3',
+
+        // 状态栏色
+        health: '#FF9EC7',       // 健康 - 糖果粉
+        happiness: '#FFD93D',    // 快乐 - 柠檬黄
+        energy: '#A8E6CF',       // 精力 - 薄荷绿
+        experience: '#87CEEB'    // 经验 - 天空蓝
+    };
     
     // 宠物数据结构
     let petData = {
@@ -297,8 +335,8 @@ jQuery(async () => {
                     height: auto !important;
                     max-width: ${containerMaxWidth} !important;
                     max-height: calc(100vh - 60px) !important;
-                    background-color: #2c2f33 !important;
-                    color: white !important;
+                    background: ${candyColors.background} !important;
+                    color: ${candyColors.textPrimary} !important;
                     border-radius: ${borderRadius} !important;
                     padding: ${containerPadding} !important;
                     overflow-y: auto !important;
@@ -578,7 +616,7 @@ jQuery(async () => {
                     width: 80px !important;
                     height: 80px !important;
                     border-radius: 50% !important;
-                    background: #40444b !important;
+                    background: ${candyColors.primary} !important;
                     display: flex !important;
                     align-items: center !important;
                     justify-content: center !important;
@@ -1120,7 +1158,7 @@ jQuery(async () => {
                 cursor: grab !important;
                 width: 48px !important;
                 height: 48px !important;
-                background: linear-gradient(145deg, #2f3338, #212529) !important;
+                background: linear-gradient(145deg, ${candyColors.primary}, ${candyColors.buttonHover}) !important;
                 border-radius: 50% !important;
                 display: flex !important;
                 align-items: center !important;
@@ -1547,7 +1585,7 @@ jQuery(async () => {
                 cursor: grab !important;
                 width: 48px !important;
                 height: 48px !important;
-                background: linear-gradient(145deg, #2f3338, #212529) !important;
+                background: linear-gradient(145deg, ${candyColors.primary}, ${candyColors.buttonHover}) !important;
                 border-radius: 50% !important;
                 display: flex !important;
                 align-items: center !important;
@@ -2616,8 +2654,8 @@ jQuery(async () => {
                     width: calc(100vw - 30px) !important;
                     max-width: 300px !important;
                     max-height: calc(100vh - 60px) !important;
-                    background-color: #2c2f33 !important;
-                    color: white !important;
+                    background: ${candyColors.background} !important;
+                    color: ${candyColors.textPrimary} !important;
                     border-radius: 16px !important;
                     padding: 16px !important;
                     overflow-y: auto !important;
@@ -2827,16 +2865,14 @@ jQuery(async () => {
                 <!-- 宠物头像和基本信息 -->
                 <div class="pet-avatar-section" style="
                     text-align: center !important;
-                    background: #40444b !important;
                     padding: 15px !important;
-                    border-radius: 8px !important;
                 ">
                     <!-- 圆形头像框 -->
                     <div class="pet-avatar-circle" style="
                         width: 70px !important;
                         height: 70px !important;
                         border-radius: 50% !important;
-                        background: #36393f !important;
+                        background: ${candyColors.primary} !important;
                         display: flex !important;
                         align-items: center !important;
                         justify-content: center !important;
@@ -2855,37 +2891,35 @@ jQuery(async () => {
 
                 <!-- 宠物状态栏 -->
                 <div class="pet-status-section" style="
-                    background: #40444b !important;
                     padding: 10px !important;
-                    border-radius: 8px !important;
                 ">
-                    <h4 style="margin: 0 0 10px 0 !important; color: #7289da !important; font-size: 0.9em !important;">📊 状态</h4>
+                    <h4 style="margin: 0 0 10px 0 !important; color: ${candyColors.primary} !important; font-size: 0.9em !important;">📊 状态</h4>
                     <div class="status-bars" style="display: flex !important; flex-direction: column !important; gap: 6px !important;">
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
-                                <span style="color: #99aab5 !important; font-size: 0.8em !important;">❤️ 健康</span>
-                                <span style="color: #43b581 !important; font-size: 0.8em !important;">85/100</span>
+                                <span style="color: ${candyColors.textSecondary} !important; font-size: 0.8em !important;">❤️ 健康</span>
+                                <span style="color: ${candyColors.health} !important; font-size: 0.8em !important;">85/100</span>
                             </div>
-                            <div style="background: #2c2f33 !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: #43b581 !important; height: 100% !important; width: 85% !important; transition: width 0.3s ease !important;"></div>
-                            </div>
-                        </div>
-                        <div class="status-item">
-                            <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
-                                <span style="color: #99aab5 !important; font-size: 0.8em !important;">🍖 饱食度</span>
-                                <span style="color: #faa61a !important; font-size: 0.8em !important;">60/100</span>
-                            </div>
-                            <div style="background: #2c2f33 !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: #faa61a !important; height: 100% !important; width: 60% !important; transition: width 0.3s ease !important;"></div>
+                            <div style="background: ${candyColors.border} !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: ${candyColors.health} !important; height: 100% !important; width: 85% !important; transition: width 0.3s ease !important;"></div>
                             </div>
                         </div>
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
-                                <span style="color: #99aab5 !important; font-size: 0.8em !important;">😊 快乐度</span>
-                                <span style="color: #7289da !important; font-size: 0.8em !important;">75/100</span>
+                                <span style="color: ${candyColors.textSecondary} !important; font-size: 0.8em !important;">🍖 饱食度</span>
+                                <span style="color: ${candyColors.warning} !important; font-size: 0.8em !important;">60/100</span>
                             </div>
-                            <div style="background: #2c2f33 !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: #7289da !important; height: 100% !important; width: 75% !important; transition: width 0.3s ease !important;"></div>
+                            <div style="background: ${candyColors.border} !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: ${candyColors.warning} !important; height: 100% !important; width: 60% !important; transition: width 0.3s ease !important;"></div>
+                            </div>
+                        </div>
+                        <div class="status-item">
+                            <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
+                                <span style="color: ${candyColors.textSecondary} !important; font-size: 0.8em !important;">😊 快乐度</span>
+                                <span style="color: ${candyColors.happiness} !important; font-size: 0.8em !important;">75/100</span>
+                            </div>
+                            <div style="background: ${candyColors.border} !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: ${candyColors.happiness} !important; height: 100% !important; width: 75% !important; transition: width 0.3s ease !important;"></div>
                             </div>
                         </div>
                     </div>
@@ -2975,9 +3009,7 @@ jQuery(async () => {
                 <div class="pet-info-section" style="
                     text-align: center !important;
                     padding: 8px !important;
-                    background: #40444b !important;
-                    border-radius: 6px !important;
-                    color: #99aab5 !important;
+                    color: ${candyColors.textLight} !important;
                     font-size: 0.7em !important;
                 ">
                     <p style="margin: 0 !important;">🎉 虚拟宠物系统 v1.0</p>
@@ -3010,16 +3042,14 @@ jQuery(async () => {
                 <!-- 宠物头像和基本信息 -->
                 <div class="pet-avatar-section" style="
                     text-align: center !important;
-                    background: #40444b !important;
                     padding: 20px !important;
-                    border-radius: 10px !important;
                 ">
                     <!-- 圆形头像框 -->
                     <div class="pet-avatar-circle" style="
                         width: 90px !important;
                         height: 90px !important;
                         border-radius: 50% !important;
-                        background: #36393f !important;
+                        background: ${candyColors.primary} !important;
                         display: flex !important;
                         align-items: center !important;
                         justify-content: center !important;
@@ -3033,43 +3063,41 @@ jQuery(async () => {
                     " onclick="openAvatarSelector()" oncontextmenu="showAvatarContextMenu(event)" title="点击更换头像，右键重置">
                         ${getAvatarContent()}
                     </div>
-                    <div class="pet-name" style="font-size: 1.3em !important; font-weight: bold !important; margin-bottom: 4px !important;">小宠物</div>
-                    <div class="pet-level" style="color: #7289da !important; font-size: 1em !important;">Lv.1</div>
+                    <div class="pet-name" style="font-size: 1.3em !important; font-weight: bold !important; margin-bottom: 4px !important; color: ${candyColors.textPrimary} !important;">小宠物</div>
+                    <div class="pet-level" style="color: ${candyColors.primary} !important; font-size: 1em !important;">Lv.1</div>
                 </div>
 
                 <!-- 宠物状态栏 -->
                 <div class="pet-status-section" style="
-                    background: #40444b !important;
                     padding: 12px !important;
-                    border-radius: 8px !important;
                 ">
-                    <h4 style="margin: 0 0 12px 0 !important; color: #7289da !important; font-size: 1em !important;">📊 状态</h4>
+                    <h4 style="margin: 0 0 12px 0 !important; color: ${candyColors.primary} !important; font-size: 1em !important;">📊 状态</h4>
                     <div class="status-bars" style="display: flex !important; flex-direction: column !important; gap: 8px !important;">
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
-                                <span style="color: #99aab5 !important; font-size: 0.9em !important;">❤️ 健康</span>
-                                <span style="color: #43b581 !important; font-size: 0.9em !important;">85/100</span>
+                                <span style="color: ${candyColors.textSecondary} !important; font-size: 0.9em !important;">❤️ 健康</span>
+                                <span style="color: ${candyColors.health} !important; font-size: 0.9em !important;">85/100</span>
                             </div>
-                            <div style="background: #2c2f33 !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: #43b581 !important; height: 100% !important; width: 85% !important; transition: width 0.3s ease !important;"></div>
-                            </div>
-                        </div>
-                        <div class="status-item">
-                            <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
-                                <span style="color: #99aab5 !important; font-size: 0.9em !important;">🍖 饱食度</span>
-                                <span style="color: #faa61a !important; font-size: 0.9em !important;">60/100</span>
-                            </div>
-                            <div style="background: #2c2f33 !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: #faa61a !important; height: 100% !important; width: 60% !important; transition: width 0.3s ease !important;"></div>
+                            <div style="background: ${candyColors.border} !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: ${candyColors.health} !important; height: 100% !important; width: 85% !important; transition: width 0.3s ease !important;"></div>
                             </div>
                         </div>
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
-                                <span style="color: #99aab5 !important; font-size: 0.9em !important;">😊 快乐度</span>
-                                <span style="color: #7289da !important; font-size: 0.9em !important;">75/100</span>
+                                <span style="color: ${candyColors.textSecondary} !important; font-size: 0.9em !important;">🍖 饱食度</span>
+                                <span style="color: ${candyColors.warning} !important; font-size: 0.9em !important;">60/100</span>
                             </div>
-                            <div style="background: #2c2f33 !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: #7289da !important; height: 100% !important; width: 75% !important; transition: width 0.3s ease !important;"></div>
+                            <div style="background: ${candyColors.border} !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: ${candyColors.warning} !important; height: 100% !important; width: 60% !important; transition: width 0.3s ease !important;"></div>
+                            </div>
+                        </div>
+                        <div class="status-item">
+                            <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
+                                <span style="color: ${candyColors.textSecondary} !important; font-size: 0.9em !important;">😊 快乐度</span>
+                                <span style="color: ${candyColors.happiness} !important; font-size: 0.9em !important;">75/100</span>
+                            </div>
+                            <div style="background: ${candyColors.border} !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: ${candyColors.happiness} !important; height: 100% !important; width: 75% !important; transition: width 0.3s ease !important;"></div>
                             </div>
                         </div>
                     </div>
@@ -3159,9 +3187,7 @@ jQuery(async () => {
                 <div class="pet-info-section" style="
                     text-align: center !important;
                     padding: 10px !important;
-                    background: #40444b !important;
-                    border-radius: 6px !important;
-                    color: #99aab5 !important;
+                    color: ${candyColors.textLight} !important;
                     font-size: 0.8em !important;
                 ">
                     <p style="margin: 0 !important;">🎉 虚拟宠物系统 v1.0</p>

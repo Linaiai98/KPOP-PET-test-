@@ -173,14 +173,35 @@ function updateFloatingButtonAvatar() {
 }
 ```
 
-### 5. **头像管理界面**
+### 5. **简洁的头像交互**
 
-#### 管理按钮
+#### 点击更换头像
 ```html
-<div class="avatar-controls">
-    <button onclick="openAvatarSelector()">📷 更换头像</button>
-    <button onclick="resetAvatar()" ${customAvatarData ? '' : 'style="display:none"'}>🔄 重置</button>
+<div class="pet-avatar-circle"
+     onclick="openAvatarSelector()"
+     oncontextmenu="showAvatarContextMenu(event)"
+     title="点击更换头像，右键重置">
+    ${getAvatarContent()}
 </div>
+```
+
+#### 右键菜单功能
+```javascript
+window.showAvatarContextMenu = function(event) {
+    event.preventDefault();
+
+    if (customAvatarData) {
+        // 如果有自定义头像，显示重置选项
+        if (confirm('是否要重置头像为默认样式？')) {
+            resetAvatar();
+        }
+    } else {
+        // 如果没有自定义头像，提示用户点击更换
+        alert('点击头像可以更换为自定义图片');
+    }
+
+    return false;
+};
 ```
 
 #### 重置功能
@@ -231,12 +252,13 @@ window.setTestAvatar();
 
 ### 3. **手动测试步骤**
 1. 打开虚拟宠物弹窗
-2. 点击圆形头像框或"📷 更换头像"按钮
+2. 点击圆形头像框
 3. 选择一张本地图片
 4. 确认头像在弹窗中正确显示（圆形，完全填充）
 5. 关闭弹窗，确认悬浮按钮也显示自定义头像
-6. 重新打开弹窗，点击"🔄 重置"按钮
-7. 确认头像恢复为默认表情，悬浮按钮恢复为🐾
+6. 重新打开弹窗，右键点击头像框
+7. 在确认对话框中选择"确定"
+8. 确认头像恢复为默认表情，悬浮按钮恢复为🐾
 
 ## 🎉 改进成果
 
@@ -258,5 +280,23 @@ window.setTestAvatar();
 - ✅ 即时的视觉反馈
 - ✅ 安全的文件处理
 - ✅ 跨平台兼容性
+- ✅ 简洁无冗余的UI设计
+- ✅ 右键菜单提供高级功能
 
-现在用户可以轻松设置个性化的圆形头像，让虚拟宠物更加个性化！🎊
+## 🎯 UI简化改进
+
+### 移除冗余按钮
+- **改进前**：弹窗中有"📷 更换头像"和"🔄 重置"按钮
+- **改进后**：移除所有按钮，界面更简洁
+
+### 交互方式优化
+- **左键点击头像**：更换头像
+- **右键点击头像**：重置头像（仅在有自定义头像时）
+- **鼠标悬停**：显示提示"点击更换头像，右键重置"
+
+### 视觉效果提升
+- 移除了按钮后，头像区域更加突出
+- 界面更加简洁美观
+- 减少了视觉干扰
+
+现在用户可以轻松设置个性化的圆形头像，界面简洁美观，操作直观便捷！🎊

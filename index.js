@@ -453,6 +453,25 @@ jQuery(async () => {
     };
 
     /**
+     * 显示头像右键菜单
+     */
+    window.showAvatarContextMenu = function(event) {
+        event.preventDefault();
+
+        if (customAvatarData) {
+            // 如果有自定义头像，显示重置选项
+            if (confirm('是否要重置头像为默认样式？')) {
+                resetAvatar();
+            }
+        } else {
+            // 如果没有自定义头像，提示用户点击更换
+            alert('点击头像可以更换为自定义图片');
+        }
+
+        return false;
+    };
+
+    /**
      * 更新头像显示
      */
     function updateAvatarDisplay() {
@@ -460,29 +479,6 @@ jQuery(async () => {
         const avatarCircle = $('.pet-avatar-circle');
         if (avatarCircle.length > 0) {
             avatarCircle.html(getAvatarContent());
-        }
-
-        // 更新头像管理按钮
-        const avatarControls = $('.avatar-controls');
-        if (avatarControls.length > 0) {
-            const resetButton = avatarControls.find('button').eq(1);
-            if (customAvatarData) {
-                if (resetButton.length === 0) {
-                    avatarControls.append(`
-                        <button onclick="resetAvatar()" style="
-                            background: #f04747 !important;
-                            color: white !important;
-                            border: none !important;
-                            padding: 6px 12px !important;
-                            border-radius: 4px !important;
-                            font-size: 0.8em !important;
-                            cursor: pointer !important;
-                        ">🔄 重置</button>
-                    `);
-                }
-            } else {
-                resetButton.remove();
-            }
         }
     }
 
@@ -592,7 +588,7 @@ jQuery(async () => {
                     box-shadow: 0 4px 8px rgba(0,0,0,0.3) !important;
                     cursor: pointer !important;
                     transition: transform 0.2s ease !important;
-                " onclick="openAvatarSelector()">
+                " onclick="openAvatarSelector()" oncontextmenu="showAvatarContextMenu(event)" title="点击更换头像，右键重置">
                     ${getAvatarContent()}
                 </div>
 
@@ -2281,16 +2277,12 @@ jQuery(async () => {
             console.log("弹窗头像: 未找到头像框");
         }
 
-        // 检查头像管理按钮
-        const avatarControls = $('.avatar-controls');
-        if (avatarControls.length > 0) {
-            const changeButton = avatarControls.find('button').first();
-            const resetButton = avatarControls.find('button').eq(1);
-            console.log(`更换按钮: ${changeButton.length > 0 ? '✅' : '❌'}`);
-            console.log(`重置按钮: ${resetButton.length > 0 ? '✅' : '❌'}`);
-        } else {
-            console.log("头像管理按钮: 未找到");
-        }
+        // 检查头像交互功能
+        const avatarCircleClickable = $('.pet-avatar-circle[onclick]').length > 0;
+        const avatarCircleContextMenu = $('.pet-avatar-circle[oncontextmenu]').length > 0;
+        console.log(`头像点击功能: ${avatarCircleClickable ? '✅' : '❌'}`);
+        console.log(`头像右键功能: ${avatarCircleContextMenu ? '✅' : '❌'}`);
+        console.log(`右键菜单函数: ${typeof window.showAvatarContextMenu === 'function' ? '✅' : '❌'}`);
 
         const allFunctionsExist = Object.values(functions).every(exists => exists);
         console.log(`\n🎉 头像功能测试: ${allFunctionsExist ? '所有功能就绪！' : '部分功能缺失'}`);
@@ -2298,10 +2290,10 @@ jQuery(async () => {
         if (allFunctionsExist) {
             console.log("📋 使用说明:");
             console.log("  - 点击弹窗中的圆形头像框可以更换头像");
-            console.log("  - 点击'📷 更换头像'按钮选择本地图片");
-            console.log("  - 点击'🔄 重置'按钮恢复默认头像");
+            console.log("  - 右键点击头像框可以重置为默认头像");
             console.log("  - 自定义头像会同时显示在弹窗和悬浮按钮中");
             console.log("  - 头像图片会自动裁剪为圆形并完全填充");
+            console.log("  - 界面简洁，无多余按钮");
         }
 
         return allFunctionsExist;
@@ -2854,40 +2846,11 @@ jQuery(async () => {
                         box-shadow: 0 3px 6px rgba(0,0,0,0.3) !important;
                         cursor: pointer !important;
                         margin: 0 auto 8px auto !important;
-                    " onclick="openAvatarSelector()">
+                    " onclick="openAvatarSelector()" oncontextmenu="showAvatarContextMenu(event)" title="点击更换头像，右键重置">
                         ${getAvatarContent()}
                     </div>
                     <div class="pet-name" style="font-size: 1.2em !important; font-weight: bold !important; margin-bottom: 3px !important;">小宠物</div>
                     <div class="pet-level" style="color: #7289da !important; font-size: 0.9em !important;">Lv.1</div>
-
-                    <!-- 头像管理按钮 -->
-                    <div class="avatar-controls" style="
-                        display: flex !important;
-                        gap: 6px !important;
-                        justify-content: center !important;
-                        margin-top: 8px !important;
-                    ">
-                        <button onclick="openAvatarSelector()" style="
-                            background: #7289da !important;
-                            color: white !important;
-                            border: none !important;
-                            padding: 4px 8px !important;
-                            border-radius: 3px !important;
-                            font-size: 0.7em !important;
-                            cursor: pointer !important;
-                        ">📷 更换</button>
-                        ${customAvatarData ? `
-                        <button onclick="resetAvatar()" style="
-                            background: #f04747 !important;
-                            color: white !important;
-                            border: none !important;
-                            padding: 4px 8px !important;
-                            border-radius: 3px !important;
-                            font-size: 0.7em !important;
-                            cursor: pointer !important;
-                        ">🔄 重置</button>
-                        ` : ''}
-                    </div>
                 </div>
 
                 <!-- 宠物状态栏 -->
@@ -3067,42 +3030,11 @@ jQuery(async () => {
                         cursor: pointer !important;
                         margin: 0 auto 10px auto !important;
                         transition: transform 0.2s ease !important;
-                    " onclick="openAvatarSelector()">
+                    " onclick="openAvatarSelector()" oncontextmenu="showAvatarContextMenu(event)" title="点击更换头像，右键重置">
                         ${getAvatarContent()}
                     </div>
                     <div class="pet-name" style="font-size: 1.3em !important; font-weight: bold !important; margin-bottom: 4px !important;">小宠物</div>
                     <div class="pet-level" style="color: #7289da !important; font-size: 1em !important;">Lv.1</div>
-
-                    <!-- 头像管理按钮 -->
-                    <div class="avatar-controls" style="
-                        display: flex !important;
-                        gap: 8px !important;
-                        justify-content: center !important;
-                        margin-top: 12px !important;
-                    ">
-                        <button onclick="openAvatarSelector()" style="
-                            background: #7289da !important;
-                            color: white !important;
-                            border: none !important;
-                            padding: 6px 12px !important;
-                            border-radius: 4px !important;
-                            font-size: 0.8em !important;
-                            cursor: pointer !important;
-                            transition: background 0.2s ease !important;
-                        ">📷 更换头像</button>
-                        ${customAvatarData ? `
-                        <button onclick="resetAvatar()" style="
-                            background: #f04747 !important;
-                            color: white !important;
-                            border: none !important;
-                            padding: 6px 12px !important;
-                            border-radius: 4px !important;
-                            font-size: 0.8em !important;
-                            cursor: pointer !important;
-                            transition: background 0.2s ease !important;
-                        ">🔄 重置</button>
-                        ` : ''}
-                    </div>
                 </div>
 
                 <!-- 宠物状态栏 -->

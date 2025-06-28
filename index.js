@@ -29,6 +29,9 @@ jQuery(async () => {
     // DOM 元素引用
     let overlay, mainView, petView, settingsView;
     let petContainer;
+
+    // 弹窗状态管理
+    let isPopupOpen = false;
     
     // 宠物数据结构
     let petData = {
@@ -307,51 +310,24 @@ jQuery(async () => {
             $("body").append(unifiedPopupHtml);
             overlayElement = $(`#${OVERLAY_ID}`);
 
-            // 绑定统一的关闭事件 - iOS优化
-            const closeButton = overlayElement.find(".close-button");
-
-            // iOS需要特殊的事件处理
+            // 绑定外部点击关闭事件
             if (isIOS) {
-                // iOS使用touchstart而不是click，避免300ms延迟
-                closeButton.on("touchstart", function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log(`[${extensionName}] iOS close button touched`);
-                    closePopup();
-                });
-
-                // 备用的click事件
-                closeButton.on("click", function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log(`[${extensionName}] iOS close button clicked`);
-                    closePopup();
-                });
-
                 // iOS外部点击关闭
                 overlayElement.on("touchstart", function(e) {
                     if (e.target === this) {
                         e.preventDefault();
                         e.stopPropagation();
-                        console.log(`[${extensionName}] iOS overlay touched`);
+                        console.log(`[${extensionName}] iOS overlay touched - closing popup`);
                         closePopup();
                     }
                 });
             } else {
-                // 非iOS设备的标准事件处理
-                closeButton.on("click touchend", function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log(`[${extensionName}] Close button activated`);
-                    closePopup();
-                });
-
-                // 点击外部关闭
+                // 非iOS设备的外部点击关闭
                 overlayElement.on("click touchend", function(e) {
                     if (e.target === this) {
                         e.preventDefault();
                         e.stopPropagation();
-                        console.log(`[${extensionName}] Overlay clicked`);
+                        console.log(`[${extensionName}] Overlay clicked - closing popup`);
                         closePopup();
                     }
                 });
@@ -361,6 +337,9 @@ jQuery(async () => {
             bindUnifiedUIEvents(overlayElement);
 
         console.log(`[${extensionName}] Unified popup created and displayed for all platforms`);
+
+        // 更新弹窗状态
+        isPopupOpen = true;
     }
     
     /**
@@ -394,6 +373,24 @@ jQuery(async () => {
             $(`#${OVERLAY_ID}`).remove();
             $(".virtual-pet-popup-overlay").remove();
         }, 250);
+
+        // 更新弹窗状态
+        isPopupOpen = false;
+    }
+
+    /**
+     * 切换弹窗状态 - 如果弹窗打开则关闭，如果关闭则打开
+     */
+    function togglePopup() {
+        console.log(`[${extensionName}] Toggling popup, current state: ${isPopupOpen ? 'open' : 'closed'}`);
+
+        if (isPopupOpen) {
+            // 弹窗已打开，关闭它
+            closePopup();
+        } else {
+            // 弹窗已关闭，打开它
+            showPopup();
+        }
     }
     
     /**
@@ -790,12 +787,12 @@ jQuery(async () => {
                         wasDragged = false;
                     }, 100);
                 } else {
-                    // 没有拖动，触发点击事件
-                    console.log(`[${extensionName}] Button clicked, showing popup`);
+                    // 没有拖动，触发点击事件 - 切换弹窗状态
+                    console.log(`[${extensionName}] Button clicked, toggling popup`);
                     try {
-                        showPopup();
+                        togglePopup();
                     } catch (error) {
-                        console.error(`[${extensionName}] Error showing popup:`, error);
+                        console.error(`[${extensionName}] Error toggling popup:`, error);
                         alert("🐾 虚拟宠物系统\n\n弹窗功能正在加载中...\n请稍后再试！");
                     }
                 }
@@ -1113,7 +1110,6 @@ jQuery(async () => {
                     <div id="virtual-pet-popup" class="pet-popup-container">
                         <div class="pet-popup-header">
                             <div class="pet-popup-title">🐾 虚拟宠物</div>
-                            <button id="virtual-pet-popup-close-button" class="pet-popup-close-button">&times;</button>
                         </div>
                         <div class="pet-popup-body">
                             <div id="pet-main-view" class="pet-view">
@@ -1159,12 +1155,7 @@ jQuery(async () => {
                 console.log(`[${extensionName}] Popup drag functionality added`);
             }
 
-            // 绑定事件 (同时绑定 click 和 touchend 以兼容移动端)
-            $(`#${CLOSE_BUTTON_ID}`).on("click touchend", (e) => {
-                e.preventDefault();
-                e.stopPropagation(); // 防止触发拖拽
-                closePopup();
-            });
+            // 移除了关闭按钮，现在只能通过悬浮按钮或外部点击关闭
 
             if (overlay && overlay.length > 0) {
                 overlay.on("click touchend", function (event) {
@@ -1747,6 +1738,93 @@ jQuery(async () => {
         return true;
     };
 
+    // 测试悬浮按钮切换功能
+    window.testToggleFunction = function() {
+        console.log("🎯 测试悬浮按钮切换功能...");
+
+        const button = $(`#${BUTTON_ID}`);
+        if (button.length === 0) {
+            console.log("❌ 悬浮按钮不存在");
+            return false;
+        }
+
+        console.log("✅ 悬浮按钮存在");
+        console.log(`当前弹窗状态: ${isPopupOpen ? '打开' : '关闭'}`);
+
+        // 检查弹窗实际状态
+        const overlay = $(`#${OVERLAY_ID}`);
+        const actuallyOpen = overlay.length > 0;
+        console.log(`实际弹窗状态: ${actuallyOpen ? '打开' : '关闭'}`);
+
+        // 状态一致性检查
+        const stateConsistent = isPopupOpen === actuallyOpen;
+        console.log(`状态一致性: ${stateConsistent ? '✅ 一致' : '❌ 不一致'}`);
+
+        // 模拟点击测试
+        console.log("🎯 模拟点击悬浮按钮...");
+        const initialState = isPopupOpen;
+
+        try {
+            // 直接调用切换函数
+            togglePopup();
+
+            setTimeout(() => {
+                const newState = isPopupOpen;
+                const newOverlay = $(`#${OVERLAY_ID}`);
+                const newActuallyOpen = newOverlay.length > 0;
+
+                console.log(`点击后状态: ${newState ? '打开' : '关闭'}`);
+                console.log(`点击后实际: ${newActuallyOpen ? '打开' : '关闭'}`);
+
+                const stateChanged = initialState !== newState;
+                const actualChanged = actuallyOpen !== newActuallyOpen;
+                const bothChanged = stateChanged && actualChanged;
+
+                console.log(`状态变化: ${stateChanged ? '✅' : '❌'}`);
+                console.log(`实际变化: ${actualChanged ? '✅' : '❌'}`);
+                console.log(`切换成功: ${bothChanged ? '✅' : '❌'}`);
+
+                // 再次点击测试
+                console.log("🎯 再次点击测试...");
+                togglePopup();
+
+                setTimeout(() => {
+                    const finalState = isPopupOpen;
+                    const finalOverlay = $(`#${OVERLAY_ID}`);
+                    const finalActuallyOpen = finalOverlay.length > 0;
+
+                    console.log(`最终状态: ${finalState ? '打开' : '关闭'}`);
+                    console.log(`最终实际: ${finalActuallyOpen ? '打开' : '关闭'}`);
+
+                    const backToOriginal = finalState === initialState;
+                    const actualBackToOriginal = finalActuallyOpen === actuallyOpen;
+
+                    console.log(`回到原状态: ${backToOriginal ? '✅' : '❌'}`);
+                    console.log(`实际回到原状态: ${actualBackToOriginal ? '✅' : '❌'}`);
+
+                    const allGood = stateConsistent && bothChanged && backToOriginal && actualBackToOriginal;
+                    console.log(`\n🎉 切换功能测试: ${allGood ? '完全成功！' : '需要检查'}`);
+
+                    if (allGood) {
+                        console.log("✅ 悬浮按钮切换功能正常工作");
+                        console.log("📋 功能说明:");
+                        console.log("  - 点击悬浮按钮可以打开弹窗");
+                        console.log("  - 再次点击悬浮按钮可以关闭弹窗");
+                        console.log("  - 点击弹窗外部也可以关闭弹窗");
+                        console.log("  - 弹窗内部没有关闭按钮");
+                    }
+
+                    return allGood;
+                }, 300);
+            }, 300);
+        } catch (error) {
+            console.error("切换功能测试失败:", error);
+            return false;
+        }
+
+        return true;
+    };
+
     // 验证拖动修复是否成功
     window.verifyDragFix = function() {
         console.log("🎯 验证拖动修复效果...");
@@ -1865,6 +1943,68 @@ jQuery(async () => {
 
             return allPassed;
         }, 100);
+
+        return true;
+    };
+
+    // 立即测试切换功能
+    window.testToggleNow = function() {
+        console.log("🎯 立即测试悬浮按钮切换功能...");
+
+        const button = $('#virtual-pet-button');
+        if (button.length === 0) {
+            console.log("❌ 悬浮按钮不存在");
+            return false;
+        }
+
+        console.log("✅ 悬浮按钮存在");
+
+        // 检查当前状态
+        const overlay = $('#virtual-pet-popup-overlay');
+        const isCurrentlyOpen = overlay.length > 0;
+        console.log(`当前弹窗状态: ${isCurrentlyOpen ? '打开' : '关闭'}`);
+
+        // 模拟点击
+        console.log("🎯 模拟点击悬浮按钮...");
+
+        // 直接触发点击事件
+        button.trigger('click');
+
+        setTimeout(() => {
+            const newOverlay = $('#virtual-pet-popup-overlay');
+            const isNowOpen = newOverlay.length > 0;
+            console.log(`点击后弹窗状态: ${isNowOpen ? '打开' : '关闭'}`);
+
+            const stateChanged = isCurrentlyOpen !== isNowOpen;
+            console.log(`状态变化: ${stateChanged ? '✅ 成功' : '❌ 失败'}`);
+
+            if (stateChanged) {
+                console.log("🎯 再次点击测试...");
+                button.trigger('click');
+
+                setTimeout(() => {
+                    const finalOverlay = $('#virtual-pet-popup-overlay');
+                    const isFinallyOpen = finalOverlay.length > 0;
+                    console.log(`再次点击后状态: ${isFinallyOpen ? '打开' : '关闭'}`);
+
+                    const backToOriginal = isFinallyOpen === isCurrentlyOpen;
+                    console.log(`回到原状态: ${backToOriginal ? '✅ 成功' : '❌ 失败'}`);
+
+                    if (backToOriginal) {
+                        console.log("🎉 切换功能测试完全成功！");
+                        console.log("📋 使用说明:");
+                        console.log("  - 点击悬浮按钮 🐾 可以打开/关闭弹窗");
+                        console.log("  - 点击弹窗外部也可以关闭弹窗");
+                        console.log("  - 弹窗内部已移除关闭按钮");
+                        console.log("  - 操作更加直观简洁");
+                    } else {
+                        console.log("❌ 切换功能有问题，需要检查");
+                    }
+                }, 300);
+            } else {
+                console.log("❌ 切换功能不工作，可能需要修复");
+            }
+        }, 300);
 
         return true;
     };
@@ -2173,12 +2313,8 @@ jQuery(async () => {
 
         $("body").append(iosPopupHtml);
 
-        // 绑定统一的关闭事件
+        // 绑定外部点击关闭事件
         const $iosOverlay = $("#virtual-pet-popup-overlay");
-        $iosOverlay.find(".close-button").on("click touchend", function(e) {
-            e.preventDefault();
-            $iosOverlay.remove();
-        });
 
         // 点击外部关闭
         $iosOverlay.on("click touchend", function(e) {
@@ -2354,30 +2490,13 @@ jQuery(async () => {
         return `
             <div class="pet-popup-header" style="
                 display: flex !important;
-                justify-content: space-between !important;
+                justify-content: center !important;
                 align-items: center !important;
                 margin-bottom: 15px !important;
                 padding-bottom: 12px !important;
                 border-bottom: 1px solid #40444b !important;
             ">
                 <h2 style="margin: 0 !important; color: #7289da !important; font-size: 1.2em !important;">🐾 虚拟宠物</h2>
-                <button class="close-button" style="
-                    background: rgba(255,255,255,0.1) !important;
-                    border: none !important;
-                    color: #99aab5 !important;
-                    font-size: 28px !important;
-                    cursor: pointer !important;
-                    padding: 12px !important;
-                    line-height: 1 !important;
-                    min-width: 48px !important;
-                    min-height: 48px !important;
-                    display: flex !important;
-                    align-items: center !important;
-                    justify-content: center !important;
-                    border-radius: 50% !important;
-                    -webkit-tap-highlight-color: transparent !important;
-                    touch-action: manipulation !important;
-                ">&times;</button>
             </div>
 
             <div class="pet-main-content" style="
@@ -2537,29 +2656,13 @@ jQuery(async () => {
         return `
             <div class="pet-popup-header" style="
                 display: flex !important;
-                justify-content: space-between !important;
+                justify-content: center !important;
                 align-items: center !important;
                 margin-bottom: 20px !important;
                 padding-bottom: 15px !important;
                 border-bottom: 1px solid #40444b !important;
             ">
                 <h2 style="margin: 0 !important; color: #7289da !important; font-size: 1.4em !important;">🐾 虚拟宠物</h2>
-                <button class="close-button" style="
-                    background: rgba(255,255,255,0.1) !important;
-                    border: none !important;
-                    color: #99aab5 !important;
-                    font-size: 28px !important;
-                    cursor: pointer !important;
-                    padding: 10px !important;
-                    line-height: 1 !important;
-                    min-width: 44px !important;
-                    min-height: 44px !important;
-                    display: flex !important;
-                    align-items: center !important;
-                    justify-content: center !important;
-                    border-radius: 50% !important;
-                    transition: background 0.2s ease !important;
-                ">&times;</button>
             </div>
 
             <div class="pet-main-content" style="

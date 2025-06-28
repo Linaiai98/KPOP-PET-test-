@@ -26,7 +26,7 @@
 /* --- 浮动按钮 --- */
 #virtual-pet-button {
     position: fixed !important;
-    z-index: 2147483645 !important;
+    z-index: 2147483647 !important;
     cursor: grab !important;
     width: 48px !important;
     height: 48px !important;
@@ -44,15 +44,20 @@
                 box-shadow 0.2s ease-out,
                 color 0.2s ease-out !important;
     user-select: none !important;
-    /* 确保可见性 */
+    /* 确保可见性和正确定位 */
     opacity: 1 !important;
     visibility: visible !important;
+    pointer-events: auto !important;
+    transform: none !important;
+    margin: 0 !important;
     /* 触摸优化 */
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
     /* 默认位置 - 确保在屏幕内 */
-    top: 200px;
-    left: 20px;
+    top: 200px !important;
+    left: 20px !important;
+    bottom: auto !important;
+    right: auto !important;
 }
 
 #virtual-pet-button:hover {

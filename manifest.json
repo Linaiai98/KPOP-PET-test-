@@ -1,0 +1,14 @@
+{
+  "name": "virtual-pet-system",
+  "display_name": "虚拟宠物系统 (Virtual Pet System)",
+  "loading_order": 1003,
+  "requires": [],
+  "optional": [],
+  "js": "index.js",
+  "css": "style.css",
+  "author": "Augment Agent",
+  "version": "1.0.0",
+  "homePage": "https://github.com/your-username/sillytavern-pet-system",
+  "auto_update": false,
+  "description": "一个为SillyTavern设计的虚拟宠物系统，通过悬浮窗界面管理和照顾你的虚拟宠物"
+}

@@ -672,18 +672,20 @@ jQuery(async () => {
     // -----------------------------------------------------------------
 
     /**
-     * 使按钮可拖动，并处理点击与拖动的区分（安全版本）
+     * 使按钮可拖动，并处理点击与拖动的区分（改进版本）
      */
     function makeButtonDraggable($button) {
         let isDragging = false;
         let wasDragged = false;
         let dragStartX, dragStartY, startX, startY;
         let dragTimeout;
+        let dragThreshold = 8; // 增加拖动阈值，减少误触
 
-        console.log(`[${extensionName}] Setting up safe drag for button`);
+        console.log(`[${extensionName}] Setting up improved drag for button`);
 
-        // 清除现有事件
-        $button.off('mousedown touchstart click touchend');
+        // 清除现有事件，包括可能的命名空间事件
+        $button.off('.petdrag');
+        $(document).off('.petdragtemp');
 
         // 鼠标/触摸开始
         const onDragStart = (e) => {
@@ -696,21 +698,34 @@ jQuery(async () => {
             const pageX = touch ? touch.pageX : e.pageX;
             const pageY = touch ? touch.pageY : e.pageY;
 
+            // 确保坐标有效
+            if (typeof pageX !== 'number' || typeof pageY !== 'number') {
+                console.warn(`[${extensionName}] Invalid coordinates, aborting drag`);
+                return;
+            }
+
             startX = pageX;
             startY = pageY;
-            dragStartX = pageX - $button.offset().left;
-            dragStartY = pageY - $button.offset().top;
+
+            // 使用getBoundingClientRect获取更准确的位置
+            const rect = $button[0].getBoundingClientRect();
+            dragStartX = pageX - rect.left;
+            dragStartY = pageY - rect.top;
 
             $button.css("cursor", "grabbing");
 
-            // 只阻止按钮本身的默认行为
+            // 阻止默认行为和事件冒泡
             e.preventDefault();
+            e.stopPropagation();
 
-            // 绑定临时的移动和结束事件
+            // 绑定临时的移动和结束事件，使用命名空间
             $(document).on("mousemove.petdragtemp", onDragMove);
             $(document).on("touchmove.petdragtemp", onDragMove);
             $(document).on("mouseup.petdragtemp", onDragEnd);
             $(document).on("touchend.petdragtemp", onDragEnd);
+
+            // 添加鼠标离开窗口的处理
+            $(document).on("mouseleave.petdragtemp", onDragEnd);
         };
 
         // 鼠标/触摸移动
@@ -721,71 +736,101 @@ jQuery(async () => {
             const pageX = touch ? touch.pageX : e.pageX;
             const pageY = touch ? touch.pageY : e.pageY;
 
-            // 检查是否超过阈值
-            if (Math.abs(pageX - startX) > 5 || Math.abs(pageY - startY) > 5) {
+            // 确保坐标有效
+            if (typeof pageX !== 'number' || typeof pageY !== 'number') {
+                return;
+            }
+
+            // 检查是否超过拖动阈值
+            const deltaX = Math.abs(pageX - startX);
+            const deltaY = Math.abs(pageY - startY);
+
+            if (deltaX > dragThreshold || deltaY > dragThreshold) {
                 wasDragged = true;
             }
 
             if (wasDragged) {
+                // 阻止页面滚动等默认行为
+                e.preventDefault();
+
                 let newX = pageX - dragStartX;
                 let newY = pageY - dragStartY;
 
-                // 边界限制
+                // 改进的边界限制
                 const windowWidth = $(window).width();
                 const windowHeight = $(window).height();
                 const buttonWidth = $button.outerWidth() || 48;
                 const buttonHeight = $button.outerHeight() || 48;
                 const safeMargin = 10;
 
+                // 确保按钮完全在屏幕内
                 newX = Math.max(safeMargin, Math.min(newX, windowWidth - buttonWidth - safeMargin));
                 newY = Math.max(safeMargin, Math.min(newY, windowHeight - buttonHeight - safeMargin));
 
-                // 设置位置
+                // 使用transform提高性能，但保持position: fixed
                 $button.css({
-                    top: newY + 'px',
-                    left: newX + 'px',
+                    'position': 'fixed',
+                    'top': newY + 'px',
+                    'left': newX + 'px',
+                    'transform': 'none' // 确保不受其他transform影响
                 });
+
+                // 实时更新位置信息用于调试
+                console.log(`[${extensionName}] Dragging to: ${newX}, ${newY}`);
             }
         };
 
         // 鼠标/触摸结束
-        const onDragEnd = (e) => {
+        const onDragEnd = () => {
             if (isDragging) {
                 console.log(`[${extensionName}] Drag end, wasDragged: ${wasDragged}`);
                 isDragging = false;
                 $button.css("cursor", "grab");
 
-                // 立即清除临时事件
-                $(document).off("mousemove.petdragtemp touchmove.petdragtemp mouseup.petdragtemp touchend.petdragtemp");
+                // 立即清除所有临时事件，包括鼠标离开事件
+                $(document).off(".petdragtemp");
 
                 if (wasDragged) {
-                    // 保存位置
-                    const currentLeft = $button.offset().left;
-                    const currentTop = $button.offset().top;
-                    localStorage.setItem(STORAGE_KEY_BUTTON_POS, JSON.stringify({
-                        x: currentLeft + 'px',
-                        y: currentTop + 'px',
-                    }));
-                    console.log(`[${extensionName}] Position saved:`, { x: currentLeft, y: currentTop });
+                    // 使用getBoundingClientRect获取更准确的位置
+                    const rect = $button[0].getBoundingClientRect();
+                    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+                    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
 
-                    // 延迟重置拖拽标志
+                    const currentLeft = rect.left + scrollLeft;
+                    const currentTop = rect.top + scrollTop;
+
+                    // 保存位置到localStorage
+                    const positionData = {
+                        x: Math.round(currentLeft),
+                        y: Math.round(currentTop)
+                    };
+
+                    localStorage.setItem(STORAGE_KEY_BUTTON_POS, JSON.stringify(positionData));
+                    console.log(`[${extensionName}] Position saved:`, positionData);
+
+                    // 延迟重置拖拽标志，防止立即触发点击事件
                     clearTimeout(dragTimeout);
                     dragTimeout = setTimeout(() => {
                         wasDragged = false;
-                    }, 100);
+                        console.log(`[${extensionName}] Drag flag reset`);
+                    }, 150); // 增加延迟时间
                 }
             }
         };
 
-        // 点击事件
+        // 点击事件处理
         const onClick = (e) => {
+            // 检查是否刚刚完成拖动
             if (wasDragged) {
-                console.log(`[${extensionName}] Click blocked due to drag`);
+                console.log(`[${extensionName}] Click blocked due to recent drag`);
                 e.preventDefault();
                 e.stopPropagation();
                 return false;
             }
+
             console.log(`[${extensionName}] Button clicked, showing popup`);
+            e.preventDefault();
+            e.stopPropagation();
 
             // 确保showPopup函数被调用
             try {
@@ -797,29 +842,36 @@ jQuery(async () => {
             }
         };
 
-        // 绑定事件 - iOS优化
-        $button.on("mousedown", onDragStart);
-        $button.on("touchstart", onDragStart);
-        $button.on("click", onClick);
-
-        // iOS专用触摸事件
-        $button.on("touchend", function(e) {
-            if (!wasDragged) {
+        // 触摸事件处理（移动端优化）
+        const onTouchEnd = (e) => {
+            // 只有在没有拖动的情况下才处理点击
+            if (!wasDragged && !isDragging) {
+                console.log(`[${extensionName}] Touch end - showing popup`);
                 e.preventDefault();
-                console.log(`[${extensionName}] iOS touch end - showing popup`);
+                e.stopPropagation();
 
                 try {
-                    // 所有平台都使用统一的showPopup函数
                     showPopup();
                 } catch (error) {
-                    console.error(`[${extensionName}] Popup error:`, error);
-                    // 备用方案
+                    console.error(`[${extensionName}] Touch popup error:`, error);
                     alert("🐾 虚拟宠物\n\n弹窗功能正在加载中...\n请稍后再试！");
                 }
             }
+        };
+
+        // 绑定事件 - 使用命名空间便于管理
+        $button.on("mousedown.petdrag", onDragStart);
+        $button.on("touchstart.petdrag", onDragStart);
+        $button.on("click.petdrag", onClick);
+        $button.on("touchend.petdrag", onTouchEnd);
+
+        // 防止上下文菜单干扰拖动
+        $button.on("contextmenu.petdrag", function(e) {
+            e.preventDefault();
+            return false;
         });
 
-        console.log(`[${extensionName}] Safe drag events bound successfully`);
+        console.log(`[${extensionName}] Improved drag events bound successfully`);
     }
 
     /**
@@ -1432,6 +1484,119 @@ jQuery(async () => {
             console.log("✅ 按钮位置正常，无需修复");
             return true;
         }
+    };
+
+    // 拖动功能测试和诊断
+    window.testDragFunction = function() {
+        console.log("🧪 测试拖动功能...");
+
+        const button = $(`#${BUTTON_ID}`);
+        if (button.length === 0) {
+            console.log("❌ 按钮不存在，无法测试拖动");
+            return false;
+        }
+
+        console.log("✅ 按钮存在，开始拖动测试");
+
+        // 检查当前位置
+        const rect = button[0].getBoundingClientRect();
+        console.log("当前位置:", {
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height
+        });
+
+        // 检查事件绑定
+        const events = $._data(button[0], "events");
+        console.log("绑定的事件:", events ? Object.keys(events) : "无");
+
+        // 模拟拖动到测试位置
+        const testX = 300;
+        const testY = 300;
+
+        console.log(`移动按钮到测试位置: (${testX}, ${testY})`);
+        button.css({
+            'position': 'fixed',
+            'left': testX + 'px',
+            'top': testY + 'px'
+        });
+
+        // 验证移动结果
+        setTimeout(() => {
+            const newRect = button[0].getBoundingClientRect();
+            const success = Math.abs(newRect.left - testX) < 5 && Math.abs(newRect.top - testY) < 5;
+            console.log(success ? "✅ 拖动测试成功" : "❌ 拖动测试失败");
+            console.log("新位置:", { left: newRect.left, top: newRect.top });
+
+            // 保存测试位置
+            if (success) {
+                localStorage.setItem(STORAGE_KEY_BUTTON_POS, JSON.stringify({
+                    x: testX,
+                    y: testY
+                }));
+                console.log("✅ 测试位置已保存");
+            }
+        }, 100);
+
+        return true;
+    };
+
+    // 拖动问题诊断
+    window.diagnoseDragIssues = function() {
+        console.log("🔍 诊断拖动问题...");
+
+        const button = $(`#${BUTTON_ID}`);
+        if (button.length === 0) {
+            console.log("❌ 按钮不存在");
+            return;
+        }
+
+        // 检查基础样式
+        const styles = window.getComputedStyle(button[0]);
+        console.log("样式检查:", {
+            position: styles.position,
+            zIndex: styles.zIndex,
+            cursor: styles.cursor,
+            pointerEvents: styles.pointerEvents,
+            userSelect: styles.userSelect
+        });
+
+        // 检查事件监听器
+        const events = $._data(button[0], "events");
+        if (events) {
+            console.log("事件监听器:");
+            Object.keys(events).forEach(eventType => {
+                console.log(`- ${eventType}: ${events[eventType].length} 个监听器`);
+            });
+        } else {
+            console.log("❌ 没有找到事件监听器");
+        }
+
+        // 检查位置数据
+        const savedPos = localStorage.getItem(STORAGE_KEY_BUTTON_POS);
+        if (savedPos) {
+            try {
+                const pos = JSON.parse(savedPos);
+                console.log("保存的位置:", pos);
+            } catch (e) {
+                console.log("❌ 位置数据损坏:", savedPos);
+            }
+        } else {
+            console.log("ℹ️ 没有保存的位置数据");
+        }
+
+        // 检查边界
+        const rect = button[0].getBoundingClientRect();
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+
+        console.log("边界检查:", {
+            inBounds: rect.left >= 0 && rect.top >= 0 &&
+                     rect.right <= windowWidth && rect.bottom <= windowHeight,
+            position: { left: rect.left, top: rect.top },
+            window: { width: windowWidth, height: windowHeight }
+        });
     };
 
     // 创建一个测试按钮来调试弹窗
@@ -2327,7 +2492,7 @@ jQuery(async () => {
             'display': 'flex',
             'opacity': '1',
             'visibility': 'visible',
-            'z-index': '2147483645'
+            'z-index': '2147483647'
         });
 
         // 清除可能有问题的保存位置

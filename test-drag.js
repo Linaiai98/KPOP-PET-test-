@@ -1,52 +1,211 @@
-// 拖拽功能测试脚本
+// 拖拽功能测试脚本 - 改进版本
 // 在浏览器控制台中运行此脚本来测试拖拽功能
 
 (function() {
-    console.log("🐾 开始测试拖拽功能...");
-    
+    console.log("🐾 开始测试改进的拖拽功能...");
+
     // 测试函数集合
     const DragTests = {
-        
+
         // 检查悬浮按钮是否存在
         checkButton: function() {
             const button = $('#virtual-pet-button');
             console.log("✅ 悬浮按钮检查:", button.length > 0 ? "存在" : "不存在");
             if (button.length > 0) {
-                console.log("   - 位置:", button.css('left'), button.css('top'));
-                console.log("   - 尺寸:", button.width() + 'x' + button.height());
-                console.log("   - 层级:", button.css('z-index'));
+                const rect = button[0].getBoundingClientRect();
+                const styles = window.getComputedStyle(button[0]);
+                console.log("   - 位置:", { left: rect.left, top: rect.top });
+                console.log("   - 尺寸:", rect.width + 'x' + rect.height);
+                console.log("   - 层级:", styles.zIndex);
+                console.log("   - 定位:", styles.position);
+                console.log("   - 光标:", styles.cursor);
             }
             return button.length > 0;
         },
-        
-        // 检查弹窗是否存在
-        checkPopup: function() {
-            const popup = $('#virtual-pet-popup');
-            const header = $('.pet-popup-header');
-            console.log("✅ 弹窗检查:", popup.length > 0 ? "存在" : "不存在");
-            console.log("✅ 标题栏检查:", header.length > 0 ? "存在" : "不存在");
-            return popup.length > 0 && header.length > 0;
+
+        // 检查事件绑定
+        checkEvents: function() {
+            const button = $('#virtual-pet-button');
+            if (button.length === 0) {
+                console.log("❌ 按钮不存在，无法检查事件");
+                return false;
+            }
+
+            const events = $._data(button[0], "events");
+            console.log("✅ 事件绑定检查:");
+            if (events) {
+                Object.keys(events).forEach(eventType => {
+                    console.log(`   - ${eventType}: ${events[eventType].length} 个监听器`);
+                    events[eventType].forEach((handler, index) => {
+                        console.log(`     ${index + 1}. 命名空间: ${handler.namespace || '无'}`);
+                    });
+                });
+            } else {
+                console.log("   ❌ 没有找到事件监听器");
+            }
+            return events && Object.keys(events).length > 0;
         },
-        
+
         // 测试按钮位置保存和恢复
         testButtonPosition: function() {
             console.log("🧪 测试按钮位置保存...");
-            
+
             const button = $('#virtual-pet-button');
             if (button.length === 0) {
                 console.log("❌ 按钮不存在，无法测试");
                 return false;
             }
-            
+
             // 保存当前位置
+            const originalRect = button[0].getBoundingClientRect();
             const originalPos = {
-                left: button.css('left'),
-                top: button.css('top')
+                left: originalRect.left,
+                top: originalRect.top
             };
-            
+            console.log("原始位置:", originalPos);
+
             // 移动到测试位置
-            const testPos = { left: '100px', top: '100px' };
-            button.css(testPos);
+            const testPos = { left: '150px', top: '150px' };
+            button.css({
+                'position': 'fixed',
+                'left': testPos.left,
+                'top': testPos.top
+            });
+
+            // 验证移动结果
+            setTimeout(() => {
+                const newRect = button[0].getBoundingClientRect();
+                const moved = Math.abs(newRect.left - 150) < 5 && Math.abs(newRect.top - 150) < 5;
+                console.log(moved ? "✅ 位置移动成功" : "❌ 位置移动失败");
+                console.log("新位置:", { left: newRect.left, top: newRect.top });
+
+                // 恢复原始位置
+                button.css({
+                    'left': originalPos.left + 'px',
+                    'top': originalPos.top + 'px'
+                });
+                console.log("✅ 已恢复原始位置");
+            }, 100);
+
+            return true;
+        },
+
+        // 测试拖动阈值
+        testDragThreshold: function() {
+            console.log("🧪 测试拖动阈值...");
+
+            const button = $('#virtual-pet-button');
+            if (button.length === 0) {
+                console.log("❌ 按钮不存在，无法测试");
+                return false;
+            }
+
+            console.log("模拟小幅移动（应该不触发拖动）...");
+            // 这里可以添加模拟事件的代码
+            console.log("ℹ️ 手动测试：轻微移动鼠标应该不会触发拖动");
+            console.log("ℹ️ 手动测试：移动超过8像素应该触发拖动");
+
+            return true;
+        },
+
+        // 测试边界限制
+        testBoundaryLimits: function() {
+            console.log("🧪 测试边界限制...");
+
+            const button = $('#virtual-pet-button');
+            if (button.length === 0) {
+                console.log("❌ 按钮不存在，无法测试");
+                return false;
+            }
+
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+            const buttonWidth = button.outerWidth() || 48;
+            const buttonHeight = button.outerHeight() || 48;
+
+            console.log("窗口尺寸:", { width: windowWidth, height: windowHeight });
+            console.log("按钮尺寸:", { width: buttonWidth, height: buttonHeight });
+
+            // 测试边界位置
+            const testPositions = [
+                { name: "左上角", left: 5, top: 5 },
+                { name: "右上角", left: windowWidth - buttonWidth - 5, top: 5 },
+                { name: "左下角", left: 5, top: windowHeight - buttonHeight - 5 },
+                { name: "右下角", left: windowWidth - buttonWidth - 5, top: windowHeight - buttonHeight - 5 },
+                { name: "超出左边界", left: -50, top: 100 },
+                { name: "超出右边界", left: windowWidth + 50, top: 100 }
+            ];
+
+            testPositions.forEach((pos, index) => {
+                setTimeout(() => {
+                    console.log(`测试 ${pos.name}...`);
+                    button.css({
+                        'position': 'fixed',
+                        'left': pos.left + 'px',
+                        'top': pos.top + 'px'
+                    });
+
+                    setTimeout(() => {
+                        const rect = button[0].getBoundingClientRect();
+                        const inBounds = rect.left >= 0 && rect.top >= 0 &&
+                                       rect.right <= windowWidth && rect.bottom <= windowHeight;
+                        console.log(`${pos.name} - 在边界内: ${inBounds ? '✅' : '❌'}`);
+                        console.log(`实际位置: (${rect.left}, ${rect.top})`);
+                    }, 50);
+                }, index * 200);
+            });
+
+            return true;
+        },
+
+        // 测试点击与拖动的区分
+        testClickVsDrag: function() {
+            console.log("🧪 测试点击与拖动区分...");
+            console.log("ℹ️ 手动测试说明:");
+            console.log("1. 快速点击按钮 - 应该显示弹窗");
+            console.log("2. 按住并拖动按钮 - 应该移动按钮，不显示弹窗");
+            console.log("3. 拖动后立即点击 - 应该被阻止，不显示弹窗");
+
+            return true;
+        },
+
+        // 运行所有测试
+        runAllTests: function() {
+            console.log("🚀 运行所有拖动测试...");
+
+            const tests = [
+                'checkButton',
+                'checkEvents',
+                'testButtonPosition',
+                'testDragThreshold',
+                'testBoundaryLimits',
+                'testClickVsDrag'
+            ];
+
+            tests.forEach((testName, index) => {
+                setTimeout(() => {
+                    console.log(`\n--- 测试 ${index + 1}/${tests.length}: ${testName} ---`);
+                    try {
+                        this[testName]();
+                    } catch (error) {
+                        console.error(`❌ 测试 ${testName} 失败:`, error);
+                    }
+                }, index * 1000);
+            });
+        }
+    };
+
+    // 导出测试对象到全局
+    window.DragTests = DragTests;
+
+    console.log("✅ 拖动测试脚本加载完成");
+    console.log("使用方法:");
+    console.log("- DragTests.runAllTests() - 运行所有测试");
+    console.log("- DragTests.checkButton() - 检查按钮状态");
+    console.log("- DragTests.testButtonPosition() - 测试位置功能");
+    console.log("- DragTests.testBoundaryLimits() - 测试边界限制");
+
+})();
             
             // 模拟保存位置
             localStorage.setItem('virtual-pet-button-position', JSON.stringify({

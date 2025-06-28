@@ -18,6 +18,7 @@ jQuery(async () => {
     const STORAGE_KEY_BUTTON_POS = "virtual-pet-button-position";
     const STORAGE_KEY_ENABLED = "virtual-pet-enabled";
     const STORAGE_KEY_PET_DATA = "virtual-pet-data";
+    const STORAGE_KEY_CUSTOM_AVATAR = "virtual-pet-custom-avatar";
     
     // DOM IDs and Selectors
     const BUTTON_ID = "virtual-pet-button";
@@ -32,6 +33,9 @@ jQuery(async () => {
 
     // 弹窗状态管理
     let isPopupOpen = false;
+
+    // 自定义头像管理
+    let customAvatarData = null;
     
     // 宠物数据结构
     let petData = {
@@ -379,6 +383,131 @@ jQuery(async () => {
     }
 
     /**
+     * 打开头像选择器
+     */
+    window.openAvatarSelector = function() {
+        console.log(`[${extensionName}] Opening avatar selector`);
+
+        // 创建文件输入元素
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'image/*';
+        fileInput.style.display = 'none';
+
+        fileInput.onchange = function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                // 检查文件大小 (限制为2MB)
+                if (file.size > 2 * 1024 * 1024) {
+                    alert('图片文件过大，请选择小于2MB的图片');
+                    return;
+                }
+
+                // 检查文件类型
+                if (!file.type.startsWith('image/')) {
+                    alert('请选择图片文件');
+                    return;
+                }
+
+                // 读取文件并转换为base64
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const imageData = e.target.result;
+
+                    // 保存头像数据
+                    if (saveCustomAvatar(imageData)) {
+                        // 更新显示
+                        updateAvatarDisplay();
+                        updateFloatingButtonAvatar();
+                        console.log(`[${extensionName}] Avatar updated successfully`);
+                    } else {
+                        alert('保存头像失败，请重试');
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+
+            // 清理文件输入元素
+            document.body.removeChild(fileInput);
+        };
+
+        // 添加到DOM并触发点击
+        document.body.appendChild(fileInput);
+        fileInput.click();
+    };
+
+    /**
+     * 重置头像为默认
+     */
+    window.resetAvatar = function() {
+        console.log(`[${extensionName}] Resetting avatar to default`);
+
+        if (clearCustomAvatar()) {
+            // 更新显示
+            updateAvatarDisplay();
+            updateFloatingButtonAvatar();
+            console.log(`[${extensionName}] Avatar reset successfully`);
+        } else {
+            alert('重置头像失败，请重试');
+        }
+    };
+
+    /**
+     * 更新头像显示
+     */
+    function updateAvatarDisplay() {
+        // 更新弹窗中的头像
+        const avatarCircle = $('.pet-avatar-circle');
+        if (avatarCircle.length > 0) {
+            avatarCircle.html(getAvatarContent());
+        }
+
+        // 更新头像管理按钮
+        const avatarControls = $('.avatar-controls');
+        if (avatarControls.length > 0) {
+            const resetButton = avatarControls.find('button').eq(1);
+            if (customAvatarData) {
+                if (resetButton.length === 0) {
+                    avatarControls.append(`
+                        <button onclick="resetAvatar()" style="
+                            background: #f04747 !important;
+                            color: white !important;
+                            border: none !important;
+                            padding: 6px 12px !important;
+                            border-radius: 4px !important;
+                            font-size: 0.8em !important;
+                            cursor: pointer !important;
+                        ">🔄 重置</button>
+                    `);
+                }
+            } else {
+                resetButton.remove();
+            }
+        }
+    }
+
+    /**
+     * 更新悬浮按钮头像
+     */
+    function updateFloatingButtonAvatar() {
+        const button = $(`#${BUTTON_ID}`);
+        if (button.length > 0) {
+            if (customAvatarData) {
+                // 显示自定义头像
+                button.html(`<img src="${customAvatarData}" alt="宠物头像" style="
+                    width: 100% !important;
+                    height: 100% !important;
+                    object-fit: cover !important;
+                    border-radius: 50% !important;
+                ">`);
+            } else {
+                // 显示默认爪子图案
+                button.html('🐾');
+            }
+        }
+    }
+
+    /**
      * 切换弹窗状态 - 如果弹窗打开则关闭，如果关闭则打开
      */
     function togglePopup() {
@@ -441,10 +570,45 @@ jQuery(async () => {
         if (!petContainer) return;
         
         const statusHtml = `
-            <div class="pet-avatar">
-                <div class="pet-emoji">${getPetEmoji()}</div>
-                <div class="pet-name">${escapeHtml(petData.name)}</div>
-                <div class="pet-level">Lv.${petData.level}</div>
+            <div class="pet-avatar-container" style="
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: center !important;
+                gap: 12px !important;
+                padding: 20px !important;
+            ">
+                <!-- 圆形头像框 -->
+                <div class="pet-avatar-circle" style="
+                    width: 80px !important;
+                    height: 80px !important;
+                    border-radius: 50% !important;
+                    background: #40444b !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    font-size: 3em !important;
+                    overflow: hidden !important;
+                    border: 3px solid #7289da !important;
+                    box-shadow: 0 4px 8px rgba(0,0,0,0.3) !important;
+                    cursor: pointer !important;
+                    transition: transform 0.2s ease !important;
+                " onclick="openAvatarSelector()">
+                    ${getAvatarContent()}
+                </div>
+
+                <!-- 宠物信息 -->
+                <div class="pet-info" style="text-align: center !important;">
+                    <div class="pet-name" style="
+                        font-size: 1.3em !important;
+                        font-weight: bold !important;
+                        margin-bottom: 4px !important;
+                        color: #ffffff !important;
+                    ">${escapeHtml(petData.name)}</div>
+                    <div class="pet-level" style="
+                        color: #7289da !important;
+                        font-size: 1em !important;
+                    ">Lv.${petData.level}</div>
+                </div>
             </div>
             <div class="pet-stats">
                 <div class="stat-bar">
@@ -487,12 +651,75 @@ jQuery(async () => {
     function getPetEmoji() {
         const emojis = {
             cat: "🐱",
-            dog: "🐶", 
+            dog: "🐶",
             dragon: "🐉",
             rabbit: "🐰",
             bird: "🐦"
         };
         return emojis[petData.type] || "🐱";
+    }
+
+    /**
+     * 获取头像显示内容 - 支持自定义图片
+     */
+    function getAvatarContent() {
+        if (customAvatarData) {
+            // 返回自定义图片的HTML
+            return `<img src="${customAvatarData}" alt="宠物头像" style="
+                width: 100% !important;
+                height: 100% !important;
+                object-fit: cover !important;
+                border-radius: 50% !important;
+            ">`;
+        } else {
+            // 返回默认表情符号
+            return getPetEmoji();
+        }
+    }
+
+    /**
+     * 加载自定义头像数据
+     */
+    function loadCustomAvatar() {
+        try {
+            const saved = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
+            if (saved) {
+                customAvatarData = saved;
+                console.log(`[${extensionName}] Custom avatar loaded`);
+            }
+        } catch (error) {
+            console.warn(`[${extensionName}] Failed to load custom avatar:`, error);
+        }
+    }
+
+    /**
+     * 保存自定义头像数据
+     */
+    function saveCustomAvatar(imageData) {
+        try {
+            localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, imageData);
+            customAvatarData = imageData;
+            console.log(`[${extensionName}] Custom avatar saved`);
+            return true;
+        } catch (error) {
+            console.error(`[${extensionName}] Failed to save custom avatar:`, error);
+            return false;
+        }
+    }
+
+    /**
+     * 清除自定义头像
+     */
+    function clearCustomAvatar() {
+        try {
+            localStorage.removeItem(STORAGE_KEY_CUSTOM_AVATAR);
+            customAvatarData = null;
+            console.log(`[${extensionName}] Custom avatar cleared`);
+            return true;
+        } catch (error) {
+            console.error(`[${extensionName}] Failed to clear custom avatar:`, error);
+            return false;
+        }
     }
     
     /**
@@ -915,7 +1142,7 @@ jQuery(async () => {
                 left: 20px !important;
                 bottom: auto !important;
                 right: auto !important;
-            ">🐾</div>
+            ">${customAvatarData ? `<img src="${customAvatarData}" alt="宠物头像" style="width: 100% !important; height: 100% !important; object-fit: cover !important; border-radius: 50% !important;">` : '🐾'}</div>
         `;
 
         // 直接添加到body，避免被其他容器影响定位
@@ -1145,6 +1372,9 @@ jQuery(async () => {
 
         // 4. 加载宠物数据
         loadPetData();
+
+        // 5. 加载自定义头像数据
+        loadCustomAvatar();
 
         // 5. 只在非iOS设备上初始化原始弹窗功能
         if (!isIOS) {
@@ -2009,6 +2239,104 @@ jQuery(async () => {
         return true;
     };
 
+    // 测试头像功能
+    window.testAvatarFunction = function() {
+        console.log("🎯 测试头像功能...");
+
+        // 检查头像相关函数是否存在
+        const functions = {
+            openAvatarSelector: typeof window.openAvatarSelector === 'function',
+            resetAvatar: typeof window.resetAvatar === 'function',
+            getAvatarContent: typeof getAvatarContent === 'function',
+            loadCustomAvatar: typeof loadCustomAvatar === 'function',
+            saveCustomAvatar: typeof saveCustomAvatar === 'function',
+            clearCustomAvatar: typeof clearCustomAvatar === 'function'
+        };
+
+        console.log("函数检查:");
+        Object.entries(functions).forEach(([name, exists]) => {
+            console.log(`  ${exists ? '✅' : '❌'} ${name}`);
+        });
+
+        // 检查当前头像状态
+        console.log(`当前自定义头像: ${customAvatarData ? '已设置' : '未设置'}`);
+
+        // 检查悬浮按钮头像
+        const button = $(`#${BUTTON_ID}`);
+        if (button.length > 0) {
+            const hasCustomImage = button.find('img').length > 0;
+            const hasDefaultEmoji = button.text().includes('🐾');
+            console.log(`悬浮按钮头像: ${hasCustomImage ? '自定义图片' : hasDefaultEmoji ? '默认爪子' : '未知'}`);
+        } else {
+            console.log("❌ 悬浮按钮不存在");
+        }
+
+        // 检查弹窗中的头像
+        const avatarCircle = $('.pet-avatar-circle');
+        if (avatarCircle.length > 0) {
+            const hasCustomImage = avatarCircle.find('img').length > 0;
+            console.log(`弹窗头像: ${hasCustomImage ? '自定义图片' : '默认表情'}`);
+            console.log(`头像框数量: ${avatarCircle.length}`);
+        } else {
+            console.log("弹窗头像: 未找到头像框");
+        }
+
+        // 检查头像管理按钮
+        const avatarControls = $('.avatar-controls');
+        if (avatarControls.length > 0) {
+            const changeButton = avatarControls.find('button').first();
+            const resetButton = avatarControls.find('button').eq(1);
+            console.log(`更换按钮: ${changeButton.length > 0 ? '✅' : '❌'}`);
+            console.log(`重置按钮: ${resetButton.length > 0 ? '✅' : '❌'}`);
+        } else {
+            console.log("头像管理按钮: 未找到");
+        }
+
+        const allFunctionsExist = Object.values(functions).every(exists => exists);
+        console.log(`\n🎉 头像功能测试: ${allFunctionsExist ? '所有功能就绪！' : '部分功能缺失'}`);
+
+        if (allFunctionsExist) {
+            console.log("📋 使用说明:");
+            console.log("  - 点击弹窗中的圆形头像框可以更换头像");
+            console.log("  - 点击'📷 更换头像'按钮选择本地图片");
+            console.log("  - 点击'🔄 重置'按钮恢复默认头像");
+            console.log("  - 自定义头像会同时显示在弹窗和悬浮按钮中");
+            console.log("  - 头像图片会自动裁剪为圆形并完全填充");
+        }
+
+        return allFunctionsExist;
+    };
+
+    // 模拟设置测试头像
+    window.setTestAvatar = function() {
+        console.log("🎯 设置测试头像...");
+
+        // 创建一个简单的测试图片 (1x1像素的红色图片)
+        const canvas = document.createElement('canvas');
+        canvas.width = 100;
+        canvas.height = 100;
+        const ctx = canvas.getContext('2d');
+
+        // 绘制一个简单的测试图案
+        ctx.fillStyle = '#7289da';
+        ctx.fillRect(0, 0, 100, 100);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '60px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('🐱', 50, 70);
+
+        const testImageData = canvas.toDataURL('image/png');
+
+        if (saveCustomAvatar(testImageData)) {
+            updateAvatarDisplay();
+            updateFloatingButtonAvatar();
+            console.log("✅ 测试头像设置成功");
+            console.log("现在可以看到自定义头像效果");
+        } else {
+            console.log("❌ 测试头像设置失败");
+        }
+    };
+
     // 全面的拖动功能验证测试
     window.validateDragFix = function() {
         console.log("🧪 开始全面验证拖动修复...");
@@ -2508,12 +2836,58 @@ jQuery(async () => {
                 <div class="pet-avatar-section" style="
                     text-align: center !important;
                     background: #40444b !important;
-                    padding: 12px !important;
+                    padding: 15px !important;
                     border-radius: 8px !important;
                 ">
-                    <div class="pet-avatar" style="font-size: 2.5em !important; margin-bottom: 6px !important;">🐱</div>
+                    <!-- 圆形头像框 -->
+                    <div class="pet-avatar-circle" style="
+                        width: 70px !important;
+                        height: 70px !important;
+                        border-radius: 50% !important;
+                        background: #36393f !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        font-size: 2.5em !important;
+                        overflow: hidden !important;
+                        border: 2px solid #7289da !important;
+                        box-shadow: 0 3px 6px rgba(0,0,0,0.3) !important;
+                        cursor: pointer !important;
+                        margin: 0 auto 8px auto !important;
+                    " onclick="openAvatarSelector()">
+                        ${getAvatarContent()}
+                    </div>
                     <div class="pet-name" style="font-size: 1.2em !important; font-weight: bold !important; margin-bottom: 3px !important;">小宠物</div>
                     <div class="pet-level" style="color: #7289da !important; font-size: 0.9em !important;">Lv.1</div>
+
+                    <!-- 头像管理按钮 -->
+                    <div class="avatar-controls" style="
+                        display: flex !important;
+                        gap: 6px !important;
+                        justify-content: center !important;
+                        margin-top: 8px !important;
+                    ">
+                        <button onclick="openAvatarSelector()" style="
+                            background: #7289da !important;
+                            color: white !important;
+                            border: none !important;
+                            padding: 4px 8px !important;
+                            border-radius: 3px !important;
+                            font-size: 0.7em !important;
+                            cursor: pointer !important;
+                        ">📷 更换</button>
+                        ${customAvatarData ? `
+                        <button onclick="resetAvatar()" style="
+                            background: #f04747 !important;
+                            color: white !important;
+                            border: none !important;
+                            padding: 4px 8px !important;
+                            border-radius: 3px !important;
+                            font-size: 0.7em !important;
+                            cursor: pointer !important;
+                        ">🔄 重置</button>
+                        ` : ''}
+                    </div>
                 </div>
 
                 <!-- 宠物状态栏 -->
@@ -2674,12 +3048,61 @@ jQuery(async () => {
                 <div class="pet-avatar-section" style="
                     text-align: center !important;
                     background: #40444b !important;
-                    padding: 15px !important;
+                    padding: 20px !important;
                     border-radius: 10px !important;
                 ">
-                    <div class="pet-avatar" style="font-size: 3em !important; margin-bottom: 8px !important;">🐱</div>
+                    <!-- 圆形头像框 -->
+                    <div class="pet-avatar-circle" style="
+                        width: 90px !important;
+                        height: 90px !important;
+                        border-radius: 50% !important;
+                        background: #36393f !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        font-size: 3em !important;
+                        overflow: hidden !important;
+                        border: 3px solid #7289da !important;
+                        box-shadow: 0 4px 8px rgba(0,0,0,0.3) !important;
+                        cursor: pointer !important;
+                        margin: 0 auto 10px auto !important;
+                        transition: transform 0.2s ease !important;
+                    " onclick="openAvatarSelector()">
+                        ${getAvatarContent()}
+                    </div>
                     <div class="pet-name" style="font-size: 1.3em !important; font-weight: bold !important; margin-bottom: 4px !important;">小宠物</div>
                     <div class="pet-level" style="color: #7289da !important; font-size: 1em !important;">Lv.1</div>
+
+                    <!-- 头像管理按钮 -->
+                    <div class="avatar-controls" style="
+                        display: flex !important;
+                        gap: 8px !important;
+                        justify-content: center !important;
+                        margin-top: 12px !important;
+                    ">
+                        <button onclick="openAvatarSelector()" style="
+                            background: #7289da !important;
+                            color: white !important;
+                            border: none !important;
+                            padding: 6px 12px !important;
+                            border-radius: 4px !important;
+                            font-size: 0.8em !important;
+                            cursor: pointer !important;
+                            transition: background 0.2s ease !important;
+                        ">📷 更换头像</button>
+                        ${customAvatarData ? `
+                        <button onclick="resetAvatar()" style="
+                            background: #f04747 !important;
+                            color: white !important;
+                            border: none !important;
+                            padding: 6px 12px !important;
+                            border-radius: 4px !important;
+                            font-size: 0.8em !important;
+                            cursor: pointer !important;
+                            transition: background 0.2s ease !important;
+                        ">🔄 重置</button>
+                        ` : ''}
+                    </div>
                 </div>
 
                 <!-- 宠物状态栏 -->

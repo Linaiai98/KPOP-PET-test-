@@ -785,7 +785,112 @@ jQuery(async () => {
                 }
             }
 
-            // 方法2: 检查是否有chat相关的全局变量
+            // 方法1.5: 尝试直接使用SillyTavern的内部生成机制
+            if (window.main_api && window.main_api.type) {
+                console.log(`[${extensionName}] Detected API type: ${window.main_api.type}`);
+
+                try {
+                    // 根据API类型尝试不同的调用方式
+                    if (window.main_api.type === 'openai' && window.Generate) {
+                        console.log(`[${extensionName}] Trying OpenAI-style generation...`);
+
+                        // 创建一个临时的消息来触发生成
+                        const tempMessage = {
+                            name: 'System',
+                            is_user: false,
+                            is_system: true,
+                            mes: prompt
+                        };
+
+                        // 尝试使用SillyTavern的生成机制
+                        const response = await window.Generate('quiet', '', false, false, prompt);
+                        if (response && response.trim()) {
+                            console.log(`[${extensionName}] OpenAI-style generation success`);
+                            return response.trim();
+                        }
+                    }
+
+                    // 尝试其他API类型
+                    if (window.main_api.type === 'kobold' || window.main_api.type === 'novel') {
+                        console.log(`[${extensionName}] Trying ${window.main_api.type} generation...`);
+
+                        // 使用更简单的提示词
+                        const simplePrompt = "说一句可爱的话：";
+                        const response = await window.Generate('quiet', '', false, false, simplePrompt);
+                        if (response && response.trim()) {
+                            console.log(`[${extensionName}] ${window.main_api.type} generation success`);
+                            return response.trim();
+                        }
+                    }
+                } catch (error) {
+                    console.warn(`[${extensionName}] API-specific generation failed:`, error);
+                }
+            }
+
+            // 方法2: 尝试使用main_api对象
+            if (window.main_api && typeof window.main_api === 'object') {
+                console.log(`[${extensionName}] Trying main_api methods...`);
+
+                // 检查main_api的可用方法
+                console.log(`[${extensionName}] main_api methods:`, Object.keys(window.main_api));
+
+                try {
+                    // 尝试不同的main_api方法
+                    const apiMethods = ['generate', 'sendMessage', 'chat', 'complete'];
+
+                    for (const method of apiMethods) {
+                        if (typeof window.main_api[method] === 'function') {
+                            console.log(`[${extensionName}] Trying main_api.${method}...`);
+                            try {
+                                let response;
+
+                                if (method === 'generate') {
+                                    response = await window.main_api.generate(prompt, {
+                                        max_tokens: 50,
+                                        temperature: 0.8
+                                    });
+                                } else if (method === 'sendMessage') {
+                                    response = await window.main_api.sendMessage(prompt);
+                                } else if (method === 'chat') {
+                                    response = await window.main_api.chat([{
+                                        role: 'user',
+                                        content: prompt
+                                    }]);
+                                } else if (method === 'complete') {
+                                    response = await window.main_api.complete(prompt);
+                                }
+
+                                if (response) {
+                                    // 处理不同格式的响应
+                                    let text = '';
+                                    if (typeof response === 'string') {
+                                        text = response;
+                                    } else if (response.text) {
+                                        text = response.text;
+                                    } else if (response.content) {
+                                        text = response.content;
+                                    } else if (response.message) {
+                                        text = response.message;
+                                    } else if (response.choices && response.choices[0]) {
+                                        text = response.choices[0].text || response.choices[0].message?.content;
+                                    }
+
+                                    if (text && text.trim()) {
+                                        console.log(`[${extensionName}] main_api.${method} success: ${text.trim()}`);
+                                        return text.trim();
+                                    }
+                                }
+                            } catch (error) {
+                                console.warn(`[${extensionName}] main_api.${method} failed:`, error);
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.warn(`[${extensionName}] main_api methods failed:`, error);
+                }
+            }
+
+            // 方法3: 检查是否有chat相关的全局变量
             if (window.chat && Array.isArray(window.chat) && typeof window.Generate === 'function') {
                 console.log(`[${extensionName}] Trying Generate function...`);
                 try {
@@ -798,13 +903,6 @@ jQuery(async () => {
                 } catch (error) {
                     console.warn(`[${extensionName}] Generate function failed:`, error);
                 }
-            }
-
-            // 方法3: 检查是否有API相关的全局对象
-            if (window.api_server && window.api_server !== '') {
-                console.log(`[${extensionName}] Found API server configuration`);
-                // 这里我们不直接调用HTTP API，因为可能没有权限
-                console.log(`[${extensionName}] API server found but skipping direct HTTP calls due to permission issues`);
             }
 
             // 方法4: 尝试使用事件系统
@@ -824,8 +922,16 @@ jQuery(async () => {
                 }
             }
 
-            // 如果所有方法都失败，返回null
-            console.warn(`[${extensionName}] All API methods failed or unavailable. This might be because:`);
+            // 如果所有方法都失败，尝试使用智能回退机制
+            console.warn(`[${extensionName}] All API methods failed or unavailable. Trying fallback...`);
+
+            // 尝试最后的回退方案：使用基于人设的智能预设回应
+            if (petPersona && petPersona.length > 0) {
+                console.log(`[${extensionName}] Using intelligent fallback based on persona...`);
+                return generateIntelligentFallback(prompt);
+            }
+
+            console.warn(`[${extensionName}] Complete API failure. This might be because:`);
             console.warn(`[${extensionName}] 1. No AI model is configured in SillyTavern`);
             console.warn(`[${extensionName}] 2. The AI service is not running`);
             console.warn(`[${extensionName}] 3. There are permission issues with the API`);
@@ -837,6 +943,244 @@ jQuery(async () => {
             console.error(`[${extensionName}] API call failed:`, error);
             return null;
         }
+    }
+
+    /**
+     * 智能回退机制 - 当API不可用时基于人设生成回应
+     */
+    function generateIntelligentFallback(prompt) {
+        console.log(`[${extensionName}] Generating intelligent fallback response...`);
+
+        try {
+            // 分析人设中的关键词
+            const persona = petPersona.toLowerCase();
+            const petName = petData.name;
+            const petType = petData.type;
+
+            // 分析prompt中的互动类型
+            let interactionType = 'attention';
+            if (prompt.includes('喂食') || prompt.includes('feed')) {
+                interactionType = 'feed';
+            } else if (prompt.includes('玩耍') || prompt.includes('play')) {
+                interactionType = 'play';
+            } else if (prompt.includes('休息') || prompt.includes('sleep')) {
+                interactionType = 'sleep';
+            } else if (prompt.includes('升级') || prompt.includes('level')) {
+                interactionType = 'levelup';
+            } else if (prompt.includes('问候') || prompt.includes('greeting')) {
+                interactionType = 'greeting';
+            }
+
+            // 根据人设特征和互动类型生成回应
+            let responses = [];
+
+            // 检查人设中的语言特色
+            if (persona.includes('nya') || persona.includes('喵') || petType === 'cat') {
+                responses = getCatResponses(interactionType, petName);
+            } else if (persona.includes('汪') || persona.includes('woof') || petType === 'dog') {
+                responses = getDogResponses(interactionType, petName);
+            } else if (persona.includes('龙') || persona.includes('dragon') || petType === 'dragon') {
+                responses = getDragonResponses(interactionType, petName);
+            } else {
+                responses = getGenericResponses(interactionType, petName);
+            }
+
+            let response = responses[Math.floor(Math.random() * responses.length)];
+
+            // 根据人设中的性格特征调整语气
+            if (persona.includes('害羞') || persona.includes('shy')) {
+                response = response.replace('！', '...').replace('~', '...');
+            } else if (persona.includes('活泼') || persona.includes('兴奋') || persona.includes('energetic')) {
+                response = response + '！！';
+            }
+
+            console.log(`[${extensionName}] Intelligent fallback generated: ${response}`);
+            return response;
+
+        } catch (error) {
+            console.error(`[${extensionName}] Error in intelligent fallback:`, error);
+            return `${petData.name}想要主人的关注~`;
+        }
+    }
+
+    /**
+     * 获取猫咪类型的回应
+     */
+    function getCatResponses(type, name) {
+        const responses = {
+            attention: [
+                `${name}想要主人的关注nya~`,
+                `主人，${name}好想你呀喵~`,
+                `${name}在这里等主人很久了nya！`,
+                `主人大人，陪${name}玩一会儿嘛~`
+            ],
+            feed: [
+                `谢谢主人的美食nya~`,
+                `${name}最喜欢主人准备的食物了喵！`,
+                `好香呀，${name}要开动了nya~`,
+                `主人做的食物最好吃了喵~`
+            ],
+            play: [
+                `和主人一起玩好开心nya~`,
+                `${name}最喜欢和主人玩了喵！`,
+                `再玩一会儿嘛nya~`,
+                `主人陪${name}玩，${name}好幸福喵~`
+            ],
+            sleep: [
+                `${name}要睡觉了nya~`,
+                `谢谢主人让${name}休息喵~`,
+                `${name}睡得好香nya...`,
+                `主人晚安，${name}要做美梦了喵~`
+            ],
+            greeting: [
+                `主人好呀nya~`,
+                `${name}见到主人好开心喵！`,
+                `主人来了nya！${name}等你很久了~`,
+                `欢迎回来，主人大人喵~`
+            ],
+            levelup: [
+                `${name}变强了nya！`,
+                `谢谢主人，${name}升级了喵~`,
+                `${name}现在更厉害了nya！`,
+                `主人看，${name}成长了喵~`
+            ]
+        };
+        return responses[type] || responses.attention;
+    }
+
+    /**
+     * 获取狗狗类型的回应
+     */
+    function getDogResponses(type, name) {
+        const responses = {
+            attention: [
+                `${name}好想主人汪！`,
+                `主人回来了！${name}好开心汪~`,
+                `${name}一直在等主人汪汪！`,
+                `主人，和${name}一起玩吧汪~`
+            ],
+            feed: [
+                `谢谢主人汪！好好吃~`,
+                `${name}最爱主人准备的食物汪！`,
+                `${name}要大口大口吃汪~`,
+                `主人最好了汪汪！`
+            ],
+            play: [
+                `和主人玩耍最开心了汪！`,
+                `${name}好兴奋汪汪~`,
+                `主人再陪${name}玩一会儿汪~`,
+                `${name}最喜欢这个游戏汪！`
+            ],
+            sleep: [
+                `${name}要乖乖睡觉汪~`,
+                `谢谢主人，${name}好困汪...`,
+                `${name}睡个好觉汪~`,
+                `主人晚安汪，${name}要做好梦~`
+            ],
+            greeting: [
+                `主人好汪！`,
+                `${name}见到主人超开心汪汪！`,
+                `主人回来了汪！${name}等你好久~`,
+                `欢迎回家汪~`
+            ],
+            levelup: [
+                `${name}变厉害了汪！`,
+                `谢谢主人汪！${name}升级了~`,
+                `${name}现在更强了汪汪！`,
+                `主人看，${name}成长了汪~`
+            ]
+        };
+        return responses[type] || responses.attention;
+    }
+
+    /**
+     * 获取龙类型的回应
+     */
+    function getDragonResponses(type, name) {
+        const responses = {
+            attention: [
+                `伟大的${name}需要您的关注！`,
+                `${name}已经等待您很久了...`,
+                `尊敬的主人，${name}想念您了`,
+                `${name}的威严需要您的陪伴`
+            ],
+            feed: [
+                `感谢您的供奉，${name}很满意`,
+                `这份食物配得上${name}的身份`,
+                `${name}接受您的敬意`,
+                `您的用心${name}感受到了`
+            ],
+            play: [
+                `${name}愿意与您共度时光`,
+                `这个游戏还算有趣`,
+                `${name}享受与您的互动`,
+                `您的陪伴让${name}愉悦`
+            ],
+            sleep: [
+                `${name}需要休息来恢复力量`,
+                `伟大的${name}要进入梦境了`,
+                `${name}将在睡梦中变得更强`,
+                `感谢您让${name}安心休息`
+            ],
+            greeting: [
+                `${name}向您致意`,
+                `尊敬的主人，${name}恭候您的到来`,
+                `${name}很高兴见到您`,
+                `您的到来让${name}感到荣幸`
+            ],
+            levelup: [
+                `${name}的力量得到了提升！`,
+                `${name}已经进化到新的境界`,
+                `伟大的${name}变得更加强大`,
+                `${name}感谢您的培养`
+            ]
+        };
+        return responses[type] || responses.attention;
+    }
+
+    /**
+     * 获取通用类型的回应
+     */
+    function getGenericResponses(type, name) {
+        const responses = {
+            attention: [
+                `${name}想要主人的关注~`,
+                `主人，${name}好想你呀~`,
+                `${name}在这里等主人很久了！`,
+                `主人，陪${name}玩一会儿嘛~`
+            ],
+            feed: [
+                `谢谢主人的食物~`,
+                `${name}最喜欢主人准备的美食了！`,
+                `好香呀，${name}要开动了~`,
+                `主人做的最好吃了~`
+            ],
+            play: [
+                `和主人一起玩好开心~`,
+                `${name}最喜欢和主人玩了！`,
+                `再玩一会儿嘛~`,
+                `主人陪${name}玩，${name}好幸福~`
+            ],
+            sleep: [
+                `${name}要睡觉了~`,
+                `谢谢主人让${name}休息~`,
+                `${name}睡得好香...`,
+                `主人晚安，${name}要做美梦了~`
+            ],
+            greeting: [
+                `主人好呀~`,
+                `${name}见到主人好开心！`,
+                `主人来了！${name}等你很久了~`,
+                `欢迎回来，主人~`
+            ],
+            levelup: [
+                `${name}变强了！`,
+                `谢谢主人，${name}升级了~`,
+                `${name}现在更厉害了！`,
+                `主人看，${name}成长了~`
+            ]
+        };
+        return responses[type] || responses.attention;
     }
 
     /**
@@ -977,21 +1321,23 @@ jQuery(async () => {
      * 显示AI不可用的提示
      */
     function showAIUnavailableMessage(interactionType) {
-        const message = `AI功能暂时不可用。请确保：
+        const message = `AI功能暂时不可用，已启用智能回退模式。
+
+🔧 如需完整AI功能，请确保：
 1. SillyTavern已正确配置AI模型
 2. AI服务正在运行
 3. 网络连接正常
 
-当前将使用默认${interactionType}消息。`;
+💡 当前使用基于人设的智能${interactionType}回应。`;
 
         if (typeof toastr !== 'undefined') {
-            toastr.warning(message, "AI功能提示", {
-                timeOut: 8000,
-                extendedTimeOut: 3000
+            toastr.info(message, "AI智能回退模式", {
+                timeOut: 10000,
+                extendedTimeOut: 4000
             });
         }
 
-        console.warn(`[${extensionName}] ${message}`);
+        console.info(`[${extensionName}] ${message}`);
     }
 
     /**
@@ -5652,6 +5998,36 @@ jQuery(async () => {
     };
 
     /**
+     * 测试智能回退功能
+     */
+    window.testIntelligentFallback = function() {
+        console.log("🧪 测试智能回退功能...");
+
+        if (!petPersona || petPersona.length === 0) {
+            console.log("❌ 需要先设置宠物人设才能测试智能回退");
+            return false;
+        }
+
+        const testTypes = ['attention', 'feed', 'play', 'sleep', 'greeting', 'levelup'];
+        const results = {};
+
+        testTypes.forEach(type => {
+            const prompt = `测试${type}互动`;
+            const response = generateIntelligentFallback(prompt);
+            results[type] = response;
+            console.log(`${type}: ${response}`);
+        });
+
+        if (typeof toastr !== 'undefined') {
+            toastr.success("智能回退功能测试完成！请查看控制台输出。", "测试成功", {
+                timeOut: 5000
+            });
+        }
+
+        return results;
+    };
+
+    /**
      * AI功能诊断工具
      */
     window.diagnoseAIFeatures = function() {
@@ -5743,8 +6119,9 @@ jQuery(async () => {
     console.log("🎛️ 设置管理：请在SillyTavern扩展设置中找到'🐾 虚拟宠物系统'进行配置");
     console.log("😽 撒娇功能：15分钟不理宠物会自动撒娇求关注！");
     console.log("🤖 AI功能：" + ((aiAttentionEnabled && aiInteractionsEnabled) ? "已启用" : "已禁用") + " (包括撒娇和互动)");
+    console.log("🛡️ 智能回退：当AI不可用时自动使用基于人设的智能回应");
     console.log("💡 提示：所有AI和人设功能都可以在设置界面中管理，无需使用控制台命令");
-    console.log("🔍 AI故障排除：如果AI功能不工作，请运行 diagnoseAIFeatures() 进行诊断");
+    console.log("🔍 AI故障排除：diagnoseAIFeatures() | 智能回退测试：testIntelligentFallback()");
     console.log("⚙️ AI功能控制：toggleAIFeatures() | 人设管理：setPetPersona('人设')");
     console.log("💡 卸载提示：如需完全卸载，请在控制台运行：uninstallVirtualPetSystem()");
 });

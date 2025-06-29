@@ -18,6 +18,7 @@ jQuery(async () => {
     const STORAGE_KEY_BUTTON_POS = "virtual-pet-button-position";
     const STORAGE_KEY_ENABLED = "virtual-pet-enabled";
     const STORAGE_KEY_PET_DATA = "virtual-pet-data";
+    const STORAGE_KEY_CUSTOM_AVATAR = "virtual-pet-custom-avatar";
     
     // DOM IDs and Selectors
     const BUTTON_ID = "virtual-pet-button";
@@ -29,6 +30,50 @@ jQuery(async () => {
     // DOM 元素引用
     let overlay, mainView, petView, settingsView;
     let petContainer;
+
+    // 弹窗状态管理
+    let isPopupOpen = false;
+
+    // 自定义头像管理
+    let customAvatarData = null;
+
+    // 糖果色配色方案
+    const candyColors = {
+        // 主色调 - 柔和的糖果色
+        primary: '#FF9EC7',      // 糖果粉
+        secondary: '#A8E6CF',    // 薄荷绿
+        accent: '#87CEEB',       // 天空蓝
+        warning: '#FFD93D',      // 柠檬黄
+        success: '#98FB98',      // 淡绿色
+
+        // 背景色
+        background: 'linear-gradient(135deg, #FFE5F1 0%, #E5F9F0 50%, #E5F4FF 100%)', // 糖果渐变
+        backgroundSolid: '#FFF8FC', // 纯色背景备选
+
+        // 文字色
+        textPrimary: '#2D3748',   // 深灰色文字
+        textSecondary: '#4A5568', // 中灰色文字
+        textLight: '#718096',     // 浅灰色文字
+        textWhite: '#FFFFFF',     // 白色文字
+
+        // 边框和阴影
+        border: '#E2E8F0',       // 浅边框
+        borderAccent: '#FF9EC7', // 强调边框
+        shadow: 'rgba(255, 158, 199, 0.2)', // 粉色阴影
+        shadowLight: 'rgba(255, 158, 199, 0.1)', // 浅粉色阴影
+
+        // 按钮色
+        buttonPrimary: '#FF9EC7',
+        buttonSecondary: '#A8E6CF',
+        buttonAccent: '#87CEEB',
+        buttonHover: '#FF7FB3',
+
+        // 状态栏色
+        health: '#FF9EC7',       // 健康 - 糖果粉
+        happiness: '#FFD93D',    // 快乐 - 柠檬黄
+        energy: '#A8E6CF',       // 精力 - 薄荷绿
+        experience: '#87CEEB'    // 经验 - 天空蓝
+    };
     
     // 宠物数据结构
     let petData = {
@@ -36,14 +81,16 @@ jQuery(async () => {
         type: "cat", // cat, dog, dragon, etc.
         level: 1,
         experience: 0,
-        health: 100,
-        happiness: 100,
+        health: 40,
+        happiness: 30,
         hunger: 50,
-        energy: 100,
+        energy: 60,
         lastFeedTime: Date.now(),
         lastPlayTime: Date.now(),
         lastSleepTime: Date.now(),
-        created: Date.now()
+        lastUpdateTime: Date.now(),
+        created: Date.now(),
+        dataVersion: 2.0 // 数据版本标记
     };
     
     // ----------------------------------------------------------------- 
@@ -57,10 +104,45 @@ jQuery(async () => {
         const saved = localStorage.getItem(STORAGE_KEY_PET_DATA);
         if (saved) {
             try {
-                petData = { ...petData, ...JSON.parse(saved) };
+                const savedData = JSON.parse(saved);
+
+                // 检查是否需要数据迁移（版本2.0 - 新的数值平衡）
+                const needsMigration = !savedData.dataVersion || savedData.dataVersion < 2.0;
+
+                if (needsMigration) {
+                    console.log(`[${extensionName}] 检测到旧数据，执行数据迁移...`);
+
+                    // 保留用户的自定义设置
+                    const migratedData = {
+                        ...petData, // 使用新的默认值
+                        name: savedData.name || petData.name, // 保留自定义名字
+                        type: savedData.type || petData.type, // 保留宠物类型
+                        level: savedData.level || petData.level, // 保留等级
+                        experience: savedData.experience || petData.experience, // 保留经验
+                        created: savedData.created || petData.created, // 保留创建时间
+                        lastFeedTime: savedData.lastFeedTime || petData.lastFeedTime,
+                        lastPlayTime: savedData.lastPlayTime || petData.lastPlayTime,
+                        lastSleepTime: savedData.lastSleepTime || petData.lastSleepTime,
+                        lastUpdateTime: savedData.lastUpdateTime || petData.lastUpdateTime,
+                        dataVersion: 2.0 // 标记为新版本数据
+                    };
+
+                    petData = migratedData;
+                    savePetData(); // 保存迁移后的数据
+
+                    console.log(`[${extensionName}] 数据迁移完成！新的初始数值已应用`);
+                    console.log(`健康: ${petData.health}, 快乐: ${petData.happiness}, 饱食: ${petData.hunger}, 精力: ${petData.energy}`);
+                } else {
+                    // 数据版本正确，直接加载
+                    petData = { ...petData, ...savedData };
+                }
             } catch (error) {
                 console.error(`[${extensionName}] Error loading pet data:`, error);
             }
+        } else {
+            // 没有保存的数据，添加版本标记
+            petData.dataVersion = 2.0;
+            savePetData();
         }
     }
     
@@ -83,19 +165,19 @@ jQuery(async () => {
         const timeSinceLastUpdate = now - (petData.lastUpdateTime || now);
         const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
         
-        // 随时间降低的属性
-        if (hoursElapsed > 0.1) { // 每6分钟更新一次
-            petData.hunger = Math.max(0, petData.hunger - hoursElapsed * 2);
-            petData.energy = Math.max(0, petData.energy - hoursElapsed * 1.5);
-            
-            // 饥饿和疲劳影响健康和快乐
+        // 随时间降低的属性（减缓衰减速度）
+        if (hoursElapsed > 0.2) { // 每12分钟更新一次
+            petData.hunger = Math.max(0, petData.hunger - hoursElapsed * 0.8);
+            petData.energy = Math.max(0, petData.energy - hoursElapsed * 0.6);
+
+            // 饥饿和疲劳影响健康和快乐（减缓影响）
             if (petData.hunger < 20) {
-                petData.health = Math.max(0, petData.health - hoursElapsed * 3);
-                petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 2);
+                petData.health = Math.max(0, petData.health - hoursElapsed * 1);
+                petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 0.8);
             }
-            
+
             if (petData.energy < 20) {
-                petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 1);
+                petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 0.5);
             }
             
             petData.lastUpdateTime = now;
@@ -113,17 +195,17 @@ jQuery(async () => {
         const now = Date.now();
         const timeSinceLastFeed = now - petData.lastFeedTime;
         
-        if (timeSinceLastFeed < 30000) { // 30秒冷却
+        if (timeSinceLastFeed < 20000) { // 20秒冷却
             toastr.warning("宠物还不饿，等一会再喂吧！");
             return;
         }
         
-        petData.hunger = Math.min(100, petData.hunger + 30);
-        petData.happiness = Math.min(100, petData.happiness + 10);
+        petData.hunger = Math.min(100, petData.hunger + 15);
+        petData.happiness = Math.min(100, petData.happiness + 5);
         petData.lastFeedTime = now;
         
         // 获得经验
-        gainExperience(5);
+        gainExperience(3);
         
         toastr.success(`${petData.name} 吃得很开心！`);
         savePetData();
@@ -137,17 +219,17 @@ jQuery(async () => {
         const now = Date.now();
         const timeSinceLastPlay = now - petData.lastPlayTime;
         
-        if (timeSinceLastPlay < 60000) { // 1分钟冷却
+        if (timeSinceLastPlay < 40000) { // 40秒冷却
             toastr.warning("宠物需要休息一下！");
             return;
         }
         
-        petData.happiness = Math.min(100, petData.happiness + 25);
-        petData.energy = Math.max(0, petData.energy - 15);
+        petData.happiness = Math.min(100, petData.happiness + 12);
+        petData.energy = Math.max(0, petData.energy - 8);
         petData.lastPlayTime = now;
         
         // 获得经验
-        gainExperience(8);
+        gainExperience(4);
         
         toastr.success(`${petData.name} 玩得很开心！`);
         savePetData();
@@ -161,17 +243,17 @@ jQuery(async () => {
         const now = Date.now();
         const timeSinceLastSleep = now - petData.lastSleepTime;
         
-        if (timeSinceLastSleep < 120000) { // 2分钟冷却
+        if (timeSinceLastSleep < 80000) { // 80秒冷却
             toastr.warning("宠物还不困！");
             return;
         }
         
-        petData.energy = Math.min(100, petData.energy + 40);
-        petData.health = Math.min(100, petData.health + 10);
+        petData.energy = Math.min(100, petData.energy + 20);
+        petData.health = Math.min(100, petData.health + 5);
         petData.lastSleepTime = now;
         
         // 获得经验
-        gainExperience(3);
+        gainExperience(2);
         
         toastr.success(`${petData.name} 睡得很香！`);
         savePetData();
@@ -188,7 +270,7 @@ jQuery(async () => {
         if (petData.experience >= expNeeded) {
             petData.level++;
             petData.experience -= expNeeded;
-            petData.health = 100; // 升级恢复健康
+            petData.health = Math.min(100, petData.health + 30); // 升级恢复部分健康
             toastr.success(`🎉 ${petData.name} 升级了！现在是 ${petData.level} 级！`);
         }
     }
@@ -236,27 +318,6 @@ jQuery(async () => {
     // 3. 弹窗和视图管理
     // -----------------------------------------------------------------
     
-    /**
-     * 切换弹窗显示/隐藏
-     */
-    function togglePopup() {
-        console.log(`[${extensionName}] Toggling popup`);
-
-        // 检查是否已有弹窗显示
-        const existingOverlay = $(`#${OVERLAY_ID}`);
-        const anyOverlay = $(".virtual-pet-popup-overlay");
-
-        if (existingOverlay.length > 0 || anyOverlay.length > 0) {
-            // 弹窗已显示，关闭它
-            console.log(`[${extensionName}] Popup is open, closing it`);
-            closePopup();
-        } else {
-            // 弹窗未显示，打开它
-            console.log(`[${extensionName}] Popup is closed, opening it`);
-            showPopup();
-        }
-    }
-
     /**
      * 打开弹窗并显示主视图
      */
@@ -311,8 +372,8 @@ jQuery(async () => {
                     height: auto !important;
                     max-width: ${containerMaxWidth} !important;
                     max-height: calc(100vh - 60px) !important;
-                    background-color: #2c2f33 !important;
-                    color: white !important;
+                    background: ${candyColors.background} !important;
+                    color: ${candyColors.textPrimary} !important;
                     border-radius: ${borderRadius} !important;
                     padding: ${containerPadding} !important;
                     overflow-y: auto !important;
@@ -328,20 +389,36 @@ jQuery(async () => {
             $("body").append(unifiedPopupHtml);
             overlayElement = $(`#${OVERLAY_ID}`);
 
-            // 点击外部关闭弹窗（所有平台统一）
-            overlayElement.on("click touchend", function(e) {
-                if (e.target === this) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log(`[${extensionName}] Overlay clicked, closing popup`);
-                    closePopup();
-                }
-            });
+            // 绑定外部点击关闭事件
+            if (isIOS) {
+                // iOS外部点击关闭
+                overlayElement.on("touchstart", function(e) {
+                    if (e.target === this) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log(`[${extensionName}] iOS overlay touched - closing popup`);
+                        closePopup();
+                    }
+                });
+            } else {
+                // 非iOS设备的外部点击关闭
+                overlayElement.on("click touchend", function(e) {
+                    if (e.target === this) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log(`[${extensionName}] Overlay clicked - closing popup`);
+                        closePopup();
+                    }
+                });
+            }
 
             // 绑定统一的操作按钮事件
             bindUnifiedUIEvents(overlayElement);
 
         console.log(`[${extensionName}] Unified popup created and displayed for all platforms`);
+
+        // 更新弹窗状态
+        isPopupOpen = true;
     }
     
     /**
@@ -375,6 +452,228 @@ jQuery(async () => {
             $(`#${OVERLAY_ID}`).remove();
             $(".virtual-pet-popup-overlay").remove();
         }, 250);
+
+        // 更新弹窗状态
+        isPopupOpen = false;
+    }
+
+    /**
+     * 打开头像选择器
+     */
+    window.openAvatarSelector = function() {
+        console.log(`[${extensionName}] Opening avatar selector`);
+
+        // 创建文件输入元素
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'image/*';
+        fileInput.style.display = 'none';
+
+        fileInput.onchange = function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                // 检查文件大小 (限制为2MB)
+                if (file.size > 2 * 1024 * 1024) {
+                    alert('图片文件过大，请选择小于2MB的图片');
+                    return;
+                }
+
+                // 检查文件类型
+                if (!file.type.startsWith('image/')) {
+                    alert('请选择图片文件');
+                    return;
+                }
+
+                // 读取文件并转换为base64
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const imageData = e.target.result;
+
+                    // 保存头像数据
+                    if (saveCustomAvatar(imageData)) {
+                        // 更新显示
+                        updateAvatarDisplay();
+                        updateFloatingButtonAvatar();
+                        console.log(`[${extensionName}] Avatar updated successfully`);
+                    } else {
+                        alert('保存头像失败，请重试');
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+
+            // 清理文件输入元素
+            document.body.removeChild(fileInput);
+        };
+
+        // 添加到DOM并触发点击
+        document.body.appendChild(fileInput);
+        fileInput.click();
+    };
+
+    /**
+     * 重置头像为默认
+     */
+    window.resetAvatar = function() {
+        console.log(`[${extensionName}] Resetting avatar to default`);
+
+        if (clearCustomAvatar()) {
+            // 更新显示
+            updateAvatarDisplay();
+            updateFloatingButtonAvatar();
+            console.log(`[${extensionName}] Avatar reset successfully`);
+        } else {
+            alert('重置头像失败，请重试');
+        }
+    };
+
+    /**
+     * 编辑宠物名字
+     */
+    window.editPetName = function() {
+        const currentName = petData.name;
+        const newName = prompt('请输入新的宠物名字:', currentName);
+
+        if (newName && newName.trim() && newName.trim() !== currentName) {
+            const trimmedName = newName.trim();
+            if (trimmedName.length > 20) {
+                alert('宠物名字不能超过20个字符！');
+                return;
+            }
+
+            petData.name = trimmedName;
+            savePetData();
+
+            // 更新所有UI中的名字显示
+            updateUnifiedUIStatus();
+
+            // 显示成功消息
+            if (typeof toastr !== 'undefined') {
+                toastr.success(`宠物名字已更改为 "${trimmedName}"`);
+            } else {
+                alert(`宠物名字已更改为 "${trimmedName}"`);
+            }
+        }
+    };
+
+    /**
+     * 更新统一UI中的状态显示
+     */
+    function updateUnifiedUIStatus() {
+        // 更新移动端和桌面端UI中的状态条
+        const healthBars = $('.status-item').find('div[style*="background: ' + candyColors.health + '"]');
+        const hungerBars = $('.status-item').find('div[style*="background: ' + candyColors.warning + '"]');
+        const happinessBars = $('.status-item').find('div[style*="background: ' + candyColors.happiness + '"]');
+
+        // 更新健康状态
+        healthBars.each(function() {
+            $(this).css('width', petData.health + '%');
+        });
+
+        // 更新饱食度状态
+        hungerBars.each(function() {
+            $(this).css('width', petData.hunger + '%');
+        });
+
+        // 更新快乐度状态
+        happinessBars.each(function() {
+            $(this).css('width', petData.happiness + '%');
+        });
+
+        // 更新数值显示
+        $('.status-item').each(function() {
+            const $item = $(this);
+            const label = $item.find('span').first().text();
+
+            if (label.includes('健康')) {
+                $item.find('span').last().text(Math.round(petData.health) + '/100');
+            } else if (label.includes('饱食度')) {
+                $item.find('span').last().text(Math.round(petData.hunger) + '/100');
+            } else if (label.includes('快乐度')) {
+                $item.find('span').last().text(Math.round(petData.happiness) + '/100');
+            }
+        });
+
+        // 更新宠物名字和等级
+        $('.pet-name').each(function() {
+            $(this).text(petData.name);
+            // 确保点击事件仍然存在
+            if (!$(this).attr('onclick')) {
+                $(this).attr('onclick', 'editPetName()');
+                $(this).attr('title', '点击编辑宠物名字');
+                $(this).css({
+                    'cursor': 'pointer',
+                    'text-decoration': 'underline'
+                });
+            }
+        });
+        $('.pet-level').text('Lv.' + petData.level);
+    }
+
+    /**
+     * 显示头像右键菜单
+     */
+    window.showAvatarContextMenu = function(event) {
+        event.preventDefault();
+
+        if (customAvatarData) {
+            // 如果有自定义头像，显示重置选项
+            if (confirm('是否要重置头像为默认样式？')) {
+                resetAvatar();
+            }
+        } else {
+            // 如果没有自定义头像，提示用户点击更换
+            alert('点击头像可以更换为自定义图片');
+        }
+
+        return false;
+    };
+
+    /**
+     * 更新头像显示
+     */
+    function updateAvatarDisplay() {
+        // 更新弹窗中的头像
+        const avatarCircle = $('.pet-avatar-circle');
+        if (avatarCircle.length > 0) {
+            avatarCircle.html(getAvatarContent());
+        }
+    }
+
+    /**
+     * 更新悬浮按钮头像
+     */
+    function updateFloatingButtonAvatar() {
+        const button = $(`#${BUTTON_ID}`);
+        if (button.length > 0) {
+            if (customAvatarData) {
+                // 显示自定义头像
+                button.html(`<img src="${customAvatarData}" alt="宠物头像" style="
+                    width: 100% !important;
+                    height: 100% !important;
+                    object-fit: cover !important;
+                    border-radius: 50% !important;
+                ">`);
+            } else {
+                // 显示默认爪子图案
+                button.html('🐾');
+            }
+        }
+    }
+
+    /**
+     * 切换弹窗状态 - 如果弹窗打开则关闭，如果关闭则打开
+     */
+    function togglePopup() {
+        console.log(`[${extensionName}] Toggling popup, current state: ${isPopupOpen ? 'open' : 'closed'}`);
+
+        if (isPopupOpen) {
+            // 弹窗已打开，关闭它
+            closePopup();
+        } else {
+            // 弹窗已关闭，打开它
+            showPopup();
+        }
     }
     
     /**
@@ -425,10 +724,45 @@ jQuery(async () => {
         if (!petContainer) return;
         
         const statusHtml = `
-            <div class="pet-avatar">
-                <div class="pet-emoji">${getPetEmoji()}</div>
-                <div class="pet-name">${escapeHtml(petData.name)}</div>
-                <div class="pet-level">Lv.${petData.level}</div>
+            <div class="pet-avatar-container" style="
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: center !important;
+                gap: 12px !important;
+                padding: 20px !important;
+            ">
+                <!-- 圆形头像框 -->
+                <div class="pet-avatar-circle" style="
+                    width: 80px !important;
+                    height: 80px !important;
+                    border-radius: 50% !important;
+                    background: ${candyColors.primary} !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    font-size: 3em !important;
+                    overflow: hidden !important;
+                    border: 3px solid #7289da !important;
+                    box-shadow: 0 4px 8px rgba(0,0,0,0.3) !important;
+                    cursor: pointer !important;
+                    transition: transform 0.2s ease !important;
+                " onclick="openAvatarSelector()" oncontextmenu="showAvatarContextMenu(event)" title="点击更换头像，右键重置">
+                    ${getAvatarContent()}
+                </div>
+
+                <!-- 宠物信息 -->
+                <div class="pet-info" style="text-align: center !important;">
+                    <div class="pet-name" style="
+                        font-size: 1.3em !important;
+                        font-weight: bold !important;
+                        margin-bottom: 4px !important;
+                        color: #ffffff !important;
+                    ">${escapeHtml(petData.name)}</div>
+                    <div class="pet-level" style="
+                        color: #7289da !important;
+                        font-size: 1em !important;
+                    ">Lv.${petData.level}</div>
+                </div>
             </div>
             <div class="pet-stats">
                 <div class="stat-bar">
@@ -471,12 +805,75 @@ jQuery(async () => {
     function getPetEmoji() {
         const emojis = {
             cat: "🐱",
-            dog: "🐶", 
+            dog: "🐶",
             dragon: "🐉",
             rabbit: "🐰",
             bird: "🐦"
         };
         return emojis[petData.type] || "🐱";
+    }
+
+    /**
+     * 获取头像显示内容 - 支持自定义图片
+     */
+    function getAvatarContent() {
+        if (customAvatarData) {
+            // 返回自定义图片的HTML
+            return `<img src="${customAvatarData}" alt="宠物头像" style="
+                width: 100% !important;
+                height: 100% !important;
+                object-fit: cover !important;
+                border-radius: 50% !important;
+            ">`;
+        } else {
+            // 返回默认表情符号
+            return getPetEmoji();
+        }
+    }
+
+    /**
+     * 加载自定义头像数据
+     */
+    function loadCustomAvatar() {
+        try {
+            const saved = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
+            if (saved) {
+                customAvatarData = saved;
+                console.log(`[${extensionName}] Custom avatar loaded`);
+            }
+        } catch (error) {
+            console.warn(`[${extensionName}] Failed to load custom avatar:`, error);
+        }
+    }
+
+    /**
+     * 保存自定义头像数据
+     */
+    function saveCustomAvatar(imageData) {
+        try {
+            localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, imageData);
+            customAvatarData = imageData;
+            console.log(`[${extensionName}] Custom avatar saved`);
+            return true;
+        } catch (error) {
+            console.error(`[${extensionName}] Failed to save custom avatar:`, error);
+            return false;
+        }
+    }
+
+    /**
+     * 清除自定义头像
+     */
+    function clearCustomAvatar() {
+        try {
+            localStorage.removeItem(STORAGE_KEY_CUSTOM_AVATAR);
+            customAvatarData = null;
+            console.log(`[${extensionName}] Custom avatar cleared`);
+            return true;
+        } catch (error) {
+            console.error(`[${extensionName}] Failed to clear custom avatar:`, error);
+            return false;
+        }
     }
     
     /**
@@ -619,15 +1016,16 @@ jQuery(async () => {
             type: "cat",
             level: 1,
             experience: 0,
-            health: 100,
-            happiness: 100,
+            health: 40,
+            happiness: 30,
             hunger: 50,
-            energy: 100,
+            energy: 60,
             lastFeedTime: Date.now(),
             lastPlayTime: Date.now(),
             lastSleepTime: Date.now(),
             created: Date.now(),
-            lastUpdateTime: Date.now()
+            lastUpdateTime: Date.now(),
+            dataVersion: 2.0 // 数据版本标记
         };
 
         savePetData();
@@ -771,7 +1169,7 @@ jQuery(async () => {
                         wasDragged = false;
                     }, 100);
                 } else {
-                    // 没有拖动，触发点击事件
+                    // 没有拖动，触发点击事件 - 切换弹窗状态
                     console.log(`[${extensionName}] Button clicked, toggling popup`);
                     try {
                         togglePopup();
@@ -881,7 +1279,7 @@ jQuery(async () => {
                 cursor: grab !important;
                 width: 48px !important;
                 height: 48px !important;
-                background: linear-gradient(145deg, #2f3338, #212529) !important;
+                background: linear-gradient(145deg, ${candyColors.primary}, ${candyColors.buttonHover}) !important;
                 border-radius: 50% !important;
                 display: flex !important;
                 align-items: center !important;
@@ -899,7 +1297,7 @@ jQuery(async () => {
                 left: 20px !important;
                 bottom: auto !important;
                 right: auto !important;
-            ">🐾</div>
+            ">${customAvatarData ? `<img src="${customAvatarData}" alt="宠物头像" style="width: 100% !important; height: 100% !important; object-fit: cover !important; border-radius: 50% !important;">` : '🐾'}</div>
         `;
 
         // 直接添加到body，避免被其他容器影响定位
@@ -1130,13 +1528,19 @@ jQuery(async () => {
         // 4. 加载宠物数据
         loadPetData();
 
+        // 5. 加载自定义头像数据
+        loadCustomAvatar();
+
         // 5. 只在非iOS设备上初始化原始弹窗功能
         if (!isIOS) {
-            // 弹窗拖拽功能已移除（标题栏已移除）
-            console.log(`[${extensionName}] Popup drag functionality disabled (no header)`);
+            // 使弹窗可拖拽
+            const $popup = $(`#${POPUP_ID}`);
+            if ($popup.length > 0) {
+                makePopupDraggable($popup);
+                console.log(`[${extensionName}] Popup drag functionality added`);
+            }
 
-
-            // 关闭按钮已移除，使用悬浮按钮切换显示
+            // 移除了关闭按钮，现在只能通过悬浮按钮或外部点击关闭
 
             if (overlay && overlay.length > 0) {
                 overlay.on("click touchend", function (event) {
@@ -1302,7 +1706,7 @@ jQuery(async () => {
                 cursor: grab !important;
                 width: 48px !important;
                 height: 48px !important;
-                background: linear-gradient(145deg, #2f3338, #212529) !important;
+                background: linear-gradient(145deg, ${candyColors.primary}, ${candyColors.buttonHover}) !important;
                 border-radius: 50% !important;
                 display: flex !important;
                 align-items: center !important;
@@ -1335,10 +1739,10 @@ jQuery(async () => {
                 console.log("🐾 按钮被点击");
 
                 try {
-                    // 所有平台都使用统一的togglePopup函数
-                    togglePopup();
+                    // 所有平台都使用统一的showPopup函数
+                    showPopup();
                 } catch (error) {
-                    console.error("切换弹窗出错:", error);
+                    console.error("显示弹窗出错:", error);
                     alert("🐾 虚拟宠物\n\n弹窗功能正在加载中...");
                 }
             });
@@ -1582,9 +1986,9 @@ jQuery(async () => {
 
                 if (!wasDragged) {
                     // 没有拖动，触发点击
-                    console.log("🎯 切换弹窗");
+                    console.log("🎯 触发弹窗");
                     try {
-                        togglePopup();
+                        showPopup();
                     } catch (error) {
                         console.error("弹窗错误:", error);
                         alert("🐾 虚拟宠物系统\n\n弹窗功能正在加载中...");
@@ -1688,10 +2092,10 @@ jQuery(async () => {
                 });
 
                 if (!wasDragged) {
-                    console.log("🎯 切换弹窗");
+                    console.log("🎯 触发弹窗");
                     try {
-                        if (typeof togglePopup === 'function') {
-                            togglePopup();
+                        if (typeof showPopup === 'function') {
+                            showPopup();
                         } else {
                             alert("🐾 虚拟宠物系统\n\n弹窗功能正在加载中...");
                         }
@@ -1716,6 +2120,93 @@ jQuery(async () => {
         });
 
         console.log("✅ 拖动位置修复完成");
+        return true;
+    };
+
+    // 测试悬浮按钮切换功能
+    window.testToggleFunction = function() {
+        console.log("🎯 测试悬浮按钮切换功能...");
+
+        const button = $(`#${BUTTON_ID}`);
+        if (button.length === 0) {
+            console.log("❌ 悬浮按钮不存在");
+            return false;
+        }
+
+        console.log("✅ 悬浮按钮存在");
+        console.log(`当前弹窗状态: ${isPopupOpen ? '打开' : '关闭'}`);
+
+        // 检查弹窗实际状态
+        const overlay = $(`#${OVERLAY_ID}`);
+        const actuallyOpen = overlay.length > 0;
+        console.log(`实际弹窗状态: ${actuallyOpen ? '打开' : '关闭'}`);
+
+        // 状态一致性检查
+        const stateConsistent = isPopupOpen === actuallyOpen;
+        console.log(`状态一致性: ${stateConsistent ? '✅ 一致' : '❌ 不一致'}`);
+
+        // 模拟点击测试
+        console.log("🎯 模拟点击悬浮按钮...");
+        const initialState = isPopupOpen;
+
+        try {
+            // 直接调用切换函数
+            togglePopup();
+
+            setTimeout(() => {
+                const newState = isPopupOpen;
+                const newOverlay = $(`#${OVERLAY_ID}`);
+                const newActuallyOpen = newOverlay.length > 0;
+
+                console.log(`点击后状态: ${newState ? '打开' : '关闭'}`);
+                console.log(`点击后实际: ${newActuallyOpen ? '打开' : '关闭'}`);
+
+                const stateChanged = initialState !== newState;
+                const actualChanged = actuallyOpen !== newActuallyOpen;
+                const bothChanged = stateChanged && actualChanged;
+
+                console.log(`状态变化: ${stateChanged ? '✅' : '❌'}`);
+                console.log(`实际变化: ${actualChanged ? '✅' : '❌'}`);
+                console.log(`切换成功: ${bothChanged ? '✅' : '❌'}`);
+
+                // 再次点击测试
+                console.log("🎯 再次点击测试...");
+                togglePopup();
+
+                setTimeout(() => {
+                    const finalState = isPopupOpen;
+                    const finalOverlay = $(`#${OVERLAY_ID}`);
+                    const finalActuallyOpen = finalOverlay.length > 0;
+
+                    console.log(`最终状态: ${finalState ? '打开' : '关闭'}`);
+                    console.log(`最终实际: ${finalActuallyOpen ? '打开' : '关闭'}`);
+
+                    const backToOriginal = finalState === initialState;
+                    const actualBackToOriginal = finalActuallyOpen === actuallyOpen;
+
+                    console.log(`回到原状态: ${backToOriginal ? '✅' : '❌'}`);
+                    console.log(`实际回到原状态: ${actualBackToOriginal ? '✅' : '❌'}`);
+
+                    const allGood = stateConsistent && bothChanged && backToOriginal && actualBackToOriginal;
+                    console.log(`\n🎉 切换功能测试: ${allGood ? '完全成功！' : '需要检查'}`);
+
+                    if (allGood) {
+                        console.log("✅ 悬浮按钮切换功能正常工作");
+                        console.log("📋 功能说明:");
+                        console.log("  - 点击悬浮按钮可以打开弹窗");
+                        console.log("  - 再次点击悬浮按钮可以关闭弹窗");
+                        console.log("  - 点击弹窗外部也可以关闭弹窗");
+                        console.log("  - 弹窗内部没有关闭按钮");
+                    }
+
+                    return allGood;
+                }, 300);
+            }, 300);
+        } catch (error) {
+            console.error("切换功能测试失败:", error);
+            return false;
+        }
+
         return true;
     };
 
@@ -1839,6 +2330,527 @@ jQuery(async () => {
         }, 100);
 
         return true;
+    };
+
+    // 立即测试切换功能
+    window.testToggleNow = function() {
+        console.log("🎯 立即测试悬浮按钮切换功能...");
+
+        const button = $('#virtual-pet-button');
+        if (button.length === 0) {
+            console.log("❌ 悬浮按钮不存在");
+            return false;
+        }
+
+        console.log("✅ 悬浮按钮存在");
+
+        // 检查当前状态
+        const overlay = $('#virtual-pet-popup-overlay');
+        const isCurrentlyOpen = overlay.length > 0;
+        console.log(`当前弹窗状态: ${isCurrentlyOpen ? '打开' : '关闭'}`);
+
+        // 模拟点击
+        console.log("🎯 模拟点击悬浮按钮...");
+
+        // 直接触发点击事件
+        button.trigger('click');
+
+        setTimeout(() => {
+            const newOverlay = $('#virtual-pet-popup-overlay');
+            const isNowOpen = newOverlay.length > 0;
+            console.log(`点击后弹窗状态: ${isNowOpen ? '打开' : '关闭'}`);
+
+            const stateChanged = isCurrentlyOpen !== isNowOpen;
+            console.log(`状态变化: ${stateChanged ? '✅ 成功' : '❌ 失败'}`);
+
+            if (stateChanged) {
+                console.log("🎯 再次点击测试...");
+                button.trigger('click');
+
+                setTimeout(() => {
+                    const finalOverlay = $('#virtual-pet-popup-overlay');
+                    const isFinallyOpen = finalOverlay.length > 0;
+                    console.log(`再次点击后状态: ${isFinallyOpen ? '打开' : '关闭'}`);
+
+                    const backToOriginal = isFinallyOpen === isCurrentlyOpen;
+                    console.log(`回到原状态: ${backToOriginal ? '✅ 成功' : '❌ 失败'}`);
+
+                    if (backToOriginal) {
+                        console.log("🎉 切换功能测试完全成功！");
+                        console.log("📋 使用说明:");
+                        console.log("  - 点击悬浮按钮 🐾 可以打开/关闭弹窗");
+                        console.log("  - 点击弹窗外部也可以关闭弹窗");
+                        console.log("  - 弹窗内部已移除关闭按钮");
+                        console.log("  - 操作更加直观简洁");
+                    } else {
+                        console.log("❌ 切换功能有问题，需要检查");
+                    }
+                }, 300);
+            } else {
+                console.log("❌ 切换功能不工作，可能需要修复");
+            }
+        }, 300);
+
+        return true;
+    };
+
+    // 测试所有修复的功能
+    window.testAllFixedFeatures = function() {
+        console.log("🎯 开始测试所有修复的功能...");
+
+        // 1. 测试玩耍图标
+        console.log("\n1. 测试玩耍图标:");
+        const playButtons = $('.play-btn span').first();
+        const playIconText = playButtons.text();
+        const playIconCorrect = playIconText.includes('🎮') && !playIconText.includes('�');
+        console.log(`玩耍图标: ${playIconCorrect ? '✅ 正确显示🎮' : '❌ 显示异常: ' + playIconText}`);
+
+        // 2. 测试宠物名字功能
+        console.log("\n2. 测试宠物名字功能:");
+        const petNameElements = $('.pet-name');
+        const hasNameElements = petNameElements.length > 0;
+        const hasClickEvent = petNameElements.first().attr('onclick') === 'editPetName()';
+        const hasEditFunction = typeof window.editPetName === 'function';
+        console.log(`名字元素: ${hasNameElements ? '✅ 找到' : '❌ 未找到'} (${petNameElements.length}个)`);
+        console.log(`点击事件: ${hasClickEvent ? '✅ 已绑定' : '❌ 未绑定'}`);
+        console.log(`编辑函数: ${hasEditFunction ? '✅ 存在' : '❌ 不存在'}`);
+        console.log(`当前名字: "${petData.name}"`);
+
+        // 3. 测试按钮功能
+        console.log("\n3. 测试按钮功能:");
+        const feedBtn = $('.feed-btn');
+        const playBtn = $('.play-btn');
+        const sleepBtn = $('.sleep-btn');
+
+        console.log(`喂食按钮: ${feedBtn.length > 0 ? '✅ 存在' : '❌ 不存在'}`);
+        console.log(`玩耍按钮: ${playBtn.length > 0 ? '✅ 存在' : '❌ 不存在'}`);
+        console.log(`睡觉按钮: ${sleepBtn.length > 0 ? '✅ 存在' : '❌ 不存在'}`);
+
+        // 4. 测试状态数值
+        console.log("\n4. 测试状态数值:");
+        console.log(`健康: ${Math.round(petData.health)}/100`);
+        console.log(`饱食度: ${Math.round(petData.hunger)}/100`);
+        console.log(`快乐度: ${Math.round(petData.happiness)}/100`);
+        console.log(`精力: ${Math.round(petData.energy)}/100`);
+        console.log(`等级: ${petData.level}`);
+
+        // 5. 测试糖果色主题
+        console.log("\n5. 测试糖果色主题:");
+        const hasCandy = typeof candyColors !== 'undefined';
+        console.log(`糖果色配置: ${hasCandy ? '✅ 已加载' : '❌ 未加载'}`);
+        if (hasCandy) {
+            console.log(`主色调: ${candyColors.primary}`);
+            console.log(`背景: ${candyColors.background}`);
+        }
+
+        // 6. 测试UI更新函数
+        console.log("\n6. 测试UI更新函数:");
+        const hasUpdateFunction = typeof updateUnifiedUIStatus === 'function';
+        console.log(`更新函数: ${hasUpdateFunction ? '✅ 存在' : '❌ 不存在'}`);
+
+        // 总结
+        const allTests = [playIconCorrect, hasNameElements, hasClickEvent, hasEditFunction,
+                         feedBtn.length > 0, playBtn.length > 0, sleepBtn.length > 0, hasCandy, hasUpdateFunction];
+        const passedTests = allTests.filter(test => test).length;
+        const totalTests = allTests.length;
+
+        console.log(`\n🎯 测试总结: ${passedTests}/${totalTests} 项通过`);
+
+        if (passedTests === totalTests) {
+            console.log("🎉 所有功能测试通过！");
+        } else {
+            console.log("⚠️ 部分功能需要检查");
+        }
+
+        return {
+            passed: passedTests,
+            total: totalTests,
+            success: passedTests === totalTests
+        };
+    };
+
+    // 模拟按钮点击测试
+    window.testButtonClicks = function() {
+        console.log("🎯 测试按钮点击功能...");
+
+        const initialHealth = petData.health;
+        const initialHunger = petData.hunger;
+        const initialHappiness = petData.happiness;
+        const initialEnergy = petData.energy;
+
+        console.log("初始状态:", {
+            health: Math.round(initialHealth),
+            hunger: Math.round(initialHunger),
+            happiness: Math.round(initialHappiness),
+            energy: Math.round(initialEnergy)
+        });
+
+        // 模拟喂食
+        console.log("\n模拟喂食...");
+        feedPet();
+
+        setTimeout(() => {
+            console.log("喂食后状态:", {
+                health: Math.round(petData.health),
+                hunger: Math.round(petData.hunger),
+                happiness: Math.round(petData.happiness),
+                energy: Math.round(petData.energy)
+            });
+
+            const hungerChanged = petData.hunger !== initialHunger;
+            console.log(`饱食度变化: ${hungerChanged ? '✅ 正常' : '❌ 无变化'}`);
+
+            // 模拟玩耍
+            console.log("\n模拟玩耍...");
+            playWithPet();
+
+            setTimeout(() => {
+                console.log("玩耍后状态:", {
+                    health: Math.round(petData.health),
+                    hunger: Math.round(petData.hunger),
+                    happiness: Math.round(petData.happiness),
+                    energy: Math.round(petData.energy)
+                });
+
+                const happinessChanged = petData.happiness !== initialHappiness;
+                console.log(`快乐度变化: ${happinessChanged ? '✅ 正常' : '❌ 无变化'}`);
+
+                // 更新UI显示
+                updateUnifiedUIStatus();
+                console.log("✅ UI状态已更新");
+
+            }, 100);
+        }, 100);
+    };
+
+    // 强制清理旧数据并应用新数值
+    window.forceDataMigration = function() {
+        console.log("🔄 强制执行数据迁移...");
+
+        // 清理localStorage中的旧数据
+        localStorage.removeItem(STORAGE_KEY_PET_DATA);
+
+        // 重置为新的初始数值
+        petData = {
+            name: petData.name || "小宠物", // 保留当前名字
+            type: "cat",
+            level: 1,
+            experience: 0,
+            health: 40,
+            happiness: 30,
+            hunger: 50,
+            energy: 60,
+            lastFeedTime: Date.now(),
+            lastPlayTime: Date.now(),
+            lastSleepTime: Date.now(),
+            lastUpdateTime: Date.now(),
+            created: Date.now(),
+            dataVersion: 2.0
+        };
+
+        // 保存新数据
+        savePetData();
+
+        // 更新UI
+        updateUnifiedUIStatus();
+
+        console.log("✅ 数据迁移完成！新的初始数值:");
+        console.log(`健康: ${petData.health}/100`);
+        console.log(`快乐度: ${petData.happiness}/100`);
+        console.log(`饱食度: ${petData.hunger}/100`);
+        console.log(`精力: ${petData.energy}/100`);
+
+        alert("数据迁移完成！新的初始数值已应用。");
+    };
+
+    // 测试新的数值平衡
+    window.testNewBalance = function() {
+        console.log("🎯 测试新的数值平衡系统...");
+
+        // 显示当前数值
+        console.log("\n📊 当前状态:");
+        console.log(`健康: ${Math.round(petData.health)}/100`);
+        console.log(`饱食度: ${Math.round(petData.hunger)}/100`);
+        console.log(`快乐度: ${Math.round(petData.happiness)}/100`);
+        console.log(`精力: ${Math.round(petData.energy)}/100`);
+        console.log(`等级: ${petData.level}`);
+
+        // 测试操作效果
+        console.log("\n🧪 测试操作效果:");
+
+        const originalValues = {
+            health: petData.health,
+            hunger: petData.hunger,
+            happiness: petData.happiness,
+            energy: petData.energy
+        };
+
+        // 测试喂食
+        console.log("\n🍖 测试喂食效果:");
+        console.log(`喂食前 - 饱食度: ${Math.round(originalValues.hunger)}, 快乐度: ${Math.round(originalValues.happiness)}`);
+        feedPet();
+        console.log(`喂食后 - 饱食度: ${Math.round(petData.hunger)} (+${Math.round(petData.hunger - originalValues.hunger)}), 快乐度: ${Math.round(petData.happiness)} (+${Math.round(petData.happiness - originalValues.happiness)})`);
+
+        // 等待一下再测试玩耍
+        setTimeout(() => {
+            const beforePlay = {
+                happiness: petData.happiness,
+                energy: petData.energy
+            };
+
+            console.log("\n🎮 测试玩耍效果:");
+            console.log(`玩耍前 - 快乐度: ${Math.round(beforePlay.happiness)}, 精力: ${Math.round(beforePlay.energy)}`);
+            playWithPet();
+            console.log(`玩耍后 - 快乐度: ${Math.round(petData.happiness)} (+${Math.round(petData.happiness - beforePlay.happiness)}), 精力: ${Math.round(petData.energy)} (${Math.round(petData.energy - beforePlay.energy)})`);
+
+            // 等待一下再测试睡觉
+            setTimeout(() => {
+                const beforeSleep = {
+                    health: petData.health,
+                    energy: petData.energy
+                };
+
+                console.log("\n😴 测试睡觉效果:");
+                console.log(`睡觉前 - 健康: ${Math.round(beforeSleep.health)}, 精力: ${Math.round(beforeSleep.energy)}`);
+                petSleep();
+                console.log(`睡觉后 - 健康: ${Math.round(petData.health)} (+${Math.round(petData.health - beforeSleep.health)}), 精力: ${Math.round(petData.energy)} (+${Math.round(petData.energy - beforeSleep.energy)})`);
+
+                // 更新UI
+                updateUnifiedUIStatus();
+
+                console.log("\n📋 数值平衡总结:");
+                console.log("✅ 喂食: +15饱食度, +5快乐度, 20秒冷却");
+                console.log("✅ 玩耍: +12快乐度, -8精力, 40秒冷却");
+                console.log("✅ 睡觉: +20精力, +5健康, 80秒冷却");
+                console.log("✅ 时间衰减: 每12分钟更新，速度减缓60%");
+                console.log("✅ 初始数值: 健康40, 快乐30, 饱食50, 精力60");
+
+            }, 100);
+        }, 100);
+    };
+
+    // 重置为新的初始数值进行测试
+    window.resetToNewInitialValues = function() {
+        console.log("🔄 重置为新的初始数值...");
+
+        petData.health = 40;
+        petData.happiness = 30;
+        petData.hunger = 50;
+        petData.energy = 60;
+        petData.level = 1;
+        petData.experience = 0;
+
+        savePetData();
+        updateUnifiedUIStatus();
+
+        console.log("✅ 已重置为新的初始数值:");
+        console.log(`健康: ${petData.health}/100`);
+        console.log(`快乐度: ${petData.happiness}/100`);
+        console.log(`饱食度: ${petData.hunger}/100`);
+        console.log(`精力: ${petData.energy}/100`);
+        console.log("现在可以测试新的数值平衡了！");
+    };
+
+    // 模拟时间流逝测试
+    window.testTimeDecay = function() {
+        console.log("⏰ 测试时间衰减效果...");
+
+        const before = {
+            health: petData.health,
+            hunger: petData.hunger,
+            happiness: petData.happiness,
+            energy: petData.energy
+        };
+
+        console.log("衰减前状态:", before);
+
+        // 模拟1小时时间流逝
+        updatePetStatus();
+
+        console.log("衰减后状态:", {
+            health: Math.round(petData.health),
+            hunger: Math.round(petData.hunger),
+            happiness: Math.round(petData.happiness),
+            energy: Math.round(petData.energy)
+        });
+
+        const changes = {
+            health: Math.round(petData.health - before.health),
+            hunger: Math.round(petData.hunger - before.hunger),
+            happiness: Math.round(petData.happiness - before.happiness),
+            energy: Math.round(petData.energy - before.energy)
+        };
+
+        console.log("数值变化:", changes);
+        updateUnifiedUIStatus();
+    };
+
+    // 验证数值修复效果
+    window.verifyInitialValues = function() {
+        console.log("🔍 验证初始数值修复效果...");
+
+        // 检查当前数值
+        console.log("\n📊 当前宠物数值:");
+        console.log(`健康: ${petData.health}/100 ${petData.health === 40 ? '✅' : '❌ 应为40'}`);
+        console.log(`快乐度: ${petData.happiness}/100 ${petData.happiness === 30 ? '✅' : '❌ 应为30'}`);
+        console.log(`饱食度: ${petData.hunger}/100 ${petData.hunger === 50 ? '✅' : '❌ 应为50'}`);
+        console.log(`精力: ${petData.energy}/100 ${petData.energy === 60 ? '✅' : '❌ 应为60'}`);
+        console.log(`数据版本: ${petData.dataVersion} ${petData.dataVersion === 2.0 ? '✅' : '❌ 应为2.0'}`);
+
+        // 检查UI显示
+        console.log("\n🖥️ UI显示检查:");
+        const healthDisplay = $('.status-item').find('span').filter(function() {
+            return $(this).text().includes('健康');
+        }).next().text();
+
+        const happinessDisplay = $('.status-item').find('span').filter(function() {
+            return $(this).text().includes('快乐');
+        }).next().text();
+
+        console.log(`UI健康显示: ${healthDisplay}`);
+        console.log(`UI快乐显示: ${happinessDisplay}`);
+
+        // 检查是否需要迁移
+        const needsMigration = petData.health === 100 || petData.happiness === 100;
+
+        if (needsMigration) {
+            console.log("\n⚠️ 检测到旧数值，建议执行数据迁移:");
+            console.log("请运行: forceDataMigration()");
+            return false;
+        } else {
+            console.log("\n✅ 数值修复成功！新的初始数值已正确应用。");
+            return true;
+        }
+    };
+
+    // 检查localStorage中的数据
+    window.checkStoredData = function() {
+        console.log("💾 检查localStorage中的数据...");
+
+        const stored = localStorage.getItem(STORAGE_KEY_PET_DATA);
+        if (stored) {
+            try {
+                const data = JSON.parse(stored);
+                console.log("存储的数据:", data);
+                console.log(`数据版本: ${data.dataVersion || '未设置'}`);
+                console.log(`健康: ${data.health}`);
+                console.log(`快乐度: ${data.happiness}`);
+                console.log(`饱食度: ${data.hunger}`);
+                console.log(`精力: ${data.energy}`);
+            } catch (e) {
+                console.error("解析存储数据失败:", e);
+            }
+        } else {
+            console.log("没有找到存储的数据");
+        }
+    };
+
+    // 测试头像功能
+    window.testAvatarFunction = function() {
+        console.log("🎯 测试头像功能...");
+
+        // 检查头像相关函数是否存在
+        const functions = {
+            openAvatarSelector: typeof window.openAvatarSelector === 'function',
+            resetAvatar: typeof window.resetAvatar === 'function',
+            getAvatarContent: typeof getAvatarContent === 'function',
+            loadCustomAvatar: typeof loadCustomAvatar === 'function',
+            saveCustomAvatar: typeof saveCustomAvatar === 'function',
+            clearCustomAvatar: typeof clearCustomAvatar === 'function'
+        };
+
+        console.log("函数检查:");
+        Object.entries(functions).forEach(([name, exists]) => {
+            console.log(`  ${exists ? '✅' : '❌'} ${name}`);
+        });
+
+        // 检查当前头像状态
+        console.log(`当前自定义头像: ${customAvatarData ? '已设置' : '未设置'}`);
+
+        // 检查悬浮按钮头像
+        const button = $(`#${BUTTON_ID}`);
+        if (button.length > 0) {
+            const hasCustomImage = button.find('img').length > 0;
+            const hasDefaultEmoji = button.text().includes('🐾');
+            console.log(`悬浮按钮头像: ${hasCustomImage ? '自定义图片' : hasDefaultEmoji ? '默认爪子' : '未知'}`);
+        } else {
+            console.log("❌ 悬浮按钮不存在");
+        }
+
+        // 检查弹窗中的头像
+        const avatarCircle = $('.pet-avatar-circle');
+        if (avatarCircle.length > 0) {
+            const hasCustomImage = avatarCircle.find('img').length > 0;
+            console.log(`弹窗头像: ${hasCustomImage ? '自定义图片' : '默认表情'}`);
+            console.log(`头像框数量: ${avatarCircle.length}`);
+        } else {
+            console.log("弹窗头像: 未找到头像框");
+        }
+
+        // 检查头像交互功能
+        const avatarCircleClickable = $('.pet-avatar-circle[onclick]').length > 0;
+        const avatarCircleContextMenu = $('.pet-avatar-circle[oncontextmenu]').length > 0;
+        console.log(`头像点击功能: ${avatarCircleClickable ? '✅' : '❌'}`);
+        console.log(`头像右键功能: ${avatarCircleContextMenu ? '✅' : '❌'}`);
+        console.log(`右键菜单函数: ${typeof window.showAvatarContextMenu === 'function' ? '✅' : '❌'}`);
+
+        const allFunctionsExist = Object.values(functions).every(exists => exists);
+        console.log(`\n🎉 头像功能测试: ${allFunctionsExist ? '所有功能就绪！' : '部分功能缺失'}`);
+
+        if (allFunctionsExist) {
+            console.log("📋 使用说明:");
+            console.log("  🎨 头像功能:");
+            console.log("    - 点击圆形头像框可以更换头像");
+            console.log("    - 右键点击头像框可以重置为默认头像");
+            console.log("    - 自定义头像会同时显示在弹窗和悬浮按钮中");
+            console.log("  📝 名字功能:");
+            console.log("    - 点击宠物名字可以编辑修改");
+            console.log("    - 支持最多20个字符的自定义名字");
+            console.log("  🎮 交互功能:");
+            console.log("    - 🍖 喂食：+15饱食度, +5快乐度 (20秒冷却)");
+            console.log("    - 🎮 玩耍：+12快乐度, -8精力 (40秒冷却)");
+            console.log("    - 😴 睡觉：+20精力, +5健康 (80秒冷却)");
+            console.log("  🎨 界面特色:");
+            console.log("    - 糖果色主题，明亮清新");
+            console.log("    - 无背景框架，元素融入背景");
+            console.log("    - 实时数值更新，状态条动画");
+            console.log("  ⚖️ 数值平衡:");
+            console.log("    - 初始数值：健康40, 快乐30, 饱食50, 精力60");
+            console.log("    - 时间衰减：每12分钟更新，速度减缓");
+            console.log("    - 操作冷却：喂食20s, 玩耍40s, 睡觉80s");
+        }
+
+        return allFunctionsExist;
+    };
+
+    // 模拟设置测试头像
+    window.setTestAvatar = function() {
+        console.log("🎯 设置测试头像...");
+
+        // 创建一个简单的测试图片 (1x1像素的红色图片)
+        const canvas = document.createElement('canvas');
+        canvas.width = 100;
+        canvas.height = 100;
+        const ctx = canvas.getContext('2d');
+
+        // 绘制一个简单的测试图案
+        ctx.fillStyle = '#7289da';
+        ctx.fillRect(0, 0, 100, 100);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '60px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('🐱', 50, 70);
+
+        const testImageData = canvas.toDataURL('image/png');
+
+        if (saveCustomAvatar(testImageData)) {
+            updateAvatarDisplay();
+            updateFloatingButtonAvatar();
+            console.log("✅ 测试头像设置成功");
+            console.log("现在可以看到自定义头像效果");
+        } else {
+            console.log("❌ 测试头像设置失败");
+        }
     };
 
     // 全面的拖动功能验证测试
@@ -2128,8 +3140,8 @@ jQuery(async () => {
                     width: calc(100vw - 30px) !important;
                     max-width: 300px !important;
                     max-height: calc(100vh - 60px) !important;
-                    background-color: #2c2f33 !important;
-                    color: white !important;
+                    background: ${candyColors.background} !important;
+                    color: ${candyColors.textPrimary} !important;
                     border-radius: 16px !important;
                     padding: 16px !important;
                     overflow-y: auto !important;
@@ -2145,12 +3157,8 @@ jQuery(async () => {
 
         $("body").append(iosPopupHtml);
 
-        // 绑定统一的关闭事件
+        // 绑定外部点击关闭事件
         const $iosOverlay = $("#virtual-pet-popup-overlay");
-        $iosOverlay.find(".close-button").on("click touchend", function(e) {
-            e.preventDefault();
-            $iosOverlay.remove();
-        });
 
         // 点击外部关闭
         $iosOverlay.on("click touchend", function(e) {
@@ -2324,6 +3332,17 @@ jQuery(async () => {
     function generateMobileUI() {
         console.log(`[UI] Generating mobile UI`);
         return `
+            <div class="pet-popup-header" style="
+                display: flex !important;
+                justify-content: center !important;
+                align-items: center !important;
+                margin-bottom: 15px !important;
+                padding-bottom: 12px !important;
+                border-bottom: 1px solid #40444b !important;
+            ">
+                <h2 style="margin: 0 !important; color: #7289da !important; font-size: 1.2em !important;">🐾 虚拟宠物</h2>
+            </div>
+
             <div class="pet-main-content" style="
                 display: flex !important;
                 flex-direction: column !important;
@@ -2332,48 +3351,61 @@ jQuery(async () => {
                 <!-- 宠物头像和基本信息 -->
                 <div class="pet-avatar-section" style="
                     text-align: center !important;
-                    background: transparent !important;
-                    padding: 12px !important;
-                    border-radius: 0 !important;
+                    padding: 15px !important;
                 ">
-                    <div class="pet-avatar" style="font-size: 2.5em !important; margin-bottom: 6px !important;">🐱</div>
+                    <!-- 圆形头像框 -->
+                    <div class="pet-avatar-circle" style="
+                        width: 70px !important;
+                        height: 70px !important;
+                        border-radius: 50% !important;
+                        background: ${candyColors.primary} !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        font-size: 2.5em !important;
+                        overflow: hidden !important;
+                        border: 2px solid #7289da !important;
+                        box-shadow: 0 3px 6px rgba(0,0,0,0.3) !important;
+                        cursor: pointer !important;
+                        margin: 0 auto 8px auto !important;
+                    " onclick="openAvatarSelector()" oncontextmenu="showAvatarContextMenu(event)" title="点击更换头像，右键重置">
+                        ${getAvatarContent()}
+                    </div>
                     <div class="pet-name" style="font-size: 1.2em !important; font-weight: bold !important; margin-bottom: 3px !important;">小宠物</div>
-                    <div class="pet-level" style="color: #4a5568 !important; font-size: 0.9em !important;">Lv.1</div>
+                    <div class="pet-level" style="color: #7289da !important; font-size: 0.9em !important;">Lv.1</div>
                 </div>
 
                 <!-- 宠物状态栏 -->
                 <div class="pet-status-section" style="
-                    background: transparent !important;
                     padding: 10px !important;
-                    border-radius: 0 !important;
                 ">
-                    <h4 style="margin: 0 0 10px 0 !important; color: #2d3748 !important; font-size: 0.9em !important; font-weight: 700 !important;">📊 状态</h4>
+                    <h4 style="margin: 0 0 10px 0 !important; color: ${candyColors.primary} !important; font-size: 0.9em !important;">📊 状态</h4>
                     <div class="status-bars" style="display: flex !important; flex-direction: column !important; gap: 6px !important;">
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
-                                <span style="color: #4a5568 !important; font-size: 0.8em !important;">❤️ 健康</span>
-                                <span style="color: #48bb78 !important; font-size: 0.8em !important;">85/100</span>
+                                <span style="color: ${candyColors.textSecondary} !important; font-size: 0.8em !important;">❤️ 健康</span>
+                                <span style="color: ${candyColors.health} !important; font-size: 0.8em !important;">${Math.round(petData.health)}/100</span>
                             </div>
-                            <div style="background: rgba(255, 255, 255, 0.2) !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: #48bb78 !important; height: 100% !important; width: 85% !important; transition: width 0.3s ease !important;"></div>
-                            </div>
-                        </div>
-                        <div class="status-item">
-                            <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
-                                <span style="color: #4a5568 !important; font-size: 0.8em !important;">🍖 饱食度</span>
-                                <span style="color: #fc8181 !important; font-size: 0.8em !important;">60/100</span>
-                            </div>
-                            <div style="background: rgba(255, 255, 255, 0.2) !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: #fbb6ce !important; height: 100% !important; width: 60% !important; transition: width 0.3s ease !important;"></div>
+                            <div style="background: ${candyColors.border} !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: ${candyColors.health} !important; height: 100% !important; width: ${petData.health}% !important; transition: width 0.3s ease !important;"></div>
                             </div>
                         </div>
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
-                                <span style="color: #4a5568 !important; font-size: 0.8em !important;">😊 快乐度</span>
-                                <span style="color: #90cdf4 !important; font-size: 0.8em !important;">75/100</span>
+                                <span style="color: ${candyColors.textSecondary} !important; font-size: 0.8em !important;">🍖 饱食度</span>
+                                <span style="color: ${candyColors.warning} !important; font-size: 0.8em !important;">${Math.round(petData.hunger)}/100</span>
                             </div>
-                            <div style="background: rgba(255, 255, 255, 0.2) !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: #90cdf4 !important; height: 100% !important; width: 75% !important; transition: width 0.3s ease !important;"></div>
+                            <div style="background: ${candyColors.border} !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: ${candyColors.warning} !important; height: 100% !important; width: ${petData.hunger}% !important; transition: width 0.3s ease !important;"></div>
+                            </div>
+                        </div>
+                        <div class="status-item">
+                            <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
+                                <span style="color: ${candyColors.textSecondary} !important; font-size: 0.8em !important;">😊 快乐度</span>
+                                <span style="color: ${candyColors.happiness} !important; font-size: 0.8em !important;">${Math.round(petData.happiness)}/100</span>
+                            </div>
+                            <div style="background: ${candyColors.border} !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: ${candyColors.happiness} !important; height: 100% !important; width: ${petData.happiness}% !important; transition: width 0.3s ease !important;"></div>
                             </div>
                         </div>
                     </div>
@@ -2387,10 +3419,10 @@ jQuery(async () => {
                 ">
                     <button class="action-btn feed-btn" style="
                         padding: 10px !important;
-                        background: linear-gradient(135deg, #48bb78, #68d391) !important;
+                        background: #43b581 !important;
                         color: white !important;
                         border: none !important;
-                        border-radius: 20px !important;
+                        border-radius: 6px !important;
                         font-size: 12px !important;
                         cursor: pointer !important;
                         min-height: 40px !important;
@@ -2405,10 +3437,10 @@ jQuery(async () => {
                     </button>
                     <button class="action-btn play-btn" style="
                         padding: 10px !important;
-                        background: linear-gradient(135deg, #ed8936, #f6ad55) !important;
+                        background: #7289da !important;
                         color: white !important;
                         border: none !important;
-                        border-radius: 20px !important;
+                        border-radius: 6px !important;
                         font-size: 12px !important;
                         cursor: pointer !important;
                         min-height: 40px !important;
@@ -2463,9 +3495,7 @@ jQuery(async () => {
                 <div class="pet-info-section" style="
                     text-align: center !important;
                     padding: 8px !important;
-                    background: transparent !important;
-                    border-radius: 0 !important;
-                    color: #4a5568 !important;
+                    color: ${candyColors.textLight} !important;
                     font-size: 0.7em !important;
                 ">
                     <p style="margin: 0 !important;">🎉 虚拟宠物系统 v1.0</p>
@@ -2479,6 +3509,17 @@ jQuery(async () => {
     function generateDesktopUI() {
         console.log(`[UI] Generating desktop UI`);
         return `
+            <div class="pet-popup-header" style="
+                display: flex !important;
+                justify-content: center !important;
+                align-items: center !important;
+                margin-bottom: 20px !important;
+                padding-bottom: 15px !important;
+                border-bottom: 1px solid #40444b !important;
+            ">
+                <h2 style="margin: 0 !important; color: #7289da !important; font-size: 1.4em !important;">🐾 虚拟宠物</h2>
+            </div>
+
             <div class="pet-main-content" style="
                 display: flex !important;
                 flex-direction: column !important;
@@ -2487,48 +3528,62 @@ jQuery(async () => {
                 <!-- 宠物头像和基本信息 -->
                 <div class="pet-avatar-section" style="
                     text-align: center !important;
-                    background: transparent !important;
-                    padding: 15px !important;
-                    border-radius: 0 !important;
+                    padding: 20px !important;
                 ">
-                    <div class="pet-avatar" style="font-size: 3em !important; margin-bottom: 8px !important;">🐱</div>
-                    <div class="pet-name" style="font-size: 1.3em !important; font-weight: bold !important; margin-bottom: 4px !important;">小宠物</div>
-                    <div class="pet-level" style="color: #7289da !important; font-size: 1em !important;">Lv.1</div>
+                    <!-- 圆形头像框 -->
+                    <div class="pet-avatar-circle" style="
+                        width: 90px !important;
+                        height: 90px !important;
+                        border-radius: 50% !important;
+                        background: ${candyColors.primary} !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        font-size: 3em !important;
+                        overflow: hidden !important;
+                        border: 3px solid #7289da !important;
+                        box-shadow: 0 4px 8px rgba(0,0,0,0.3) !important;
+                        cursor: pointer !important;
+                        margin: 0 auto 10px auto !important;
+                        transition: transform 0.2s ease !important;
+                    " onclick="openAvatarSelector()" oncontextmenu="showAvatarContextMenu(event)" title="点击更换头像，右键重置">
+                        ${getAvatarContent()}
+                    </div>
+                    <div class="pet-name" style="font-size: 1.3em !important; font-weight: bold !important; margin-bottom: 4px !important; color: ${candyColors.textPrimary} !important; cursor: pointer !important; text-decoration: underline !important;" onclick="editPetName()" title="点击编辑宠物名字">${petData.name}</div>
+                    <div class="pet-level" style="color: ${candyColors.primary} !important; font-size: 1em !important;">Lv.${petData.level}</div>
                 </div>
 
                 <!-- 宠物状态栏 -->
                 <div class="pet-status-section" style="
-                    background: transparent !important;
                     padding: 12px !important;
-                    border-radius: 0 !important;
                 ">
-                    <h4 style="margin: 0 0 12px 0 !important; color: #2d3748 !important; font-size: 1em !important; font-weight: 700 !important;">📊 状态</h4>
+                    <h4 style="margin: 0 0 12px 0 !important; color: ${candyColors.primary} !important; font-size: 1em !important;">📊 状态</h4>
                     <div class="status-bars" style="display: flex !important; flex-direction: column !important; gap: 8px !important;">
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
-                                <span style="color: #4a5568 !important; font-size: 0.9em !important;">❤️ 健康</span>
-                                <span style="color: #48bb78 !important; font-size: 0.9em !important;">85/100</span>
+                                <span style="color: ${candyColors.textSecondary} !important; font-size: 0.9em !important;">❤️ 健康</span>
+                                <span style="color: ${candyColors.health} !important; font-size: 0.9em !important;">${Math.round(petData.health)}/100</span>
                             </div>
-                            <div style="background: rgba(255, 255, 255, 0.2) !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: #48bb78 !important; height: 100% !important; width: 85% !important; transition: width 0.3s ease !important;"></div>
-                            </div>
-                        </div>
-                        <div class="status-item">
-                            <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
-                                <span style="color: #4a5568 !important; font-size: 0.9em !important;">🍖 饱食度</span>
-                                <span style="color: #fc8181 !important; font-size: 0.9em !important;">60/100</span>
-                            </div>
-                            <div style="background: rgba(255, 255, 255, 0.2) !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: #fc8181 !important; height: 100% !important; width: 60% !important; transition: width 0.3s ease !important;"></div>
+                            <div style="background: ${candyColors.border} !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: ${candyColors.health} !important; height: 100% !important; width: ${petData.health}% !important; transition: width 0.3s ease !important;"></div>
                             </div>
                         </div>
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
-                                <span style="color: #4a5568 !important; font-size: 0.9em !important;">😊 快乐度</span>
-                                <span style="color: #90cdf4 !important; font-size: 0.9em !important;">75/100</span>
+                                <span style="color: ${candyColors.textSecondary} !important; font-size: 0.9em !important;">🍖 饱食度</span>
+                                <span style="color: ${candyColors.warning} !important; font-size: 0.9em !important;">${Math.round(petData.hunger)}/100</span>
                             </div>
-                            <div style="background: rgba(255, 255, 255, 0.2) !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: #90cdf4 !important; height: 100% !important; width: 75% !important; transition: width 0.3s ease !important;"></div>
+                            <div style="background: ${candyColors.border} !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: ${candyColors.warning} !important; height: 100% !important; width: ${petData.hunger}% !important; transition: width 0.3s ease !important;"></div>
+                            </div>
+                        </div>
+                        <div class="status-item">
+                            <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
+                                <span style="color: ${candyColors.textSecondary} !important; font-size: 0.9em !important;">😊 快乐度</span>
+                                <span style="color: ${candyColors.happiness} !important; font-size: 0.9em !important;">${Math.round(petData.happiness)}/100</span>
+                            </div>
+                            <div style="background: ${candyColors.border} !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: ${candyColors.happiness} !important; height: 100% !important; width: ${petData.happiness}% !important; transition: width 0.3s ease !important;"></div>
                             </div>
                         </div>
                     </div>
@@ -2542,10 +3597,10 @@ jQuery(async () => {
                 ">
                     <button class="action-btn feed-btn" style="
                         padding: 12px !important;
-                        background: linear-gradient(135deg, #48bb78, #68d391) !important;
+                        background: #43b581 !important;
                         color: white !important;
                         border: none !important;
-                        border-radius: 20px !important;
+                        border-radius: 6px !important;
                         font-size: 13px !important;
                         cursor: pointer !important;
                         min-height: 44px !important;
@@ -2560,10 +3615,10 @@ jQuery(async () => {
                     </button>
                     <button class="action-btn play-btn" style="
                         padding: 12px !important;
-                        background: linear-gradient(135deg, #ed8936, #f6ad55) !important;
+                        background: #7289da !important;
                         color: white !important;
                         border: none !important;
-                        border-radius: 20px !important;
+                        border-radius: 6px !important;
                         font-size: 13px !important;
                         cursor: pointer !important;
                         min-height: 44px !important;
@@ -2578,10 +3633,10 @@ jQuery(async () => {
                     </button>
                     <button class="action-btn sleep-btn" style="
                         padding: 12px !important;
-                        background: linear-gradient(135deg, #ed64a6, #f093fb) !important;
+                        background: #99aab5 !important;
                         color: white !important;
                         border: none !important;
-                        border-radius: 20px !important;
+                        border-radius: 6px !important;
                         font-size: 13px !important;
                         cursor: pointer !important;
                         min-height: 44px !important;
@@ -2596,10 +3651,10 @@ jQuery(async () => {
                     </button>
                     <button class="action-btn settings-btn" style="
                         padding: 12px !important;
-                        background: linear-gradient(135deg, #a0aec0, #cbd5e0) !important;
-                        color: #2d3748 !important;
+                        background: #f04747 !important;
+                        color: white !important;
                         border: none !important;
-                        border-radius: 20px !important;
+                        border-radius: 6px !important;
                         font-size: 13px !important;
                         cursor: pointer !important;
                         min-height: 44px !important;
@@ -2618,9 +3673,7 @@ jQuery(async () => {
                 <div class="pet-info-section" style="
                     text-align: center !important;
                     padding: 10px !important;
-                    background: #40444b !important;
-                    border-radius: 6px !important;
-                    color: #99aab5 !important;
+                    color: ${candyColors.textLight} !important;
                     font-size: 0.8em !important;
                 ">
                     <p style="margin: 0 !important;">🎉 虚拟宠物系统 v1.0</p>
@@ -2638,24 +3691,33 @@ jQuery(async () => {
         $container.find(".feed-btn").on("click touchend", function(e) {
             e.preventDefault();
             console.log("🍖 喂食宠物");
-            // 这里可以添加喂食逻辑
-            showNotification("🍖 宠物吃得很开心！", "success");
+            feedPet();
+            // 更新UI显示
+            setTimeout(() => {
+                updateUnifiedUIStatus();
+            }, 100);
         });
 
         // 玩耍按钮
         $container.find(".play-btn").on("click touchend", function(e) {
             e.preventDefault();
             console.log("🎮 和宠物玩耍");
-            // 这里可以添加玩耍逻辑
-            showNotification("🎮 宠物玩得很开心！", "success");
+            playWithPet();
+            // 更新UI显示
+            setTimeout(() => {
+                updateUnifiedUIStatus();
+            }, 100);
         });
 
         // 休息按钮
         $container.find(".sleep-btn").on("click touchend", function(e) {
             e.preventDefault();
             console.log("😴 宠物休息");
-            // 这里可以添加休息逻辑
-            showNotification("😴 宠物正在休息...", "info");
+            petSleep();
+            // 更新UI显示
+            setTimeout(() => {
+                updateUnifiedUIStatus();
+            }, 100);
         });
 
         // 设置按钮
@@ -2663,6 +3725,12 @@ jQuery(async () => {
             e.preventDefault();
             console.log("⚙️ 打开设置");
             showNotification("⚙️ 设置功能开发中...", "info");
+        });
+
+        // 宠物名字点击事件（备用，主要通过onclick属性）
+        $container.find(".pet-name").on("click touchend", function(e) {
+            e.preventDefault();
+            editPetName();
         });
 
         console.log(`[${extensionName}] Unified UI events bound successfully`);

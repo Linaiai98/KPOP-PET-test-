@@ -362,8 +362,12 @@ jQuery(async () => {
 
         // 显示消息
         const title = messageSource === "AI" ? "喂食回应 ✨" : "喂食";
-        toastr.success(message, title, {
-            timeOut: messageSource === "AI" ? 6000 : 4000
+        const cleanMessage = messageSource === "AI" ?
+            message.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim() : message;
+
+        toastr.success(cleanMessage, title, {
+            timeOut: messageSource === "AI" ? 6000 : 4000,
+            escapeHtml: false
         });
 
         savePetData();
@@ -411,8 +415,12 @@ jQuery(async () => {
 
         // 显示消息
         const title = messageSource === "AI" ? "玩耍回应 ✨" : "玩耍";
-        toastr.success(message, title, {
-            timeOut: messageSource === "AI" ? 6000 : 4000
+        const cleanMessage = messageSource === "AI" ?
+            message.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim() : message;
+
+        toastr.success(cleanMessage, title, {
+            timeOut: messageSource === "AI" ? 6000 : 4000,
+            escapeHtml: false
         });
 
         savePetData();
@@ -460,8 +468,12 @@ jQuery(async () => {
 
         // 显示消息
         const title = messageSource === "AI" ? "休息回应 ✨" : "休息";
-        toastr.success(message, title, {
-            timeOut: messageSource === "AI" ? 6000 : 4000
+        const cleanMessage = messageSource === "AI" ?
+            message.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim() : message;
+
+        toastr.success(cleanMessage, title, {
+            timeOut: messageSource === "AI" ? 6000 : 4000,
+            escapeHtml: false
         });
 
         savePetData();
@@ -503,8 +515,12 @@ jQuery(async () => {
 
             // 显示升级消息
             const title = messageSource === "AI" ? `升级到 ${petData.level} 级！✨` : "升级啦！";
-            toastr.success(message, title, {
-                timeOut: messageSource === "AI" ? 8000 : 5000
+            const cleanMessage = messageSource === "AI" ?
+                message.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim() : message;
+
+            toastr.success(cleanMessage, title, {
+                timeOut: messageSource === "AI" ? 8000 : 5000,
+                escapeHtml: false
             });
         }
     }
@@ -1636,9 +1652,13 @@ jQuery(async () => {
                     // 延迟显示问候，让弹窗先打开
                     setTimeout(() => {
                         if (typeof toastr !== 'undefined') {
-                            toastr.info(aiMessage, `${petData.name} 的问候 ✨`, {
+                            const cleanMessage = aiMessage.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim();
+                            const cleanTitle = `${petData.name} 的问候 ✨`.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim();
+
+                            toastr.info(cleanMessage, cleanTitle, {
                                 timeOut: 5000,
-                                extendedTimeOut: 2000
+                                extendedTimeOut: 2000,
+                                escapeHtml: false
                             });
                         }
                     }, 800);
@@ -5960,9 +5980,13 @@ jQuery(async () => {
 
                 // 显示测试消息
                 if (typeof toastr !== 'undefined') {
-                    toastr.info(message, `${petData.name} 的AI ${type} 测试 ✨`, {
+                    const cleanMessage = message.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim();
+                    const cleanTitle = `${petData.name} 的AI ${type} 测试 ✨`.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim();
+
+                    toastr.info(cleanMessage, cleanTitle, {
                         timeOut: 6000,
-                        extendedTimeOut: 2000
+                        extendedTimeOut: 2000,
+                        escapeHtml: false
                     });
                 }
 

@@ -856,3 +856,126 @@
         padding: 8px 10px;
     }
 }
+
+/* --- 撒娇卖萌动画效果 --- */
+
+/* 关注发光效果 */
+@keyframes attention-glow {
+    0% {
+        box-shadow: 0 0 15px rgba(255, 158, 199, 0.6), 0 4px 8px rgba(0,0,0,0.3);
+    }
+    50% {
+        box-shadow: 0 0 25px rgba(255, 158, 199, 1), 0 4px 8px rgba(0,0,0,0.3);
+    }
+    100% {
+        box-shadow: 0 0 15px rgba(255, 158, 199, 0.6), 0 4px 8px rgba(0,0,0,0.3);
+    }
+}
+
+/* 弹跳动画 */
+@keyframes bounce {
+    0%, 20%, 53%, 80%, 100% {
+        transform: translate3d(0, 0, 0);
+    }
+    40%, 43% {
+        transform: translate3d(0, -8px, 0);
+    }
+    70% {
+        transform: translate3d(0, -4px, 0);
+    }
+    90% {
+        transform: translate3d(0, -2px, 0);
+    }
+}
+
+/* 摇摆动画 */
+@keyframes shake {
+    0%, 100% {
+        transform: translateX(0);
+    }
+    10%, 30%, 50%, 70%, 90% {
+        transform: translateX(-3px);
+    }
+    20%, 40%, 60%, 80% {
+        transform: translateX(3px);
+    }
+}
+
+/* 脉冲动画 */
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* 摆动动画 */
+@keyframes swing {
+    0%, 100% {
+        transform: rotate(0deg);
+    }
+    20% {
+        transform: rotate(15deg);
+    }
+    40% {
+        transform: rotate(-10deg);
+    }
+    60% {
+        transform: rotate(5deg);
+    }
+    80% {
+        transform: rotate(-5deg);
+    }
+}
+
+/* 撒娇状态样式 */
+.attention-seeking {
+    position: relative !important;
+}
+
+.attention-seeking::before {
+    content: '💕';
+    position: absolute;
+    top: -10px;
+    right: -5px;
+    font-size: 16px;
+    animation: pulse 1.5s ease-in-out infinite;
+    z-index: 1;
+}
+
+/* 动画类 */
+.bounce {
+    animation: bounce 0.8s ease-in-out;
+}
+
+.shake {
+    animation: shake 0.8s ease-in-out;
+}
+
+.pulse {
+    animation: pulse 0.8s ease-in-out;
+}
+
+.swing {
+    animation: swing 0.8s ease-in-out;
+}
+
+/* 撒娇通知样式增强 */
+.toast-info {
+    background: linear-gradient(135deg, var(--primary-accent-color), var(--tertiary-accent-color)) !important;
+    color: white !important;
+}
+
+.toast-info .toast-title {
+    font-weight: bold !important;
+    color: white !important;
+}
+
+.toast-info .toast-message {
+    color: rgba(255, 255, 255, 0.95) !important;
+}

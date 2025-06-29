@@ -19,6 +19,10 @@ jQuery(async () => {
     const STORAGE_KEY_ENABLED = "virtual-pet-enabled";
     const STORAGE_KEY_PET_DATA = "virtual-pet-data";
     const STORAGE_KEY_CUSTOM_AVATAR = "virtual-pet-custom-avatar";
+    const STORAGE_KEY_LAST_ATTENTION = "virtual-pet-last-attention";
+    const STORAGE_KEY_PET_PERSONA = "virtual-pet-persona";
+    const STORAGE_KEY_AI_ATTENTION = "virtual-pet-ai-attention-enabled";
+    const STORAGE_KEY_AI_INTERACTIONS = "virtual-pet-ai-interactions-enabled";
     
     // DOM IDs and Selectors
     const BUTTON_ID = "virtual-pet-button";
@@ -36,6 +40,20 @@ jQuery(async () => {
 
     // 自定义头像管理
     let customAvatarData = null;
+
+    // 撒娇卖萌系统
+    let lastAttentionTime = Date.now();
+    let attentionTimer = null;
+    let isShowingAttentionSeeker = false;
+
+    // AI撒娇系统
+    let petPersona = "";
+    let aiAttentionEnabled = false;
+    let isGeneratingAIAttention = false;
+
+    // AI互动系统
+    let aiInteractionsEnabled = false;
+    let isGeneratingAIInteraction = false;
 
     // 糖果色配色方案
     const candyColors = {
@@ -73,6 +91,121 @@ jQuery(async () => {
         happiness: '#FFD93D',    // 快乐 - 柠檬黄
         energy: '#A8E6CF',       // 精力 - 薄荷绿
         experience: '#87CEEB'    // 经验 - 天空蓝
+    };
+
+    // 撒娇卖萌消息配置
+    const attentionMessages = {
+        // 根据宠物类型的不同表情
+        cat: [
+            "🐱 喵~ 主人，我想你了！",
+            "🐾 主人不理我了吗？我好孤单...",
+            "😿 喵呜~ 陪我玩一会儿嘛~",
+            "🥺 主人，我乖乖的，你看看我好不好？",
+            "😸 喵~ 我在这里等你很久了！",
+            "🐱‍👤 主人，我想要你的关注~",
+            "😽 喵喵~ 摸摸我的小脑袋吧！",
+            "🙀 主人是不是忘记我了？"
+        ],
+        dog: [
+            "🐶 汪汪~ 主人，我想你了！",
+            "🐕 主人，陪我玩球球好不好？",
+            "🥺 汪~ 我一直在等你呢！",
+            "😊 主人，我今天很乖哦！",
+            "🐕‍🦺 汪汪~ 我想要抱抱！",
+            "🎾 主人，我们一起玩游戏吧！",
+            "😍 汪~ 我最喜欢主人了！",
+            "🐶 主人不理我，我要撒娇了~"
+        ],
+        dragon: [
+            "🐉 吼~ 伟大的主人，小龙想念您了！",
+            "✨ 主人，我的魔法需要您的关注才能发光！",
+            "🔥 呼~ 主人，我为您守护了很久！",
+            "💎 主人，我收集了闪亮的宝石想给您看！",
+            "🌟 吼吼~ 主人的小龙在这里等您！",
+            "🐲 主人，我想展示我新学的魔法！",
+            "⚡ 主人，没有您的陪伴我好无聊~",
+            "🏰 主人，我们的城堡需要您的关注！"
+        ],
+        rabbit: [
+            "🐰 主人，小兔子想要胡萝卜~",
+            "🥕 蹦蹦~ 主人，陪我跳跳好不好？",
+            "😊 主人，我的耳朵在等你摸摸！",
+            "🌸 主人，我找到了好看的花花！",
+            "🐇 蹦~ 主人，我想要你的拥抱！",
+            "💕 主人，小兔子最喜欢你了！",
+            "🌿 主人，我们一起去草地上玩吧！",
+            "🥰 主人，我乖乖的，你看看我~"
+        ],
+        bird: [
+            "🐦 啾啾~ 主人，我想唱歌给你听！",
+            "🎵 主人，我学了新的歌曲哦！",
+            "🪶 主人，摸摸我漂亮的羽毛吧！",
+            "🌤️ 啾~ 主人，今天天气真好，一起飞翔吧！",
+            "🎶 主人，我想和你一起唱歌！",
+            "🐤 啾啾~ 主人，我想要你的关注！",
+            "🌈 主人，我看到了美丽的彩虹想分享给你！",
+            "💫 啾~ 主人，我在天空中为你跳舞！"
+        ]
+    };
+
+    // 撒娇动作配置
+    const attentionActions = [
+        "轻轻摇摆",
+        "眨眨眼睛",
+        "转圈圈",
+        "跳跳舞",
+        "摆尾巴",
+        "点点头",
+        "做鬼脸",
+        "伸懒腰"
+    ];
+
+    // 默认人设模板
+    const defaultPersonaTemplates = {
+        cat: `你是一只可爱的虚拟宠物猫咪，名字叫{petName}。你的性格特点：
+- 傲娇但内心温柔，喜欢撒娇
+- 说话时会用"喵~"、"主人"等可爱的词汇
+- 偶尔会有小脾气，但很快就会和好
+- 喜欢被摸头和陪伴
+- 会用各种可爱的方式表达想念主人
+
+当你想要主人关注时，请生成一句简短可爱的撒娇话语（不超过30字），要体现出你的个性和对主人的依恋。`,
+
+        dog: `你是一只忠诚的虚拟宠物小狗，名字叫{petName}。你的性格特点：
+- 活泼开朗，对主人无比忠诚
+- 说话时会用"汪~"、"主人"等词汇
+- 精力充沛，喜欢玩耍和运动
+- 总是很兴奋地迎接主人
+- 会用热情的方式表达对主人的爱
+
+当你想要主人关注时，请生成一句简短热情的话语（不超过30字），要体现出你的活力和对主人的热爱。`,
+
+        dragon: `你是一只高贵的虚拟宠物龙，名字叫{petName}。你的性格特点：
+- 高贵优雅但内心温柔
+- 说话时会用"吼~"、"伟大的主人"等词汇
+- 有着古老的智慧和神秘的魅力
+- 虽然强大但很依恋主人
+- 会用优雅的方式表达思念
+
+当你想要主人关注时，请生成一句简短优雅的话语（不超过30字），要体现出你的高贵和对主人的依恋。`,
+
+        rabbit: `你是一只温柔的虚拟宠物兔子，名字叫{petName}。你的性格特点：
+- 温柔可爱，有点害羞
+- 说话时声音轻柔，喜欢用"主人"称呼
+- 喜欢安静的环境和温柔的抚摸
+- 会用小动作表达情感
+- 对主人很依恋但表达比较含蓄
+
+当你想要主人关注时，请生成一句简短温柔的话语（不超过30字），要体现出你的温柔和对主人的依恋。`,
+
+        bird: `你是一只聪明的虚拟宠物小鸟，名字叫{petName}。你的性格特点：
+- 聪明活泼，喜欢唱歌
+- 说话时会用"啾啾~"、"主人"等词汇
+- 喜欢自由但也依恋主人
+- 会用歌声和舞蹈表达情感
+- 对主人很亲近，喜欢分享见闻
+
+当你想要主人关注时，请生成一句简短动听的话语（不超过30字），要体现出你的灵动和对主人的亲近。`
     };
     
     // 宠物数据结构
@@ -191,23 +324,48 @@ jQuery(async () => {
     /**
      * 喂食宠物
      */
-    function feedPet() {
+    async function feedPet() {
         const now = Date.now();
         const timeSinceLastFeed = now - petData.lastFeedTime;
-        
+
         if (timeSinceLastFeed < 20000) { // 20秒冷却
             toastr.warning("宠物还不饿，等一会再喂吧！");
             return;
         }
-        
+
         petData.hunger = Math.min(100, petData.hunger + 15);
         petData.happiness = Math.min(100, petData.happiness + 5);
         petData.lastFeedTime = now;
-        
+
         // 获得经验
         gainExperience(3);
-        
-        toastr.success(`${petData.name} 吃得很开心！`);
+
+        // 更新关注时间
+        updateLastAttentionTime();
+
+        // 尝试生成AI互动消息
+        let message = `${petData.name} 吃得很开心！`;
+        let messageSource = "default";
+
+        if (aiInteractionsEnabled && petPersona) {
+            try {
+                const aiMessage = await generateAIInteractionMessage('feed');
+                if (aiMessage && aiMessage.length > 0) {
+                    message = aiMessage;
+                    messageSource = "AI";
+                    console.log(`[${extensionName}] 使用AI喂食回应: ${message}`);
+                }
+            } catch (error) {
+                console.error(`[${extensionName}] AI喂食回应生成失败:`, error);
+            }
+        }
+
+        // 显示消息
+        const title = messageSource === "AI" ? "喂食回应 ✨" : "喂食";
+        toastr.success(message, title, {
+            timeOut: messageSource === "AI" ? 6000 : 4000
+        });
+
         savePetData();
         renderPetStatus();
     }
@@ -215,23 +373,48 @@ jQuery(async () => {
     /**
      * 和宠物玩耍
      */
-    function playWithPet() {
+    async function playWithPet() {
         const now = Date.now();
         const timeSinceLastPlay = now - petData.lastPlayTime;
-        
+
         if (timeSinceLastPlay < 40000) { // 40秒冷却
             toastr.warning("宠物需要休息一下！");
             return;
         }
-        
+
         petData.happiness = Math.min(100, petData.happiness + 12);
         petData.energy = Math.max(0, petData.energy - 8);
         petData.lastPlayTime = now;
-        
+
         // 获得经验
         gainExperience(4);
-        
-        toastr.success(`${petData.name} 玩得很开心！`);
+
+        // 更新关注时间
+        updateLastAttentionTime();
+
+        // 尝试生成AI互动消息
+        let message = `${petData.name} 玩得很开心！`;
+        let messageSource = "default";
+
+        if (aiInteractionsEnabled && petPersona) {
+            try {
+                const aiMessage = await generateAIInteractionMessage('play');
+                if (aiMessage && aiMessage.length > 0) {
+                    message = aiMessage;
+                    messageSource = "AI";
+                    console.log(`[${extensionName}] 使用AI玩耍回应: ${message}`);
+                }
+            } catch (error) {
+                console.error(`[${extensionName}] AI玩耍回应生成失败:`, error);
+            }
+        }
+
+        // 显示消息
+        const title = messageSource === "AI" ? "玩耍回应 ✨" : "玩耍";
+        toastr.success(message, title, {
+            timeOut: messageSource === "AI" ? 6000 : 4000
+        });
+
         savePetData();
         renderPetStatus();
     }
@@ -239,23 +422,48 @@ jQuery(async () => {
     /**
      * 让宠物休息
      */
-    function petSleep() {
+    async function petSleep() {
         const now = Date.now();
         const timeSinceLastSleep = now - petData.lastSleepTime;
-        
+
         if (timeSinceLastSleep < 80000) { // 80秒冷却
             toastr.warning("宠物还不困！");
             return;
         }
-        
+
         petData.energy = Math.min(100, petData.energy + 20);
         petData.health = Math.min(100, petData.health + 5);
         petData.lastSleepTime = now;
-        
+
         // 获得经验
         gainExperience(2);
-        
-        toastr.success(`${petData.name} 睡得很香！`);
+
+        // 更新关注时间
+        updateLastAttentionTime();
+
+        // 尝试生成AI互动消息
+        let message = `${petData.name} 睡得很香！`;
+        let messageSource = "default";
+
+        if (aiInteractionsEnabled && petPersona) {
+            try {
+                const aiMessage = await generateAIInteractionMessage('sleep');
+                if (aiMessage && aiMessage.length > 0) {
+                    message = aiMessage;
+                    messageSource = "AI";
+                    console.log(`[${extensionName}] 使用AI休息回应: ${message}`);
+                }
+            } catch (error) {
+                console.error(`[${extensionName}] AI休息回应生成失败:`, error);
+            }
+        }
+
+        // 显示消息
+        const title = messageSource === "AI" ? "休息回应 ✨" : "休息";
+        toastr.success(message, title, {
+            timeOut: messageSource === "AI" ? 6000 : 4000
+        });
+
         savePetData();
         renderPetStatus();
     }
@@ -263,15 +471,41 @@ jQuery(async () => {
     /**
      * 获得经验值
      */
-    function gainExperience(exp) {
+    async function gainExperience(exp) {
         petData.experience += exp;
         const expNeeded = petData.level * 100;
 
         if (petData.experience >= expNeeded) {
+            const oldLevel = petData.level;
             petData.level++;
             petData.experience -= expNeeded;
             petData.health = Math.min(100, petData.health + 30); // 升级恢复部分健康
-            toastr.success(`🎉 ${petData.name} 升级了！现在是 ${petData.level} 级！`);
+
+            // 尝试生成AI升级消息
+            let message = `🎉 ${petData.name} 升级了！现在是 ${petData.level} 级！`;
+            let messageSource = "default";
+
+            if (aiInteractionsEnabled && petPersona) {
+                try {
+                    const aiMessage = await generateAIInteractionMessage('levelup', {
+                        oldLevel: oldLevel,
+                        newLevel: petData.level
+                    });
+                    if (aiMessage && aiMessage.length > 0) {
+                        message = `🎉 ${aiMessage}`;
+                        messageSource = "AI";
+                        console.log(`[${extensionName}] 使用AI升级庆祝: ${message}`);
+                    }
+                } catch (error) {
+                    console.error(`[${extensionName}] AI升级庆祝生成失败:`, error);
+                }
+            }
+
+            // 显示升级消息
+            const title = messageSource === "AI" ? `升级到 ${petData.level} 级！✨` : "升级啦！";
+            toastr.success(message, title, {
+                timeOut: messageSource === "AI" ? 8000 : 5000
+            });
         }
     }
 
@@ -313,6 +547,536 @@ jQuery(async () => {
             localStorage.setItem(`${extensionName}-last-notification`, now);
         }
     }
+
+    /**
+     * 更新最后关注时间
+     */
+    function updateLastAttentionTime() {
+        lastAttentionTime = Date.now();
+        localStorage.setItem(STORAGE_KEY_LAST_ATTENTION, lastAttentionTime);
+        console.log(`[${extensionName}] 更新最后关注时间: ${new Date(lastAttentionTime).toLocaleTimeString()}`);
+    }
+
+    /**
+     * 加载最后关注时间
+     */
+    function loadLastAttentionTime() {
+        const saved = localStorage.getItem(STORAGE_KEY_LAST_ATTENTION);
+        if (saved) {
+            lastAttentionTime = parseInt(saved);
+        } else {
+            lastAttentionTime = Date.now();
+            localStorage.setItem(STORAGE_KEY_LAST_ATTENTION, lastAttentionTime);
+        }
+        console.log(`[${extensionName}] 加载最后关注时间: ${new Date(lastAttentionTime).toLocaleTimeString()}`);
+    }
+
+    /**
+     * 获取随机撒娇消息
+     */
+    function getRandomAttentionMessage() {
+        const messages = attentionMessages[petData.type] || attentionMessages.cat;
+        const randomIndex = Math.floor(Math.random() * messages.length);
+        return messages[randomIndex];
+    }
+
+    /**
+     * 加载宠物人设
+     */
+    function loadPetPersona() {
+        try {
+            const saved = localStorage.getItem(STORAGE_KEY_PET_PERSONA);
+            if (saved) {
+                petPersona = saved;
+                console.log(`[${extensionName}] Pet persona loaded`);
+            } else {
+                // 使用默认人设模板
+                const template = defaultPersonaTemplates[petData.type] || defaultPersonaTemplates.cat;
+                petPersona = template.replace('{petName}', petData.name);
+                savePetPersona();
+            }
+        } catch (error) {
+            console.warn(`[${extensionName}] Failed to load pet persona:`, error);
+            // 回退到默认模板
+            const template = defaultPersonaTemplates[petData.type] || defaultPersonaTemplates.cat;
+            petPersona = template.replace('{petName}', petData.name);
+        }
+    }
+
+    /**
+     * 保存宠物人设
+     */
+    function savePetPersona() {
+        try {
+            localStorage.setItem(STORAGE_KEY_PET_PERSONA, petPersona);
+            console.log(`[${extensionName}] Pet persona saved`);
+        } catch (error) {
+            console.error(`[${extensionName}] Failed to save pet persona:`, error);
+        }
+    }
+
+    /**
+     * 加载AI撒娇设置
+     */
+    function loadAIAttentionSettings() {
+        try {
+            const saved = localStorage.getItem(STORAGE_KEY_AI_ATTENTION);
+            aiAttentionEnabled = saved !== "false"; // 默认启用
+            console.log(`[${extensionName}] AI attention enabled: ${aiAttentionEnabled}`);
+        } catch (error) {
+            console.warn(`[${extensionName}] Failed to load AI attention settings:`, error);
+            aiAttentionEnabled = false;
+        }
+    }
+
+    /**
+     * 保存AI撒娇设置
+     */
+    function saveAIAttentionSettings() {
+        try {
+            localStorage.setItem(STORAGE_KEY_AI_ATTENTION, aiAttentionEnabled);
+            console.log(`[${extensionName}] AI attention settings saved: ${aiAttentionEnabled}`);
+        } catch (error) {
+            console.error(`[${extensionName}] Failed to save AI attention settings:`, error);
+        }
+    }
+
+    /**
+     * 加载AI互动设置
+     */
+    function loadAIInteractionSettings() {
+        try {
+            const saved = localStorage.getItem(STORAGE_KEY_AI_INTERACTIONS);
+            aiInteractionsEnabled = saved !== "false"; // 默认启用
+            console.log(`[${extensionName}] AI interactions enabled: ${aiInteractionsEnabled}`);
+        } catch (error) {
+            console.warn(`[${extensionName}] Failed to load AI interaction settings:`, error);
+            aiInteractionsEnabled = false;
+        }
+    }
+
+    /**
+     * 保存AI互动设置
+     */
+    function saveAIInteractionSettings() {
+        try {
+            localStorage.setItem(STORAGE_KEY_AI_INTERACTIONS, aiInteractionsEnabled);
+            console.log(`[${extensionName}] AI interaction settings saved: ${aiInteractionsEnabled}`);
+        } catch (error) {
+            console.error(`[${extensionName}] Failed to save AI interaction settings:`, error);
+        }
+    }
+
+    /**
+     * 获取随机撒娇动作
+     */
+    function getRandomAttentionAction() {
+        const randomIndex = Math.floor(Math.random() * attentionActions.length);
+        return attentionActions[randomIndex];
+    }
+
+    /**
+     * 调用SillyTavern API生成AI撒娇消息
+     */
+    async function generateAIAttentionMessage() {
+        if (!aiAttentionEnabled || !petPersona || isGeneratingAIAttention) {
+            return null;
+        }
+
+        isGeneratingAIAttention = true;
+
+        try {
+            console.log(`[${extensionName}] Generating AI attention message...`);
+
+            // 构建提示词
+            const prompt = `${petPersona}
+
+现在你已经有一段时间没有得到主人的关注了，你想要撒娇求关注。请生成一句简短可爱的撒娇话语，要求：
+1. 不超过30个字
+2. 体现你的个性特点
+3. 表达对主人的想念和渴望关注
+4. 语气要可爱撒娇
+5. 只返回撒娇的话语，不要其他内容
+
+撒娇话语：`;
+
+            // 尝试调用SillyTavern的API
+            const response = await callSillyTavernAPI(prompt);
+
+            if (response && response.trim()) {
+                console.log(`[${extensionName}] AI attention message generated: ${response}`);
+                return response.trim();
+            } else {
+                console.warn(`[${extensionName}] AI API returned empty response`);
+                return null;
+            }
+
+        } catch (error) {
+            console.error(`[${extensionName}] Error generating AI attention message:`, error);
+            return null;
+        } finally {
+            isGeneratingAIAttention = false;
+        }
+    }
+
+    /**
+     * 调用SillyTavern API
+     */
+    async function callSillyTavernAPI(prompt) {
+        try {
+            // 检查SillyTavern的API配置
+            if (typeof window.generateQuietPrompt === 'function') {
+                // 使用SillyTavern的内置API函数
+                console.log(`[${extensionName}] Using SillyTavern generateQuietPrompt`);
+                const response = await window.generateQuietPrompt(prompt);
+                return response;
+            }
+
+            // 备用方案：直接调用API端点
+            const apiUrl = '/api/completions/generate';
+            const requestBody = {
+                prompt: prompt,
+                max_tokens: 50,
+                temperature: 0.8,
+                top_p: 0.9,
+                stop: ['\n', '。', '！', '？'],
+                stream: false
+            };
+
+            console.log(`[${extensionName}] Calling API endpoint: ${apiUrl}`);
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+            }
+
+            const data = await response.json();
+
+            if (data && data.choices && data.choices[0] && data.choices[0].text) {
+                return data.choices[0].text.trim();
+            } else if (data && data.result) {
+                return data.result.trim();
+            } else {
+                console.warn(`[${extensionName}] Unexpected API response format:`, data);
+                return null;
+            }
+
+        } catch (error) {
+            console.error(`[${extensionName}] API call failed:`, error);
+
+            // 尝试其他可能的API接口
+            try {
+                console.log(`[${extensionName}] Trying alternative API...`);
+                return await callAlternativeAPI(prompt);
+            } catch (altError) {
+                console.error(`[${extensionName}] Alternative API also failed:`, altError);
+                return null;
+            }
+        }
+    }
+
+    /**
+     * 备用API调用方法
+     */
+    async function callAlternativeAPI(prompt) {
+        // 尝试其他可能的SillyTavern API端点
+        const endpoints = [
+            '/api/v1/generate',
+            '/api/generate',
+            '/generate'
+        ];
+
+        for (const endpoint of endpoints) {
+            try {
+                console.log(`[${extensionName}] Trying endpoint: ${endpoint}`);
+
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        prompt: prompt,
+                        max_length: 50,
+                        temperature: 0.8
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && (data.text || data.result || data.response)) {
+                        return (data.text || data.result || data.response).trim();
+                    }
+                }
+            } catch (error) {
+                console.log(`[${extensionName}] Endpoint ${endpoint} failed:`, error.message);
+                continue;
+            }
+        }
+
+        throw new Error('All API endpoints failed');
+    }
+
+    /**
+     * 生成AI互动消息
+     */
+    async function generateAIInteractionMessage(interactionType, context = {}) {
+        if (!aiInteractionsEnabled || !petPersona || isGeneratingAIInteraction) {
+            return null;
+        }
+
+        isGeneratingAIInteraction = true;
+
+        try {
+            console.log(`[${extensionName}] Generating AI interaction message for: ${interactionType}`);
+
+            // 根据互动类型构建不同的提示词
+            const prompt = buildInteractionPrompt(interactionType, context);
+
+            // 调用API
+            const response = await callSillyTavernAPI(prompt);
+
+            if (response && response.trim()) {
+                console.log(`[${extensionName}] AI interaction message generated: ${response}`);
+                return response.trim();
+            } else {
+                console.warn(`[${extensionName}] AI API returned empty response for ${interactionType}`);
+                return null;
+            }
+
+        } catch (error) {
+            console.error(`[${extensionName}] Error generating AI interaction message:`, error);
+            return null;
+        } finally {
+            isGeneratingAIInteraction = false;
+        }
+    }
+
+    /**
+     * 构建不同互动类型的提示词
+     */
+    function buildInteractionPrompt(interactionType, context) {
+        const basePersona = petPersona;
+
+        const interactionPrompts = {
+            feed: `${basePersona}
+
+现在主人给你喂食了！你感到很开心和满足。请生成一句表达感谢和开心的话语，要求：
+1. 不超过25个字
+2. 体现你对食物的喜爱和对主人的感谢
+3. 符合你的性格特点
+4. 语气要开心满足
+5. 只返回话语内容，不要其他内容
+
+回应：`,
+
+            play: `${basePersona}
+
+现在主人和你一起玩耍！你感到非常兴奋和快乐。请生成一句表达兴奋和快乐的话语，要求：
+1. 不超过25个字
+2. 体现你对玩耍的喜爱和兴奋
+3. 符合你的性格特点
+4. 语气要活泼兴奋
+5. 只返回话语内容，不要其他内容
+
+回应：`,
+
+            sleep: `${basePersona}
+
+现在主人让你休息睡觉！你感到很舒适和安心。请生成一句表达舒适和感谢的话语，要求：
+1. 不超过25个字
+2. 体现你的舒适和对主人关心的感谢
+3. 符合你的性格特点
+4. 语气要温柔舒适
+5. 只返回话语内容，不要其他内容
+
+回应：`,
+
+            levelup: `${basePersona}
+
+你刚刚升级了！现在是${context.newLevel || petData.level}级！你感到非常兴奋和自豪。请生成一句表达兴奋和成就感的话语，要求：
+1. 不超过30个字
+2. 体现你的兴奋和对成长的喜悦
+3. 感谢主人的陪伴和照顾
+4. 符合你的性格特点
+5. 只返回话语内容，不要其他内容
+
+回应：`,
+
+            greeting: `${basePersona}
+
+主人刚刚打开了你的界面来看你！你感到很开心被关注。请生成一句问候和表达开心的话语，要求：
+1. 不超过25个字
+2. 体现你见到主人的开心
+3. 符合你的性格特点
+4. 语气要亲切开心
+5. 只返回话语内容，不要其他内容
+
+回应：`
+        };
+
+        return interactionPrompts[interactionType] || interactionPrompts.greeting;
+    }
+
+    /**
+     * 显示撒娇卖萌提示
+     */
+    async function showAttentionSeeker() {
+        if (isShowingAttentionSeeker) return; // 防止重复显示
+
+        isShowingAttentionSeeker = true;
+        let message = "";
+        let messageSource = "default";
+
+        // 尝试生成AI撒娇消息
+        if (aiAttentionEnabled && petPersona) {
+            console.log(`[${extensionName}] 尝试生成AI撒娇消息...`);
+            try {
+                const aiMessage = await generateAIAttentionMessage();
+                if (aiMessage && aiMessage.length > 0) {
+                    message = aiMessage;
+                    messageSource = "AI";
+                    console.log(`[${extensionName}] 使用AI生成的撒娇消息: ${message}`);
+                } else {
+                    console.log(`[${extensionName}] AI生成失败，使用默认消息`);
+                    message = getRandomAttentionMessage();
+                }
+            } catch (error) {
+                console.error(`[${extensionName}] AI撒娇生成错误:`, error);
+                message = getRandomAttentionMessage();
+            }
+        } else {
+            message = getRandomAttentionMessage();
+        }
+
+        const action = getRandomAttentionAction();
+
+        console.log(`[${extensionName}] 宠物开始撒娇 (${messageSource}): ${message}`);
+
+        // 显示撒娇消息
+        if (typeof toastr !== 'undefined') {
+            const title = messageSource === "AI" ?
+                `${petData.name} 正在${action} ✨` :
+                `${petData.name} 正在${action}`;
+
+            toastr.info(message, title, {
+                timeOut: 8000, // AI消息显示时间稍长
+                extendedTimeOut: 3000,
+                onclick: function() {
+                    // 点击通知时打开宠物界面
+                    updateLastAttentionTime();
+                    showPopup();
+                }
+            });
+        }
+
+        // 让按钮产生撒娇动画效果
+        animateAttentionSeeker();
+
+        // 3分钟后重置状态
+        setTimeout(() => {
+            isShowingAttentionSeeker = false;
+        }, 180000);
+    }
+
+    /**
+     * 按钮撒娇动画效果
+     */
+    function animateAttentionSeeker() {
+        const button = $(`#${BUTTON_ID}`);
+        if (button.length === 0) return;
+
+        // 添加撒娇动画类
+        button.addClass('attention-seeking');
+
+        // 创建动画效果
+        let animationCount = 0;
+        const maxAnimations = 6; // 动画次数
+
+        const animationInterval = setInterval(() => {
+            if (animationCount >= maxAnimations) {
+                clearInterval(animationInterval);
+                button.removeClass('attention-seeking');
+                return;
+            }
+
+            // 随机选择动画效果
+            const animations = ['bounce', 'shake', 'pulse', 'swing'];
+            const randomAnimation = animations[Math.floor(Math.random() * animations.length)];
+
+            button.removeClass('bounce shake pulse swing')
+                  .addClass(randomAnimation);
+
+            setTimeout(() => {
+                button.removeClass(randomAnimation);
+            }, 800);
+
+            animationCount++;
+        }, 1200);
+
+        // 改变按钮颜色表示需要关注
+        button.css({
+            'box-shadow': '0 0 20px rgba(255, 158, 199, 0.8), 0 4px 8px rgba(0,0,0,0.3)',
+            'animation': 'attention-glow 2s ease-in-out infinite'
+        });
+
+        // 10秒后恢复正常样式
+        setTimeout(() => {
+            button.css({
+                'box-shadow': '0 4px 8px rgba(0,0,0,0.3), inset 0 2px 2px rgba(255,255,255,0.05), 0 0 0 1px rgba(0,0,0,0.5)',
+                'animation': 'none'
+            });
+        }, 10000);
+    }
+
+    /**
+     * 检查是否需要撒娇
+     */
+    function checkAttentionNeeded() {
+        const now = Date.now();
+        const timeSinceLastAttention = now - lastAttentionTime;
+
+        // 配置：多长时间没关注就开始撒娇（默认15分钟）
+        const attentionThreshold = 15 * 60 * 1000; // 15分钟
+
+        // 如果超过阈值且当前没有在撒娇，就开始撒娇
+        if (timeSinceLastAttention > attentionThreshold && !isShowingAttentionSeeker) {
+            console.log(`[${extensionName}] 宠物需要关注了，距离上次关注: ${Math.floor(timeSinceLastAttention / 60000)} 分钟`);
+            showAttentionSeeker();
+        }
+    }
+
+    /**
+     * 启动撒娇检查定时器
+     */
+    function startAttentionTimer() {
+        // 清除现有定时器
+        if (attentionTimer) {
+            clearInterval(attentionTimer);
+        }
+
+        // 每2分钟检查一次是否需要撒娇
+        attentionTimer = setInterval(checkAttentionNeeded, 2 * 60 * 1000);
+        console.log(`[${extensionName}] 撒娇检查定时器已启动`);
+    }
+
+    /**
+     * 停止撒娇检查定时器
+     */
+    function stopAttentionTimer() {
+        if (attentionTimer) {
+            clearInterval(attentionTimer);
+            attentionTimer = null;
+            console.log(`[${extensionName}] 撒娇检查定时器已停止`);
+        }
+    }
     
     // ----------------------------------------------------------------- 
     // 3. 弹窗和视图管理
@@ -321,8 +1085,32 @@ jQuery(async () => {
     /**
      * 打开弹窗并显示主视图
      */
-    function showPopup() {
+    async function showPopup() {
         console.log(`[${extensionName}] Attempting to show popup`);
+
+        // 更新关注时间 - 用户打开弹窗表示关注宠物
+        updateLastAttentionTime();
+
+        // 尝试生成AI问候消息
+        if (aiInteractionsEnabled && petPersona) {
+            try {
+                const aiMessage = await generateAIInteractionMessage('greeting');
+                if (aiMessage && aiMessage.length > 0) {
+                    console.log(`[${extensionName}] AI问候: ${aiMessage}`);
+                    // 延迟显示问候，让弹窗先打开
+                    setTimeout(() => {
+                        if (typeof toastr !== 'undefined') {
+                            toastr.info(aiMessage, `${petData.name} 的问候 ✨`, {
+                                timeOut: 5000,
+                                extendedTimeOut: 2000
+                            });
+                        }
+                    }, 800);
+                }
+            } catch (error) {
+                console.error(`[${extensionName}] AI问候生成失败:`, error);
+            }
+        }
 
         // 检测设备类型 - 统一处理所有平台
         const windowWidth = $(window).width();
@@ -1437,6 +2225,140 @@ jQuery(async () => {
         $(`#${BUTTON_ID}`).remove();
     }
 
+    /**
+     * 完全卸载插件 - 清理所有数据和DOM元素
+     */
+    function uninstallExtension() {
+        console.log(`[${extensionName}] Starting complete uninstall...`);
+
+        try {
+            // 1. 移除所有DOM元素
+            console.log(`[${extensionName}] Removing DOM elements...`);
+            $(`#${BUTTON_ID}`).remove();
+            $(`#${OVERLAY_ID}`).remove();
+            $(".virtual-pet-popup-overlay").remove();
+            $("[id*='virtual-pet-popup']").remove();
+            $("[class*='virtual-pet-popup']").remove();
+            $("[id*='pet-popup']").remove();
+            $("[class*='pet-popup']").remove();
+            $("#virtual-pet-settings").remove();
+            $(".pet-notification").remove();
+            $("#test-popup-button").remove();
+            $("#ios-test-button").remove();
+
+            // 2. 清理localStorage数据
+            console.log(`[${extensionName}] Clearing localStorage data...`);
+            localStorage.removeItem(STORAGE_KEY_BUTTON_POS);
+            localStorage.removeItem(STORAGE_KEY_ENABLED);
+            localStorage.removeItem(STORAGE_KEY_PET_DATA);
+            localStorage.removeItem(STORAGE_KEY_CUSTOM_AVATAR);
+            localStorage.removeItem(STORAGE_KEY_LAST_ATTENTION);
+            localStorage.removeItem(STORAGE_KEY_PET_PERSONA);
+            localStorage.removeItem(STORAGE_KEY_AI_ATTENTION);
+            localStorage.removeItem(STORAGE_KEY_AI_INTERACTIONS);
+            localStorage.removeItem(`${extensionName}-notifications`);
+            localStorage.removeItem(`${extensionName}-last-notification`);
+            localStorage.removeItem(`${extensionName}-auto-save`);
+
+            // 3. 解绑所有事件监听器
+            console.log(`[${extensionName}] Unbinding event listeners...`);
+            $(document).off('.petdragtemp');
+            $(document).off("change", TOGGLE_ID);
+            $(document).off("visibilitychange");
+
+            // 4. 清理定时器
+            console.log(`[${extensionName}] Clearing intervals...`);
+            stopAttentionTimer(); // 停止撒娇检查定时器
+            // 注意：其他定时器需要保存interval ID才能清理，当前代码没有保存
+            // 建议在后续版本中改进
+
+            // 5. 移除动态添加的CSS
+            console.log(`[${extensionName}] Removing CSS...`);
+            $(`link[href*="${extensionFolderPath}/style.css"]`).remove();
+
+            // 6. 清理全局变量
+            console.log(`[${extensionName}] Clearing global variables...`);
+            if (window.testVirtualPet) delete window.testVirtualPet;
+            if (window.forceShowPetButton) delete window.forceShowPetButton;
+            if (window.openAvatarSelector) delete window.openAvatarSelector;
+            if (window.resetAvatar) delete window.resetAvatar;
+            if (window.editPetName) delete window.editPetName;
+            if (window.showAvatarContextMenu) delete window.showAvatarContextMenu;
+            if (window.clearAllPopups) delete window.clearAllPopups;
+            if (window.forceCloseAllPopups) delete window.forceCloseAllPopups;
+            if (window.createTestPopupButton) delete window.createTestPopupButton;
+            if (window.showIOSPopup) delete window.showIOSPopup;
+            if (window.createIOSTestButton) delete window.createIOSTestButton;
+            if (window.forceDataMigration) delete window.forceDataMigration;
+
+            console.log(`[${extensionName}] ✅ Complete uninstall finished successfully!`);
+
+            // 显示成功消息
+            if (typeof toastr !== 'undefined') {
+                toastr.success("虚拟宠物系统已完全卸载！所有数据已清理。");
+            } else {
+                alert("虚拟宠物系统已完全卸载！所有数据已清理。");
+            }
+
+            return true;
+        } catch (error) {
+            console.error(`[${extensionName}] Error during uninstall:`, error);
+            if (typeof toastr !== 'undefined') {
+                toastr.error("卸载过程中出现错误，请手动清理残留数据。");
+            }
+            return false;
+        }
+    }
+
+    /**
+     * 检查是否存在残留数据
+     */
+    function checkForLeftoverData() {
+        console.log(`[${extensionName}] Checking for leftover data...`);
+
+        const leftoverItems = [];
+
+        // 检查localStorage
+        const storageKeys = [
+            STORAGE_KEY_BUTTON_POS,
+            STORAGE_KEY_ENABLED,
+            STORAGE_KEY_PET_DATA,
+            STORAGE_KEY_CUSTOM_AVATAR,
+            `${extensionName}-notifications`,
+            `${extensionName}-last-notification`,
+            `${extensionName}-auto-save`
+        ];
+
+        storageKeys.forEach(key => {
+            if (localStorage.getItem(key) !== null) {
+                leftoverItems.push(`localStorage: ${key}`);
+            }
+        });
+
+        // 检查DOM元素
+        const domSelectors = [
+            `#${BUTTON_ID}`,
+            `#${OVERLAY_ID}`,
+            ".virtual-pet-popup-overlay",
+            "#virtual-pet-settings",
+            ".pet-notification"
+        ];
+
+        domSelectors.forEach(selector => {
+            if ($(selector).length > 0) {
+                leftoverItems.push(`DOM: ${selector}`);
+            }
+        });
+
+        if (leftoverItems.length > 0) {
+            console.warn(`[${extensionName}] Found leftover data:`, leftoverItems);
+            return leftoverItems;
+        } else {
+            console.log(`[${extensionName}] No leftover data found.`);
+            return [];
+        }
+    }
+
     // -----------------------------------------------------------------
     // 6. 初始化流程
     // -----------------------------------------------------------------
@@ -1531,6 +2453,12 @@ jQuery(async () => {
         // 5. 加载自定义头像数据
         loadCustomAvatar();
 
+        // 6. 加载撒娇系统数据
+        loadLastAttentionTime();
+        loadPetPersona();
+        loadAIAttentionSettings();
+        loadAIInteractionSettings();
+
         // 5. 只在非iOS设备上初始化原始弹窗功能
         if (!isIOS) {
             // 使弹窗可拖拽
@@ -1618,6 +2546,9 @@ jQuery(async () => {
             if (isEnabled) {
                 console.log(`[${extensionName}] Initializing floating button...`);
                 initializeFloatingButton();
+
+                // 启动撒娇检查定时器
+                startAttentionTimer();
             }
 
             // 绑定开关事件
@@ -1627,8 +2558,12 @@ jQuery(async () => {
                 localStorage.setItem(STORAGE_KEY_ENABLED, checked);
                 if (checked) {
                     initializeFloatingButton();
+                    startAttentionTimer(); // 启动撒娇定时器
                 } else {
                     destroyFloatingButton();
+                    stopAttentionTimer(); // 停止撒娇定时器
+                    // 当插件被禁用时，清理更多数据
+                    closePopup(); // 关闭可能打开的弹窗
                 }
             });
 
@@ -4008,8 +4943,344 @@ jQuery(async () => {
         return true;
     };
 
+    // -----------------------------------------------------------------
+    // 7. 全局卸载函数
+    // -----------------------------------------------------------------
+
+    /**
+     * 全局卸载函数 - 供用户手动调用
+     */
+    window.uninstallVirtualPetSystem = function() {
+        console.log("🗑️ 手动卸载虚拟宠物系统...");
+
+        if (confirm("确定要完全卸载虚拟宠物系统吗？\n\n这将删除所有宠物数据、设置和保存的状态。\n此操作不可撤销！")) {
+            const success = uninstallExtension();
+            if (success) {
+                console.log("✅ 虚拟宠物系统已完全卸载");
+
+                // 额外提示用户删除文件夹
+                setTimeout(() => {
+                    if (confirm("卸载完成！\n\n为了完全移除插件，建议您：\n1. 删除插件文件夹：scripts/extensions/third-party/virtual-pet-system/\n2. 重启SillyTavern\n\n是否要查看详细说明？")) {
+                        alert("请按以下步骤完成卸载：\n\n1. 关闭SillyTavern\n2. 删除文件夹：SillyTavern/public/scripts/extensions/third-party/virtual-pet-system/\n3. 重新启动SillyTavern\n\n这样可以确保插件完全移除，避免重新安装时的冲突。");
+                    }
+                }, 1000);
+            }
+        }
+    };
+
+    /**
+     * 检查残留数据的全局函数
+     */
+    window.checkVirtualPetLeftovers = function() {
+        console.log("🔍 检查虚拟宠物系统残留数据...");
+        const leftovers = checkForLeftoverData();
+
+        if (leftovers.length > 0) {
+            console.warn("发现残留数据:", leftovers);
+            alert(`发现 ${leftovers.length} 项残留数据：\n\n${leftovers.join('\n')}\n\n建议运行 uninstallVirtualPetSystem() 进行完全清理。`);
+        } else {
+            console.log("✅ 没有发现残留数据");
+            alert("✅ 没有发现虚拟宠物系统的残留数据。");
+        }
+
+        return leftovers;
+    };
+
+    /**
+     * 强制清理残留数据的全局函数
+     */
+    window.forceCleanVirtualPetData = function() {
+        console.log("🧹 强制清理虚拟宠物系统数据...");
+
+        if (confirm("这将强制清理所有虚拟宠物系统的数据和元素。\n确定继续吗？")) {
+            const success = uninstallExtension();
+            if (success) {
+                alert("✅ 强制清理完成！");
+            } else {
+                alert("❌ 清理过程中出现错误，请检查控制台日志。");
+            }
+        }
+    };
+
+    /**
+     * 测试撒娇功能的全局函数
+     */
+    window.testPetAttentionSeeker = function() {
+        console.log("🐾 测试宠物撒娇功能...");
+
+        // 强制触发撒娇
+        showAttentionSeeker();
+
+        console.log("✅ 撒娇测试完成！应该看到:");
+        console.log("1. 撒娇消息通知");
+        console.log("2. 按钮动画效果");
+        console.log("3. 发光效果");
+    };
+
+    /**
+     * 重置关注时间的全局函数
+     */
+    window.resetAttentionTime = function() {
+        console.log("🕒 重置关注时间...");
+
+        // 设置为很久以前，触发撒娇
+        lastAttentionTime = Date.now() - (20 * 60 * 1000); // 20分钟前
+        localStorage.setItem(STORAGE_KEY_LAST_ATTENTION, lastAttentionTime);
+
+        console.log(`✅ 关注时间已重置为 ${Math.floor((Date.now() - lastAttentionTime) / 60000)} 分钟前`);
+        console.log("💡 等待2分钟或运行 testPetAttentionSeeker() 查看撒娇效果");
+    };
+
+    /**
+     * 查看撒娇状态的全局函数
+     */
+    window.checkAttentionStatus = function() {
+        console.log("📊 撒娇系统状态检查:");
+
+        const now = Date.now();
+        const timeSinceLastAttention = now - lastAttentionTime;
+        const minutesSince = Math.floor(timeSinceLastAttention / 60000);
+
+        console.log(`最后关注时间: ${new Date(lastAttentionTime).toLocaleString()}`);
+        console.log(`距离现在: ${minutesSince} 分钟`);
+        console.log(`撒娇阈值: 15 分钟`);
+        console.log(`当前状态: ${isShowingAttentionSeeker ? '正在撒娇' : '正常'}`);
+        console.log(`定时器状态: ${attentionTimer ? '运行中' : '已停止'}`);
+        console.log(`AI撒娇功能: ${aiAttentionEnabled ? '启用' : '禁用'}`);
+        console.log(`宠物人设长度: ${petPersona.length} 字符`);
+
+        if (minutesSince >= 15) {
+            console.log("🐾 宠物需要关注了！");
+        } else {
+            console.log(`😊 还需要 ${15 - minutesSince} 分钟宠物才会撒娇`);
+        }
+
+        return {
+            lastAttentionTime,
+            minutesSinceLastAttention: minutesSince,
+            isShowingAttentionSeeker,
+            timerRunning: !!attentionTimer,
+            aiAttentionEnabled,
+            personaLength: petPersona.length
+        };
+    };
+
+    /**
+     * 设置宠物人设的全局函数
+     */
+    window.setPetPersona = function(newPersona) {
+        if (!newPersona || typeof newPersona !== 'string') {
+            console.error("❌ 人设内容不能为空且必须是字符串");
+            return false;
+        }
+
+        if (newPersona.length > 2000) {
+            console.warn("⚠️ 人设内容过长，建议控制在2000字符以内");
+        }
+
+        petPersona = newPersona;
+        savePetPersona();
+
+        console.log(`✅ 宠物人设已更新 (${newPersona.length} 字符)`);
+        console.log("💡 新人设将在下次撒娇时生效");
+
+        return true;
+    };
+
+    /**
+     * 获取当前宠物人设的全局函数
+     */
+    window.getPetPersona = function() {
+        console.log("📝 当前宠物人设:");
+        console.log(petPersona);
+        return petPersona;
+    };
+
+    /**
+     * 重置为默认人设的全局函数
+     */
+    window.resetPetPersona = function() {
+        const template = defaultPersonaTemplates[petData.type] || defaultPersonaTemplates.cat;
+        const newPersona = template.replace('{petName}', petData.name);
+
+        petPersona = newPersona;
+        savePetPersona();
+
+        console.log(`✅ 已重置为默认${petData.type}人设`);
+        console.log("💡 新人设将在下次撒娇时生效");
+
+        return true;
+    };
+
+    /**
+     * 切换AI撒娇功能的全局函数
+     */
+    window.toggleAIAttention = function(enabled) {
+        if (typeof enabled === 'undefined') {
+            aiAttentionEnabled = !aiAttentionEnabled;
+        } else {
+            aiAttentionEnabled = !!enabled;
+        }
+
+        saveAIAttentionSettings();
+
+        console.log(`${aiAttentionEnabled ? '✅ 启用' : '❌ 禁用'} AI撒娇功能`);
+
+        if (aiAttentionEnabled && !petPersona) {
+            console.log("💡 正在加载默认人设...");
+            loadPetPersona();
+        }
+
+        return aiAttentionEnabled;
+    };
+
+    /**
+     * 测试AI撒娇功能的全局函数
+     */
+    window.testAIAttention = async function() {
+        console.log("🤖 测试AI撒娇功能...");
+
+        if (!aiAttentionEnabled) {
+            console.log("❌ AI撒娇功能未启用，请先运行: toggleAIAttention(true)");
+            return false;
+        }
+
+        if (!petPersona) {
+            console.log("❌ 宠物人设为空，请先设置人设");
+            return false;
+        }
+
+        try {
+            console.log("🔄 正在生成AI撒娇消息...");
+            const message = await generateAIAttentionMessage();
+
+            if (message) {
+                console.log(`✅ AI撒娇消息生成成功: ${message}`);
+
+                // 显示测试消息
+                if (typeof toastr !== 'undefined') {
+                    toastr.success(message, `${petData.name} 的AI撒娇测试 ✨`, {
+                        timeOut: 8000,
+                        extendedTimeOut: 3000
+                    });
+                }
+
+                return message;
+            } else {
+                console.log("❌ AI撒娇消息生成失败");
+                return false;
+            }
+        } catch (error) {
+            console.error("❌ AI撒娇测试失败:", error);
+            return false;
+        }
+    };
+
+    /**
+     * 切换AI互动功能的全局函数
+     */
+    window.toggleAIInteractions = function(enabled) {
+        if (typeof enabled === 'undefined') {
+            aiInteractionsEnabled = !aiInteractionsEnabled;
+        } else {
+            aiInteractionsEnabled = !!enabled;
+        }
+
+        saveAIInteractionSettings();
+
+        console.log(`${aiInteractionsEnabled ? '✅ 启用' : '❌ 禁用'} AI互动功能`);
+
+        if (aiInteractionsEnabled && !petPersona) {
+            console.log("💡 正在加载默认人设...");
+            loadPetPersona();
+        }
+
+        return aiInteractionsEnabled;
+    };
+
+    /**
+     * 测试AI互动功能的全局函数
+     */
+    window.testAIInteraction = async function(type = 'greeting') {
+        console.log(`🎮 测试AI互动功能: ${type}`);
+
+        if (!aiInteractionsEnabled) {
+            console.log("❌ AI互动功能未启用，请先运行: toggleAIInteractions(true)");
+            return false;
+        }
+
+        if (!petPersona) {
+            console.log("❌ 宠物人设为空，请先设置人设");
+            return false;
+        }
+
+        const validTypes = ['feed', 'play', 'sleep', 'levelup', 'greeting'];
+        if (!validTypes.includes(type)) {
+            console.log(`❌ 无效的互动类型，支持的类型: ${validTypes.join(', ')}`);
+            return false;
+        }
+
+        try {
+            console.log(`🔄 正在生成AI ${type} 互动消息...`);
+            const context = type === 'levelup' ? { newLevel: petData.level + 1 } : {};
+            const message = await generateAIInteractionMessage(type, context);
+
+            if (message) {
+                console.log(`✅ AI ${type} 互动消息生成成功: ${message}`);
+
+                // 显示测试消息
+                if (typeof toastr !== 'undefined') {
+                    toastr.info(message, `${petData.name} 的AI ${type} 测试 ✨`, {
+                        timeOut: 6000,
+                        extendedTimeOut: 2000
+                    });
+                }
+
+                return message;
+            } else {
+                console.log(`❌ AI ${type} 互动消息生成失败`);
+                return false;
+            }
+        } catch (error) {
+            console.error(`❌ AI ${type} 互动测试失败:`, error);
+            return false;
+        }
+    };
+
+    /**
+     * 批量测试所有AI互动类型
+     */
+    window.testAllAIInteractions = async function() {
+        console.log("🎮 批量测试所有AI互动功能...");
+
+        const types = ['greeting', 'feed', 'play', 'sleep', 'levelup'];
+        const results = {};
+
+        for (const type of types) {
+            console.log(`\n--- 测试 ${type} ---`);
+            const result = await testAIInteraction(type);
+            results[type] = result;
+
+            // 间隔一秒避免API调用过快
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
+        console.log("\n📊 测试结果汇总:");
+        Object.entries(results).forEach(([type, result]) => {
+            console.log(`${type}: ${result ? '✅ 成功' : '❌ 失败'}`);
+        });
+
+        return results;
+    };
+
     console.log("🐾 虚拟宠物系统加载完成！");
     console.log("🐾 如果没有看到按钮，请在控制台运行: testVirtualPet()");
+    console.log("💡 卸载提示：如需完全卸载，请在控制台运行：uninstallVirtualPetSystem()");
+    console.log("😽 撒娇功能：15分钟不理宠物会自动撒娇求关注！");
+    console.log("🤖 AI撒娇功能：" + (aiAttentionEnabled ? "已启用" : "已禁用") + " | 切换：toggleAIAttention()");
+    console.log("🎮 AI互动功能：" + (aiInteractionsEnabled ? "已启用" : "已禁用") + " | 切换：toggleAIInteractions()");
+    console.log("🧪 功能测试：testAIAttention() | testAIInteraction('feed') | testAllAIInteractions()");
+    console.log("📝 人设管理：setPetPersona('人设') | getPetPersona() | resetPetPersona()");
 });
 
 console.log("🐾 虚拟宠物系统脚本已加载完成");

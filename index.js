@@ -2332,48 +2332,48 @@ jQuery(async () => {
                 <!-- 宠物头像和基本信息 -->
                 <div class="pet-avatar-section" style="
                     text-align: center !important;
-                    background: #40444b !important;
+                    background: transparent !important;
                     padding: 12px !important;
-                    border-radius: 8px !important;
+                    border-radius: 0 !important;
                 ">
                     <div class="pet-avatar" style="font-size: 2.5em !important; margin-bottom: 6px !important;">🐱</div>
                     <div class="pet-name" style="font-size: 1.2em !important; font-weight: bold !important; margin-bottom: 3px !important;">小宠物</div>
-                    <div class="pet-level" style="color: #7289da !important; font-size: 0.9em !important;">Lv.1</div>
+                    <div class="pet-level" style="color: #4a5568 !important; font-size: 0.9em !important;">Lv.1</div>
                 </div>
 
                 <!-- 宠物状态栏 -->
                 <div class="pet-status-section" style="
-                    background: #40444b !important;
+                    background: transparent !important;
                     padding: 10px !important;
-                    border-radius: 8px !important;
+                    border-radius: 0 !important;
                 ">
-                    <h4 style="margin: 0 0 10px 0 !important; color: #7289da !important; font-size: 0.9em !important;">📊 状态</h4>
+                    <h4 style="margin: 0 0 10px 0 !important; color: #2d3748 !important; font-size: 0.9em !important; font-weight: 700 !important;">📊 状态</h4>
                     <div class="status-bars" style="display: flex !important; flex-direction: column !important; gap: 6px !important;">
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
-                                <span style="color: #99aab5 !important; font-size: 0.8em !important;">❤️ 健康</span>
-                                <span style="color: #43b581 !important; font-size: 0.8em !important;">85/100</span>
+                                <span style="color: #4a5568 !important; font-size: 0.8em !important;">❤️ 健康</span>
+                                <span style="color: #48bb78 !important; font-size: 0.8em !important;">85/100</span>
                             </div>
-                            <div style="background: #2c2f33 !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: #43b581 !important; height: 100% !important; width: 85% !important; transition: width 0.3s ease !important;"></div>
-                            </div>
-                        </div>
-                        <div class="status-item">
-                            <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
-                                <span style="color: #99aab5 !important; font-size: 0.8em !important;">🍖 饱食度</span>
-                                <span style="color: #faa61a !important; font-size: 0.8em !important;">60/100</span>
-                            </div>
-                            <div style="background: #2c2f33 !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: #faa61a !important; height: 100% !important; width: 60% !important; transition: width 0.3s ease !important;"></div>
+                            <div style="background: rgba(255, 255, 255, 0.2) !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: #48bb78 !important; height: 100% !important; width: 85% !important; transition: width 0.3s ease !important;"></div>
                             </div>
                         </div>
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
-                                <span style="color: #99aab5 !important; font-size: 0.8em !important;">😊 快乐度</span>
-                                <span style="color: #7289da !important; font-size: 0.8em !important;">75/100</span>
+                                <span style="color: #4a5568 !important; font-size: 0.8em !important;">🍖 饱食度</span>
+                                <span style="color: #fc8181 !important; font-size: 0.8em !important;">60/100</span>
                             </div>
-                            <div style="background: #2c2f33 !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: #7289da !important; height: 100% !important; width: 75% !important; transition: width 0.3s ease !important;"></div>
+                            <div style="background: rgba(255, 255, 255, 0.2) !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: #fbb6ce !important; height: 100% !important; width: 60% !important; transition: width 0.3s ease !important;"></div>
+                            </div>
+                        </div>
+                        <div class="status-item">
+                            <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
+                                <span style="color: #4a5568 !important; font-size: 0.8em !important;">😊 快乐度</span>
+                                <span style="color: #90cdf4 !important; font-size: 0.8em !important;">75/100</span>
+                            </div>
+                            <div style="background: rgba(255, 255, 255, 0.2) !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: #90cdf4 !important; height: 100% !important; width: 75% !important; transition: width 0.3s ease !important;"></div>
                             </div>
                         </div>
                     </div>
@@ -2387,10 +2387,10 @@ jQuery(async () => {
                 ">
                     <button class="action-btn feed-btn" style="
                         padding: 10px !important;
-                        background: #43b581 !important;
+                        background: linear-gradient(135deg, #48bb78, #68d391) !important;
                         color: white !important;
                         border: none !important;
-                        border-radius: 6px !important;
+                        border-radius: 20px !important;
                         font-size: 12px !important;
                         cursor: pointer !important;
                         min-height: 40px !important;
@@ -2405,10 +2405,10 @@ jQuery(async () => {
                     </button>
                     <button class="action-btn play-btn" style="
                         padding: 10px !important;
-                        background: #7289da !important;
+                        background: linear-gradient(135deg, #ed8936, #f6ad55) !important;
                         color: white !important;
                         border: none !important;
-                        border-radius: 6px !important;
+                        border-radius: 20px !important;
                         font-size: 12px !important;
                         cursor: pointer !important;
                         min-height: 40px !important;
@@ -2463,9 +2463,9 @@ jQuery(async () => {
                 <div class="pet-info-section" style="
                     text-align: center !important;
                     padding: 8px !important;
-                    background: #40444b !important;
-                    border-radius: 6px !important;
-                    color: #99aab5 !important;
+                    background: transparent !important;
+                    border-radius: 0 !important;
+                    color: #4a5568 !important;
                     font-size: 0.7em !important;
                 ">
                     <p style="margin: 0 !important;">🎉 虚拟宠物系统 v1.0</p>
@@ -2487,9 +2487,9 @@ jQuery(async () => {
                 <!-- 宠物头像和基本信息 -->
                 <div class="pet-avatar-section" style="
                     text-align: center !important;
-                    background: #40444b !important;
+                    background: transparent !important;
                     padding: 15px !important;
-                    border-radius: 10px !important;
+                    border-radius: 0 !important;
                 ">
                     <div class="pet-avatar" style="font-size: 3em !important; margin-bottom: 8px !important;">🐱</div>
                     <div class="pet-name" style="font-size: 1.3em !important; font-weight: bold !important; margin-bottom: 4px !important;">小宠物</div>
@@ -2498,37 +2498,37 @@ jQuery(async () => {
 
                 <!-- 宠物状态栏 -->
                 <div class="pet-status-section" style="
-                    background: #40444b !important;
+                    background: transparent !important;
                     padding: 12px !important;
-                    border-radius: 8px !important;
+                    border-radius: 0 !important;
                 ">
-                    <h4 style="margin: 0 0 12px 0 !important; color: #7289da !important; font-size: 1em !important;">📊 状态</h4>
+                    <h4 style="margin: 0 0 12px 0 !important; color: #2d3748 !important; font-size: 1em !important; font-weight: 700 !important;">📊 状态</h4>
                     <div class="status-bars" style="display: flex !important; flex-direction: column !important; gap: 8px !important;">
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
-                                <span style="color: #99aab5 !important; font-size: 0.9em !important;">❤️ 健康</span>
-                                <span style="color: #43b581 !important; font-size: 0.9em !important;">85/100</span>
+                                <span style="color: #4a5568 !important; font-size: 0.9em !important;">❤️ 健康</span>
+                                <span style="color: #48bb78 !important; font-size: 0.9em !important;">85/100</span>
                             </div>
-                            <div style="background: #2c2f33 !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: #43b581 !important; height: 100% !important; width: 85% !important; transition: width 0.3s ease !important;"></div>
-                            </div>
-                        </div>
-                        <div class="status-item">
-                            <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
-                                <span style="color: #99aab5 !important; font-size: 0.9em !important;">🍖 饱食度</span>
-                                <span style="color: #faa61a !important; font-size: 0.9em !important;">60/100</span>
-                            </div>
-                            <div style="background: #2c2f33 !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: #faa61a !important; height: 100% !important; width: 60% !important; transition: width 0.3s ease !important;"></div>
+                            <div style="background: rgba(255, 255, 255, 0.2) !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: #48bb78 !important; height: 100% !important; width: 85% !important; transition: width 0.3s ease !important;"></div>
                             </div>
                         </div>
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
-                                <span style="color: #99aab5 !important; font-size: 0.9em !important;">😊 快乐度</span>
-                                <span style="color: #7289da !important; font-size: 0.9em !important;">75/100</span>
+                                <span style="color: #4a5568 !important; font-size: 0.9em !important;">🍖 饱食度</span>
+                                <span style="color: #fc8181 !important; font-size: 0.9em !important;">60/100</span>
                             </div>
-                            <div style="background: #2c2f33 !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: #7289da !important; height: 100% !important; width: 75% !important; transition: width 0.3s ease !important;"></div>
+                            <div style="background: rgba(255, 255, 255, 0.2) !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: #fc8181 !important; height: 100% !important; width: 60% !important; transition: width 0.3s ease !important;"></div>
+                            </div>
+                        </div>
+                        <div class="status-item">
+                            <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
+                                <span style="color: #4a5568 !important; font-size: 0.9em !important;">😊 快乐度</span>
+                                <span style="color: #90cdf4 !important; font-size: 0.9em !important;">75/100</span>
+                            </div>
+                            <div style="background: rgba(255, 255, 255, 0.2) !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: #90cdf4 !important; height: 100% !important; width: 75% !important; transition: width 0.3s ease !important;"></div>
                             </div>
                         </div>
                     </div>
@@ -2542,10 +2542,10 @@ jQuery(async () => {
                 ">
                     <button class="action-btn feed-btn" style="
                         padding: 12px !important;
-                        background: #43b581 !important;
+                        background: linear-gradient(135deg, #48bb78, #68d391) !important;
                         color: white !important;
                         border: none !important;
-                        border-radius: 6px !important;
+                        border-radius: 20px !important;
                         font-size: 13px !important;
                         cursor: pointer !important;
                         min-height: 44px !important;
@@ -2560,10 +2560,10 @@ jQuery(async () => {
                     </button>
                     <button class="action-btn play-btn" style="
                         padding: 12px !important;
-                        background: #7289da !important;
+                        background: linear-gradient(135deg, #ed8936, #f6ad55) !important;
                         color: white !important;
                         border: none !important;
-                        border-radius: 6px !important;
+                        border-radius: 20px !important;
                         font-size: 13px !important;
                         cursor: pointer !important;
                         min-height: 44px !important;
@@ -2578,10 +2578,10 @@ jQuery(async () => {
                     </button>
                     <button class="action-btn sleep-btn" style="
                         padding: 12px !important;
-                        background: #99aab5 !important;
+                        background: linear-gradient(135deg, #ed64a6, #f093fb) !important;
                         color: white !important;
                         border: none !important;
-                        border-radius: 6px !important;
+                        border-radius: 20px !important;
                         font-size: 13px !important;
                         cursor: pointer !important;
                         min-height: 44px !important;
@@ -2596,10 +2596,10 @@ jQuery(async () => {
                     </button>
                     <button class="action-btn settings-btn" style="
                         padding: 12px !important;
-                        background: #f04747 !important;
-                        color: white !important;
+                        background: linear-gradient(135deg, #a0aec0, #cbd5e0) !important;
+                        color: #2d3748 !important;
                         border: none !important;
-                        border-radius: 6px !important;
+                        border-radius: 20px !important;
                         font-size: 13px !important;
                         cursor: pointer !important;
                         min-height: 44px !important;

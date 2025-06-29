@@ -1704,24 +1704,22 @@ jQuery(async () => {
                     // 延迟显示问候，让弹窗先打开
                     setTimeout(() => {
                         if (typeof toastr !== 'undefined') {
-                            // 特别处理问候消息的编码
-                            const cleanMessage = aiMessage
-                                .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // 移除控制字符
-                                .replace(/[^\u0000-\u007F]/g, function(char) {
-                                    // 确保中文字符正确编码
-                                    return char;
-                                })
-                                .trim();
+                            // 基于测试结果：方法1和2正常，方法3、5、6出错
+                            // 使用最简单有效的方法
 
                             const cleanTitle = `${petData.name} 的问候 ✨`;
 
-                            console.log(`[${extensionName}] 显示问候消息:`, cleanMessage);
+                            console.log(`[${extensionName}] 原始问候消息:`, aiMessage);
+                            console.log(`[${extensionName}] 消息长度:`, aiMessage.length);
+                            console.log(`[${extensionName}] 消息类型:`, typeof aiMessage);
 
-                            toastr.info(cleanMessage, cleanTitle, {
+                            // 使用最基本的方法，只设置escapeHtml: false
+                            toastr.info(aiMessage, cleanTitle, {
                                 timeOut: 5000,
                                 extendedTimeOut: 2000,
                                 escapeHtml: false,
-                                preventDuplicates: true
+                                preventDuplicates: true,
+                                closeButton: true
                             });
                         }
                     }, 800);
@@ -6232,12 +6230,18 @@ jQuery(async () => {
             // 方法3: 使用encodeURIComponent
             setTimeout(() => {
                 console.log("方法3: encodeURIComponent");
-                const encoded = encodeURIComponent(testMsg);
-                console.log("编码后:", encoded);
-                toastr.info(decodeURIComponent(encoded), "方法3: URI编码", {
-                    timeOut: 3000,
-                    escapeHtml: false
-                });
+                try {
+                    const encoded = encodeURIComponent(testMsg);
+                    console.log("编码后:", encoded);
+                    const decoded = decodeURIComponent(encoded);
+                    toastr.info(decoded, "方法3: URI编码", {
+                        timeOut: 3000,
+                        escapeHtml: false
+                    });
+                } catch (error) {
+                    console.log("方法3出错:", error);
+                    toastr.error("编码测试失败", "方法3: URI编码错误", { timeOut: 3000 });
+                }
             }, 3000);
 
             // 方法4: 使用JSON.stringify
@@ -6256,18 +6260,24 @@ jQuery(async () => {
             setTimeout(() => {
                 console.log("方法5: TextEncoder/TextDecoder");
                 try {
-                    const encoder = new TextEncoder();
-                    const decoder = new TextDecoder();
-                    const encoded = encoder.encode(testMsg);
-                    const decoded = decoder.decode(encoded);
-                    console.log("编码字节:", Array.from(encoded));
-                    console.log("解码结果:", decoded);
-                    toastr.info(decoded, "方法5: TextEncoder", {
-                        timeOut: 3000,
-                        escapeHtml: false
-                    });
+                    if (typeof TextEncoder !== 'undefined' && typeof TextDecoder !== 'undefined') {
+                        const encoder = new TextEncoder();
+                        const decoder = new TextDecoder();
+                        const encoded = encoder.encode(testMsg);
+                        const decoded = decoder.decode(encoded);
+                        console.log("编码字节:", Array.from(encoded));
+                        console.log("解码结果:", decoded);
+                        toastr.info(decoded, "方法5: TextEncoder", {
+                            timeOut: 3000,
+                            escapeHtml: false
+                        });
+                    } else {
+                        console.log("TextEncoder/TextDecoder不可用");
+                        toastr.warning("TextEncoder不支持", "方法5: 不支持", { timeOut: 3000 });
+                    }
                 } catch (error) {
-                    console.log("TextEncoder不可用:", error);
+                    console.log("TextEncoder错误:", error);
+                    toastr.error("TextEncoder出错", "方法5: 错误", { timeOut: 3000 });
                 }
             }, 5000);
 
@@ -6292,29 +6302,72 @@ jQuery(async () => {
 
         if (aiInteractionsEnabled && petPersona) {
             console.log("尝试生成AI问候消息...");
-            generateAIInteractionMessage('greeting').then(message => {
-                if (message) {
-                    console.log("AI生成的消息:", message);
-                    console.log("消息类型:", typeof message);
-                    console.log("消息编码分析:", message.split('').map(c => c.charCodeAt(0)));
+            try {
+                generateAIInteractionMessage('greeting').then(message => {
+                    if (message) {
+                        console.log("AI生成的消息:", message);
+                        console.log("消息类型:", typeof message);
+                        console.log("消息编码分析:", message.split('').map(c => c.charCodeAt(0)));
 
-                    // 直接测试这个AI消息
-                    setTimeout(() => {
-                        toastr.info(message, "AI生成消息测试", {
-                            timeOut: 5000,
-                            escapeHtml: false
-                        });
-                    }, 6000);
-                } else {
-                    console.log("AI消息生成失败");
-                }
-            }).catch(error => {
-                console.log("AI消息生成错误:", error);
-            });
+                        // 直接测试这个AI消息
+                        setTimeout(() => {
+                            try {
+                                toastr.info(message, "AI生成消息测试", {
+                                    timeOut: 5000,
+                                    escapeHtml: false
+                                });
+                            } catch (toastrError) {
+                                console.log("AI消息显示错误:", toastrError);
+                                toastr.error("AI消息显示失败", "测试6: 错误", { timeOut: 3000 });
+                            }
+                        }, 6000);
+                    } else {
+                        console.log("AI消息生成失败");
+                    }
+                }).catch(error => {
+                    console.log("AI消息生成错误:", error);
+                });
+            } catch (error) {
+                console.log("AI消息生成异常:", error);
+            }
         }
 
         console.log("\n=====================================");
         console.log("诊断完成！请观察控制台输出和通知显示效果");
+    };
+
+    /**
+     * 专门测试问候消息的简化版本
+     */
+    window.testGreetingSimple = function() {
+        console.log("🔍 简化测试问候消息...");
+
+        const testMessage = "主人好呀nya~";
+
+        if (typeof toastr !== 'undefined') {
+            console.log("测试消息:", testMessage);
+
+            // 测试1: 最基本的方式
+            toastr.success(testMessage, "基本测试", {
+                timeOut: 4000,
+                escapeHtml: false
+            });
+
+            // 测试2: 模拟实际问候消息
+            setTimeout(() => {
+                toastr.info(testMessage, `${petData.name} 的问候 ✨`, {
+                    timeOut: 5000,
+                    extendedTimeOut: 2000,
+                    escapeHtml: false,
+                    preventDuplicates: true,
+                    closeButton: true
+                });
+            }, 1000);
+
+            console.log("显示了2个测试通知，观察显示效果");
+        } else {
+            console.log("❌ toastr未定义");
+        }
     };
 
     /**
@@ -6676,7 +6729,7 @@ jQuery(async () => {
     console.log("🛡️ 智能回退：当AI不可用时自动使用基于人设的智能回应");
     console.log("💡 提示：所有AI和人设功能都可以在设置界面中管理，无需使用控制台命令");
     console.log("🔍 AI故障排除：diagnoseAIFeatures() | 智能回退测试：testIntelligentFallback()");
-    console.log("🐛 界面调试：debugPopupContent() | 乱码诊断：diagnoseGreetingIssue()");
+    console.log("🐛 界面调试：debugPopupContent() | 问候测试：testGreetingSimple()");
     console.log("⚙️ AI功能控制：toggleAIFeatures() | 人设管理：setPetPersona('人设')");
     console.log("💡 卸载提示：如需完全卸载，请在控制台运行：uninstallVirtualPetSystem()");
 });

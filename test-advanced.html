@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>虚拟宠物系统 - 智能API配置测试</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #2b2b2b;
+            color: #fff;
+        }
+        .test-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #3b3b3b;
+            border-radius: 10px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #4b4b4b;
+            border-radius: 8px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .log {
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        input, select {
+            padding: 8px;
+            margin: 5px;
+            background: #2b2b2b;
+            color: #fff;
+            border: 1px solid #555;
+            border-radius: 4px;
+        }
+        .config-display {
+            background: #2a2a2a;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border-left: 4px solid #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🐾 虚拟宠物系统 - 智能API配置功能测试</h1>
+        
+        <div class="test-section">
+            <h2>1. 模拟SillyTavern环境</h2>
+            <p>这个测试页面模拟了SillyTavern的环境，包括配置数据结构。</p>
+            <button onclick="setupMockSillyTavern()">设置模拟SillyTavern环境</button>
+            <div id="extensions_settings2" style="display: none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>2. SillyTavern配置侦测测试</h2>
+            <button onclick="testDetection()">🕵️ 侦测SillyTavern配置</button>
+            <button onclick="testPopulateDropdown()">🔄 动态填充下拉框</button>
+            <button onclick="testApiEndpointInfo()">📊 测试端点信息获取</button>
+            <button onclick="clearStorage()">🗑️ 清除存储数据</button>
+            <div id="test-log" class="log"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>3. 当前配置状态</h2>
+            <div id="current-config" class="config-display">
+                <strong>当前配置:</strong> 未加载
+            </div>
+            <button onclick="refreshConfigDisplay()">🔄 刷新配置显示</button>
+        </div>
+
+        <div class="test-section">
+            <h2>4. 手动测试区域</h2>
+            <label>选择配置:</label>
+            <select id="manual-config-select">
+                <option value="">请先运行侦测</option>
+            </select>
+            <br>
+            <button onclick="manualConfigTest()">测试选中配置</button>
+        </div>
+    </div>
+
+    <script src="index.js"></script>
+    <script>
+        function log(message) {
+            const logDiv = document.getElementById('test-log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.textContent += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function setupMockSillyTavern() {
+            log('🔧 设置模拟SillyTavern环境...');
+            
+            // 模拟 window.stores 结构
+            window.stores = {
+                connections: {
+                    connections: [
+                        {
+                            name: "本地Oobabooga",
+                            uri: "http://127.0.0.1:5000/api/v1/generate",
+                            api_key: null,
+                            enabled: true
+                        },
+                        {
+                            name: "OpenAI GPT-4",
+                            uri: "https://api.openai.com/v1/completions",
+                            api_key: "sk-test123456789",
+                            enabled: true
+                        },
+                        {
+                            name: "Claude API",
+                            uri: "https://api.anthropic.com/v1/messages",
+                            api_key: "claude-key-123",
+                            enabled: false
+                        }
+                    ]
+                }
+            };
+            
+            log('✅ 模拟环境设置完成');
+            log(`📊 模拟了 ${window.stores.connections.connections.length} 个API配置`);
+        }
+
+        function testDetection() {
+            log('🕵️ 开始侦测测试...');
+            
+            try {
+                const result = detectSillyTavernConfigs();
+                log(`侦测结果: ${result.found ? '成功' : '失败'}`);
+                log(`数据路径: ${result.dataPath || '未找到'}`);
+                log(`配置数量: ${result.configs.length}`);
+                
+                if (result.configs.length > 0) {
+                    result.configs.forEach((config, index) => {
+                        log(`配置 ${index + 1}: ${config.name || '未命名'} -> ${config.uri || config.url || '无URL'}`);
+                    });
+                }
+                
+                log('✅ 侦测测试完成');
+            } catch (error) {
+                log(`❌ 侦测测试失败: ${error.message}`);
+            }
+        }
+
+        function testPopulateDropdown() {
+            log('🔄 测试动态填充下拉框...');
+            
+            try {
+                populateApiDropdownFromSillyTavern();
+                
+                const dropdown = $("#virtual-pet-api-endpoint-select");
+                const optionCount = dropdown.find('option').length;
+                log(`下拉框选项数量: ${optionCount}`);
+                
+                dropdown.find('option').each(function(index) {
+                    log(`选项 ${index + 1}: ${$(this).text()} (值: ${$(this).val()})`);
+                });
+                
+                log('✅ 下拉框填充测试完成');
+            } catch (error) {
+                log(`❌ 下拉框填充测试失败: ${error.message}`);
+            }
+        }
+
+        function testApiEndpointInfo() {
+            log('📊 测试端点信息获取...');
+            
+            try {
+                const endpointInfo = getUserApiEndpoint();
+                log(`当前端点URL: ${endpointInfo.url}`);
+                log(`API密钥: ${endpointInfo.apiKey ? '已配置' : '未配置'}`);
+                log(`配置来源: ${endpointInfo.source}`);
+                if (endpointInfo.name) {
+                    log(`配置名称: ${endpointInfo.name}`);
+                }
+                
+                log('✅ 端点信息获取测试完成');
+            } catch (error) {
+                log(`❌ 端点信息获取测试失败: ${error.message}`);
+            }
+        }
+
+        function refreshConfigDisplay() {
+            try {
+                const endpointInfo = getUserApiEndpoint();
+                const configDiv = document.getElementById('current-config');
+                
+                let configText = `<strong>当前配置:</strong><br>`;
+                configText += `URL: ${endpointInfo.url}<br>`;
+                configText += `来源: ${endpointInfo.source}<br>`;
+                configText += `API密钥: ${endpointInfo.apiKey ? '已配置' : '未配置'}<br>`;
+                if (endpointInfo.name) {
+                    configText += `名称: ${endpointInfo.name}<br>`;
+                }
+                
+                configDiv.innerHTML = configText;
+            } catch (error) {
+                document.getElementById('current-config').innerHTML = `<strong>配置加载失败:</strong> ${error.message}`;
+            }
+        }
+
+        function clearStorage() {
+            localStorage.clear();
+            log('🗑️ 存储数据已清除');
+            refreshConfigDisplay();
+        }
+
+        function manualConfigTest() {
+            const select = document.getElementById('manual-config-select');
+            const selectedValue = select.value;
+            
+            if (!selectedValue) {
+                log('⚠️ 请先选择一个配置');
+                return;
+            }
+            
+            log(`🧪 手动测试配置: ${selectedValue}`);
+            
+            // 保存选择的配置
+            saveApiEndpointSettings(selectedValue);
+            
+            // 获取并显示结果
+            testApiEndpointInfo();
+            refreshConfigDisplay();
+        }
+
+        // 页面加载完成后的初始化
+        $(document).ready(function() {
+            log('📄 测试页面加载完成');
+            log('🚀 虚拟宠物系统正在初始化...');
+            
+            // 设置模拟环境
+            setupMockSillyTavern();
+            
+            // 刷新配置显示
+            setTimeout(() => {
+                refreshConfigDisplay();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

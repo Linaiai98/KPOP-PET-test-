@@ -146,18 +146,44 @@ jQuery(async () => {
     // -----------------------------------------------------------------
 
     /**
-     * 获取用户配置的API端点
-     * @returns {string} 用户配置的API端点URL
+     * 获取用户配置的API端点和相关信息
+     * @returns {object} 包含URL、API密钥等信息的对象
      */
     function getUserApiEndpoint() {
         const selectedEndpoint = localStorage.getItem(STORAGE_KEY_API_ENDPOINT) || '/api/v1/generate';
 
+        // 处理自定义端点
         if (selectedEndpoint === 'custom') {
             const customUrl = localStorage.getItem(STORAGE_KEY_CUSTOM_API_URL) || '/api/v1/generate';
-            return customUrl.trim() || '/api/v1/generate';
+            return {
+                url: customUrl.trim() || '/api/v1/generate',
+                apiKey: null,
+                source: 'custom'
+            };
         }
 
-        return selectedEndpoint;
+        // 处理SillyTavern检测到的配置
+        if (selectedEndpoint.startsWith('sillytavern:')) {
+            const configIndex = parseInt(selectedEndpoint.split(':')[1]);
+            const detectedConfigs = window.virtualPetDetectedConfigs;
+
+            if (detectedConfigs && detectedConfigs[configIndex]) {
+                const config = detectedConfigs[configIndex];
+                return {
+                    url: config.uri || config.url || config.endpoint || config.api_url || '/api/v1/generate',
+                    apiKey: config.api_key || config.apiKey || config.key || null,
+                    source: 'sillytavern',
+                    name: config.name || config.title || `配置 ${configIndex + 1}`
+                };
+            }
+        }
+
+        // 处理预设端点
+        return {
+            url: selectedEndpoint,
+            apiKey: null,
+            source: 'preset'
+        };
     }
 
     /**
@@ -172,6 +198,164 @@ jQuery(async () => {
         }
 
         console.log(`[${extensionName}] API端点已更新为: ${endpoint === 'custom' ? customUrl : endpoint}`);
+    }
+
+    /**
+     * 侦测SillyTavern的配置数据结构
+     * 这个函数会尝试找到SillyTavern存储API配置的地方
+     */
+    function detectSillyTavernConfigs() {
+        console.log(`[${extensionName}] 🕵️ 开始侦测SillyTavern配置...`);
+
+        const detectionResults = {
+            found: false,
+            configs: [],
+            dataPath: null,
+            rawData: null
+        };
+
+        // 侦测方法1: 检查 window.stores (最可能的位置)
+        if (typeof window.stores !== 'undefined') {
+            console.log(`[${extensionName}] ✅ 发现 window.stores`);
+            detectionResults.rawData = window.stores;
+
+            // 尝试不同的可能路径
+            const possiblePaths = [
+                'connections.connections',
+                'connections',
+                'presets.presets',
+                'presets',
+                'settings.connections',
+                'api.connections'
+            ];
+
+            for (const path of possiblePaths) {
+                const value = getNestedProperty(window.stores, path);
+                if (Array.isArray(value) && value.length > 0) {
+                    console.log(`[${extensionName}] 🎯 在 window.stores.${path} 找到配置数组:`, value);
+                    detectionResults.found = true;
+                    detectionResults.configs = value;
+                    detectionResults.dataPath = `window.stores.${path}`;
+                    break;
+                }
+            }
+        }
+
+        // 侦测方法2: 检查 window.SillyTavern
+        if (!detectionResults.found && typeof window.SillyTavern !== 'undefined') {
+            console.log(`[${extensionName}] ✅ 发现 window.SillyTavern`);
+            const stPaths = [
+                'settings.connections',
+                'config.connections',
+                'api.connections'
+            ];
+
+            for (const path of stPaths) {
+                const value = getNestedProperty(window.SillyTavern, path);
+                if (Array.isArray(value) && value.length > 0) {
+                    console.log(`[${extensionName}] 🎯 在 window.SillyTavern.${path} 找到配置数组:`, value);
+                    detectionResults.found = true;
+                    detectionResults.configs = value;
+                    detectionResults.dataPath = `window.SillyTavern.${path}`;
+                    break;
+                }
+            }
+        }
+
+        // 侦测方法3: 检查 localStorage
+        if (!detectionResults.found) {
+            console.log(`[${extensionName}] 🔍 检查 localStorage...`);
+            const storageKeys = Object.keys(localStorage);
+            const relevantKeys = storageKeys.filter(key =>
+                key.toLowerCase().includes('connection') ||
+                key.toLowerCase().includes('api') ||
+                key.toLowerCase().includes('sillytavern')
+            );
+
+            for (const key of relevantKeys) {
+                try {
+                    const data = JSON.parse(localStorage.getItem(key));
+                    if (Array.isArray(data) && data.length > 0) {
+                        console.log(`[${extensionName}] 🎯 在 localStorage.${key} 找到可能的配置:`, data);
+                        detectionResults.found = true;
+                        detectionResults.configs = data;
+                        detectionResults.dataPath = `localStorage.${key}`;
+                        break;
+                    }
+                } catch (e) {
+                    // 忽略JSON解析错误
+                }
+            }
+        }
+
+        return detectionResults;
+    }
+
+    /**
+     * 安全地获取嵌套对象属性
+     * @param {object} obj - 目标对象
+     * @param {string} path - 属性路径，如 'a.b.c'
+     */
+    function getNestedProperty(obj, path) {
+        return path.split('.').reduce((current, key) => {
+            return current && current[key] !== undefined ? current[key] : undefined;
+        }, obj);
+    }
+
+    /**
+     * 动态填充API下拉框，使用从SillyTavern侦测到的配置
+     */
+    function populateApiDropdownFromSillyTavern() {
+        console.log(`[${extensionName}] 🔄 开始动态填充API下拉框...`);
+
+        const dropdown = $("#virtual-pet-api-endpoint-select");
+        if (dropdown.length === 0) {
+            console.log(`[${extensionName}] ⚠️ 未找到API下拉框，跳过填充`);
+            return;
+        }
+
+        // 侦测SillyTavern配置
+        const detection = detectSillyTavernConfigs();
+
+        // 清空现有选项（保留一个默认选项）
+        dropdown.empty();
+        dropdown.append('<option value="/api/v1/generate">📡 /api/v1/generate (默认)</option>');
+
+        if (detection.found && detection.configs.length > 0) {
+            console.log(`[${extensionName}] 🎯 找到 ${detection.configs.length} 个SillyTavern配置`);
+
+            // 为每个检测到的配置添加选项
+            detection.configs.forEach((config, index) => {
+                // 尝试提取配置信息
+                const name = config.name || config.title || config.label || `配置 ${index + 1}`;
+                const url = config.uri || config.url || config.endpoint || config.api_url;
+
+                if (url) {
+                    const displayName = `🔗 ${name}`;
+                    const optionValue = `sillytavern:${index}`; // 使用特殊前缀标识这是SillyTavern配置
+
+                    dropdown.append(`<option value="${optionValue}">${displayName}</option>`);
+                    console.log(`[${extensionName}] ➕ 添加配置: ${displayName} -> ${url}`);
+                }
+            });
+
+            // 存储检测到的配置供后续使用
+            window.virtualPetDetectedConfigs = detection.configs;
+
+            toastr.success(`发现 ${detection.configs.length} 个SillyTavern API配置！`, "配置侦测成功");
+        } else {
+            console.log(`[${extensionName}] ℹ️ 未检测到SillyTavern配置，使用默认选项`);
+
+            // 添加一些常见的备用选项
+            dropdown.append('<option value="/api/generate">📡 /api/generate (常见变体)</option>');
+            dropdown.append('<option value="/completions">📡 /completions (OpenAI兼容)</option>');
+            dropdown.append('<option value="/v1/completions">📡 /v1/completions (OpenAI v1)</option>');
+        }
+
+        // 总是添加自定义选项
+        dropdown.append('<option value="custom">✏️ 自定义端点</option>');
+
+        console.log(`[${extensionName}] ✅ API下拉框填充完成`);
     }
 
     /**
@@ -204,15 +388,24 @@ jQuery(async () => {
                     console.log(`[${extensionName}] 使用Generate API`);
                     result = await window.Generate(prompt);
                 } else {
-                    // 方法4：使用用户配置的端点进行fetch调用
-                    const userEndpoint = getUserApiEndpoint();
-                    console.log(`[${extensionName}] 使用用户配置的端点: ${userEndpoint}`);
+                    // 方法4：使用用户配置的端点进行智能fetch调用
+                    const endpointInfo = getUserApiEndpoint();
+                    console.log(`[${extensionName}] 使用${endpointInfo.source}配置: ${endpointInfo.url}`);
 
-                    const response = await fetch(userEndpoint, {
+                    // 动态构建请求头
+                    const headers = {
+                        'Content-Type': 'application/json',
+                    };
+
+                    // 如果有API密钥，添加授权头
+                    if (endpointInfo.apiKey) {
+                        headers['Authorization'] = `Bearer ${endpointInfo.apiKey}`;
+                        console.log(`[${extensionName}] 使用API密钥进行授权`);
+                    }
+
+                    const response = await fetch(endpointInfo.url, {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
+                        headers: headers,
                         body: JSON.stringify({
                             prompt: prompt,
                             max_length: 100,
@@ -224,7 +417,7 @@ jQuery(async () => {
                         const data = await response.json();
                         result = data.text || data.response || data.result;
                     } else {
-                        throw new Error(`API调用失败: ${response.status} (端点: ${userEndpoint})`);
+                        throw new Error(`API调用失败: ${response.status} (端点: ${endpointInfo.url}, 来源: ${endpointInfo.source})`);
                     }
                 }
 
@@ -385,6 +578,9 @@ jQuery(async () => {
      * 初始化设置面板
      */
     function initializeSettingsPanel() {
+        // 首先动态填充API下拉框
+        populateApiDropdownFromSillyTavern();
+
         // 加载当前设置
         const currentPersonalityType = localStorage.getItem(`${extensionName}-personality-type`) || 'default';
         const customPersonality = localStorage.getItem(`${extensionName}-custom-personality`) || '';
@@ -431,7 +627,14 @@ jQuery(async () => {
             if (!isCustom) {
                 // 如果选择了预设端点，立即保存
                 saveApiEndpointSettings(selectedEndpoint);
-                toastr.success(`API端点已切换到: ${selectedEndpoint}`);
+
+                // 获取端点信息用于显示
+                const endpointInfo = getUserApiEndpoint();
+                let message = `API端点已切换到: ${endpointInfo.url}`;
+                if (endpointInfo.source === 'sillytavern' && endpointInfo.name) {
+                    message = `已切换到SillyTavern配置: ${endpointInfo.name}`;
+                }
+                toastr.success(message);
             }
         });
 
@@ -466,7 +669,13 @@ jQuery(async () => {
         console.log(`[${extensionName}] 设置面板初始化完成`);
         console.log(`[${extensionName}] 当前人设类型: ${currentPersonalityType}`);
         console.log(`[${extensionName}] 当前人设内容: ${getCurrentPersonality()}`);
-        console.log(`[${extensionName}] 当前API端点: ${getUserApiEndpoint()}`);
+
+        // 显示当前API配置信息
+        const endpointInfo = getUserApiEndpoint();
+        console.log(`[${extensionName}] 当前API端点: ${endpointInfo.url} (来源: ${endpointInfo.source})`);
+        if (endpointInfo.apiKey) {
+            console.log(`[${extensionName}] 已配置API密钥`);
+        }
     }
 
     /**
@@ -478,18 +687,6 @@ jQuery(async () => {
             $("#virtual-pet-custom-personality-container").show();
         } else {
             $("#virtual-pet-custom-personality-container").hide();
-        }
-    }
-
-    /**
-     * 切换自定义API输入框的显示状态
-     * @param {boolean} show 是否显示
-     */
-    function toggleCustomApiInput(show) {
-        if (show) {
-            $("#virtual-pet-custom-api-container").show();
-        } else {
-            $("#virtual-pet-custom-api-container").hide();
         }
     }
 
@@ -1910,35 +2107,6 @@ jQuery(async () => {
 
                         <small class="notes" style="margin-top: 10px; display: block;">
                             选择或自定义宠物的性格，AI会根据人设生成个性化回复
-                        </small>
-
-                        <hr style="margin: 15px 0; border: none; border-top: 1px solid #444;">
-
-                        <div class="flex-container">
-                            <label for="virtual-pet-api-endpoint-select" style="display: block; margin-bottom: 8px; font-weight: bold;">
-                                🔗 API端点配置
-                            </label>
-                            <select id="virtual-pet-api-endpoint-select" style="width: 100%; padding: 8px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
-                                <option value="/api/v1/generate">📡 /api/v1/generate (默认)</option>
-                                <option value="/api/generate">📡 /api/generate (常见变体)</option>
-                                <option value="/completions">📡 /completions (OpenAI兼容)</option>
-                                <option value="/v1/completions">📡 /v1/completions (OpenAI v1)</option>
-                                <option value="custom">✏️ 自定义端点</option>
-                            </select>
-                        </div>
-
-                        <div id="virtual-pet-custom-api-container" style="display: none; margin-top: 10px;">
-                            <label for="virtual-pet-custom-api-url" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
-                                自定义API端点URL：
-                            </label>
-                            <input type="text" id="virtual-pet-custom-api-url"
-                                   placeholder="例如: /api/custom/generate"
-                                   style="width: 100%; padding: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px; font-family: monospace;">
-                            <small style="color: #888; font-size: 0.8em;">输入完整的API路径，例如 /api/v2/generate</small>
-                        </div>
-
-                        <small class="notes" style="margin-top: 10px; display: block;">
-                            当内置API调用失败时，插件会使用此端点进行HTTP请求。如果不确定，请保持默认设置。
                         </small>
                     </div>
                 </div>

@@ -6168,6 +6168,156 @@ jQuery(async () => {
     };
 
     /**
+     * 全面诊断问候消息乱码问题
+     */
+    window.diagnoseGreetingIssue = function() {
+        console.log("🔍 全面诊断问候消息乱码问题...");
+        console.log("=====================================");
+
+        // 1. 检查toastr环境
+        console.log("\n1. 📋 检查toastr环境:");
+        console.log("toastr可用:", typeof toastr !== 'undefined');
+        if (typeof toastr !== 'undefined') {
+            console.log("toastr版本:", toastr.version || '未知');
+            console.log("toastr选项:", toastr.options);
+        }
+
+        // 2. 检查字符编码
+        console.log("\n2. 🔤 检查字符编码:");
+        const testStrings = [
+            "主人好呀nya~",
+            "小宠等你很久了~",
+            "欢迎回来，主人大人喵~",
+            "谢谢主人的美食nya~"
+        ];
+
+        testStrings.forEach((str, index) => {
+            console.log(`\n测试字符串 ${index + 1}: "${str}"`);
+            console.log("字符长度:", str.length);
+            console.log("字节长度:", new Blob([str]).size);
+            console.log("字符编码:", str.split('').map(c => ({
+                char: c,
+                unicode: c.charCodeAt(0),
+                hex: '0x' + c.charCodeAt(0).toString(16),
+                isASCII: c.charCodeAt(0) < 128
+            })));
+
+            // 检查是否包含问题字符
+            const hasControlChars = /[\u0000-\u001F\u007F-\u009F]/.test(str);
+            const hasHighUnicode = /[\u0100-\uFFFF]/.test(str);
+            console.log("包含控制字符:", hasControlChars);
+            console.log("包含高位Unicode:", hasHighUnicode);
+        });
+
+        // 3. 测试不同的显示方法
+        console.log("\n3. 🧪 测试不同的显示方法:");
+        if (typeof toastr !== 'undefined') {
+            const testMsg = "主人好呀nya~";
+
+            // 方法1: 直接显示
+            setTimeout(() => {
+                console.log("方法1: 直接显示");
+                toastr.error(testMsg, "方法1: 直接显示", { timeOut: 3000 });
+            }, 1000);
+
+            // 方法2: 设置escapeHtml: false
+            setTimeout(() => {
+                console.log("方法2: escapeHtml: false");
+                toastr.warning(testMsg, "方法2: escapeHtml=false", {
+                    timeOut: 3000,
+                    escapeHtml: false
+                });
+            }, 2000);
+
+            // 方法3: 使用encodeURIComponent
+            setTimeout(() => {
+                console.log("方法3: encodeURIComponent");
+                const encoded = encodeURIComponent(testMsg);
+                console.log("编码后:", encoded);
+                toastr.info(decodeURIComponent(encoded), "方法3: URI编码", {
+                    timeOut: 3000,
+                    escapeHtml: false
+                });
+            }, 3000);
+
+            // 方法4: 使用JSON.stringify
+            setTimeout(() => {
+                console.log("方法4: JSON处理");
+                const jsonStr = JSON.stringify(testMsg);
+                const parsed = JSON.parse(jsonStr);
+                console.log("JSON处理后:", parsed);
+                toastr.success(parsed, "方法4: JSON处理", {
+                    timeOut: 3000,
+                    escapeHtml: false
+                });
+            }, 4000);
+
+            // 方法5: 使用TextEncoder/TextDecoder
+            setTimeout(() => {
+                console.log("方法5: TextEncoder/TextDecoder");
+                try {
+                    const encoder = new TextEncoder();
+                    const decoder = new TextDecoder();
+                    const encoded = encoder.encode(testMsg);
+                    const decoded = decoder.decode(encoded);
+                    console.log("编码字节:", Array.from(encoded));
+                    console.log("解码结果:", decoded);
+                    toastr.info(decoded, "方法5: TextEncoder", {
+                        timeOut: 3000,
+                        escapeHtml: false
+                    });
+                } catch (error) {
+                    console.log("TextEncoder不可用:", error);
+                }
+            }, 5000);
+
+            console.log("将显示5个测试通知，观察哪个显示正常");
+        }
+
+        // 4. 检查页面编码
+        console.log("\n4. 📄 检查页面编码:");
+        console.log("document.charset:", document.charset);
+        console.log("document.characterSet:", document.characterSet);
+        console.log("document.inputEncoding:", document.inputEncoding);
+
+        const metaCharset = document.querySelector('meta[charset]');
+        if (metaCharset) {
+            console.log("meta charset:", metaCharset.getAttribute('charset'));
+        }
+
+        // 5. 检查AI消息生成
+        console.log("\n5. 🤖 检查AI消息生成:");
+        console.log("AI互动启用:", aiInteractionsEnabled);
+        console.log("宠物人设长度:", petPersona ? petPersona.length : 0);
+
+        if (aiInteractionsEnabled && petPersona) {
+            console.log("尝试生成AI问候消息...");
+            generateAIInteractionMessage('greeting').then(message => {
+                if (message) {
+                    console.log("AI生成的消息:", message);
+                    console.log("消息类型:", typeof message);
+                    console.log("消息编码分析:", message.split('').map(c => c.charCodeAt(0)));
+
+                    // 直接测试这个AI消息
+                    setTimeout(() => {
+                        toastr.info(message, "AI生成消息测试", {
+                            timeOut: 5000,
+                            escapeHtml: false
+                        });
+                    }, 6000);
+                } else {
+                    console.log("AI消息生成失败");
+                }
+            }).catch(error => {
+                console.log("AI消息生成错误:", error);
+            });
+        }
+
+        console.log("\n=====================================");
+        console.log("诊断完成！请观察控制台输出和通知显示效果");
+    };
+
+    /**
      * 简化的问候消息测试
      */
     window.testGreetingFixed = function() {
@@ -6526,7 +6676,7 @@ jQuery(async () => {
     console.log("🛡️ 智能回退：当AI不可用时自动使用基于人设的智能回应");
     console.log("💡 提示：所有AI和人设功能都可以在设置界面中管理，无需使用控制台命令");
     console.log("🔍 AI故障排除：diagnoseAIFeatures() | 智能回退测试：testIntelligentFallback()");
-    console.log("🐛 界面调试：debugPopupContent() | 问候测试：testGreetingFixed()");
+    console.log("🐛 界面调试：debugPopupContent() | 乱码诊断：diagnoseGreetingIssue()");
     console.log("⚙️ AI功能控制：toggleAIFeatures() | 人设管理：setPetPersona('人设')");
     console.log("💡 卸载提示：如需完全卸载，请在控制台运行：uninstallVirtualPetSystem()");
 });

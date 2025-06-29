@@ -1497,9 +1497,14 @@ jQuery(async () => {
                 `${petData.name} 正在${action} ✨` :
                 `${petData.name} 正在${action}`;
 
-            toastr.info(message, title, {
+            // 确保消息正确编码，避免乱码
+            const cleanMessage = message.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim();
+            const cleanTitle = title.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim();
+
+            toastr.info(cleanMessage, cleanTitle, {
                 timeOut: 8000, // AI消息显示时间稍长
                 extendedTimeOut: 3000,
+                escapeHtml: false, // 允许emoji等字符
                 onclick: function() {
                     // 点击通知时打开宠物界面
                     updateLastAttentionTime();
@@ -3128,8 +3133,7 @@ jQuery(async () => {
             } catch (error) {
                 console.warn(`[${extensionName}] Failed to load popup.html, using simple version:`, error);
                 // 创建简单的弹窗HTML
-            const simplePopupHtml = `
-                <div id="virtual-pet-popup-overlay" class="virtual-pet-popup-overlay">
+            const simplePopupHtml = `<div id="virtual-pet-popup-overlay" class="virtual-pet-popup-overlay">
                     <div id="virtual-pet-popup" class="pet-popup-container">
                         <div class="pet-popup-header">
                             <div class="pet-popup-title">🐾</div>
@@ -4985,8 +4989,7 @@ jQuery(async () => {
     // 生成移动端UI
     function generateMobileUI() {
         console.log(`[UI] Generating mobile UI`);
-        return `
-            <div class="pet-popup-header" style="
+        return `<div class="pet-popup-header" style="
                 display: flex !important;
                 justify-content: center !important;
                 align-items: center !important;
@@ -5025,7 +5028,7 @@ jQuery(async () => {
                     " onclick="openAvatarSelector()" oncontextmenu="showAvatarContextMenu(event)" title="点击更换头像，右键重置">
                         ${getAvatarContent()}
                     </div>
-                    <div class="pet-name" style="font-size: 1.2em !important; font-weight: bold !important; margin-bottom: 3px !important;">小宠物</div>
+                    <div class="pet-name" style="font-size: 1.2em !important; font-weight: bold !important; margin-bottom: 3px !important;">${petData.name}</div>
                     <div class="pet-level" style="color: #7289da !important; font-size: 0.9em !important;">Lv.1</div>
                 </div>
 
@@ -5162,8 +5165,7 @@ jQuery(async () => {
     // 生成桌面端UI
     function generateDesktopUI() {
         console.log(`[UI] Generating desktop UI`);
-        return `
-            <div class="pet-popup-header" style="
+        return `<div class="pet-popup-header" style="
                 display: flex !important;
                 justify-content: center !important;
                 align-items: center !important;
@@ -5897,9 +5899,13 @@ jQuery(async () => {
 
                 // 显示测试消息
                 if (typeof toastr !== 'undefined') {
-                    toastr.success(message, `${petData.name} 的AI撒娇测试 ✨`, {
+                    const cleanMessage = message.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim();
+                    const cleanTitle = `${petData.name} 的AI撒娇测试 ✨`.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim();
+
+                    toastr.success(cleanMessage, cleanTitle, {
                         timeOut: 8000,
-                        extendedTimeOut: 3000
+                        extendedTimeOut: 3000,
+                        escapeHtml: false
                     });
                 }
 
@@ -5995,6 +6001,148 @@ jQuery(async () => {
         });
 
         return results;
+    };
+
+    /**
+     * 调试弹窗内容 - 检查乱码问题
+     */
+    window.debugPopupContent = function() {
+        console.log("🔍 调试弹窗内容...");
+
+        const popup = $("#virtual-pet-popup");
+        if (popup.length === 0) {
+            console.log("❌ 弹窗未打开");
+            return;
+        }
+
+        console.log("📋 弹窗HTML结构:");
+        console.log(popup.html());
+
+        console.log("\n📋 弹窗文本内容:");
+        console.log("完整文本:", popup.text());
+
+        console.log("\n📋 各部分内容:");
+        const header = popup.find(".pet-popup-header");
+        const title = popup.find(".pet-popup-title");
+        const name = popup.find(".pet-name");
+        const level = popup.find(".pet-level");
+
+        console.log("Header HTML:", header.html());
+        console.log("Title HTML:", title.html());
+        console.log("Name HTML:", name.html());
+        console.log("Level HTML:", level.html());
+
+        console.log("Header Text:", header.text());
+        console.log("Title Text:", title.text());
+        console.log("Name Text:", name.text());
+        console.log("Level Text:", level.text());
+
+        // 检查是否有隐藏元素
+        const hiddenElements = popup.find("*").filter(function() {
+            return $(this).css("display") === "none" || $(this).css("visibility") === "hidden";
+        });
+
+        console.log("\n📋 隐藏元素:", hiddenElements.length);
+        hiddenElements.each(function(i) {
+            console.log(`隐藏元素 ${i+1}:`, $(this).html());
+        });
+
+        // 检查所有文本节点
+        const textNodes = [];
+        popup.find("*").addBack().contents().each(function() {
+            if (this.nodeType === 3 && this.textContent.trim()) { // 文本节点
+                textNodes.push({
+                    content: this.textContent,
+                    parent: this.parentElement ? this.parentElement.tagName : 'unknown'
+                });
+            }
+        });
+
+        console.log("\n📋 文本节点:", textNodes);
+
+        // 检查字符编码问题
+        const suspiciousChars = [];
+        popup.text().split('').forEach((char, index) => {
+            const charCode = char.charCodeAt(0);
+            // 检查可能的乱码字符
+            if (charCode > 65535 || (charCode >= 0xFFF0 && charCode <= 0xFFFF)) {
+                suspiciousChars.push({
+                    char: char,
+                    code: charCode,
+                    position: index
+                });
+            }
+        });
+
+        if (suspiciousChars.length > 0) {
+            console.log("\n⚠️ 发现可疑字符:", suspiciousChars);
+        }
+
+        return {
+            popup: popup.html(),
+            text: popup.text(),
+            textNodes: textNodes,
+            suspiciousChars: suspiciousChars
+        };
+    };
+
+    /**
+     * 调试撒娇消息编码问题
+     */
+    window.debugAttentionMessage = function() {
+        console.log("🔍 调试撒娇消息编码...");
+
+        // 测试AI撒娇消息
+        if (aiAttentionEnabled && petPersona) {
+            console.log("🤖 测试AI撒娇消息编码...");
+            generateAIAttentionMessage().then(message => {
+                if (message) {
+                    console.log("原始消息:", message);
+                    console.log("消息长度:", message.length);
+                    console.log("字符分析:", message.split('').map((c, i) => ({
+                        index: i,
+                        char: c,
+                        code: c.charCodeAt(0),
+                        hex: c.charCodeAt(0).toString(16),
+                        isControl: c.charCodeAt(0) < 32 || (c.charCodeAt(0) >= 127 && c.charCodeAt(0) <= 159)
+                    })));
+
+                    // 测试清理后的消息
+                    const cleaned = message.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim();
+                    console.log("清理后消息:", cleaned);
+                    console.log("清理前后对比:", {
+                        original: message,
+                        cleaned: cleaned,
+                        same: message === cleaned
+                    });
+
+                    // 测试显示
+                    if (typeof toastr !== 'undefined') {
+                        toastr.info(cleaned, "编码测试", {
+                            timeOut: 5000,
+                            escapeHtml: false
+                        });
+                    }
+                } else {
+                    console.log("❌ AI消息生成失败");
+                }
+            }).catch(error => {
+                console.error("❌ AI消息生成错误:", error);
+            });
+        } else {
+            console.log("❌ AI撒娇功能未启用或人设为空");
+        }
+
+        // 测试默认撒娇消息
+        console.log("📝 测试默认撒娇消息编码...");
+        const defaultMessage = getRandomAttentionMessage();
+        console.log("默认消息:", defaultMessage);
+        console.log("默认消息字符分析:", defaultMessage.split('').map((c, i) => ({
+            index: i,
+            char: c,
+            code: c.charCodeAt(0),
+            hex: c.charCodeAt(0).toString(16)
+        })));
     };
 
     /**
@@ -6122,6 +6270,7 @@ jQuery(async () => {
     console.log("🛡️ 智能回退：当AI不可用时自动使用基于人设的智能回应");
     console.log("💡 提示：所有AI和人设功能都可以在设置界面中管理，无需使用控制台命令");
     console.log("🔍 AI故障排除：diagnoseAIFeatures() | 智能回退测试：testIntelligentFallback()");
+    console.log("🐛 界面调试：debugPopupContent() | 撒娇编码调试：debugAttentionMessage()");
     console.log("⚙️ AI功能控制：toggleAIFeatures() | 人设管理：setPetPersona('人设')");
     console.log("💡 卸载提示：如需完全卸载，请在控制台运行：uninstallVirtualPetSystem()");
 });

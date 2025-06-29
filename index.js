@@ -19,6 +19,8 @@ jQuery(async () => {
     const STORAGE_KEY_ENABLED = "virtual-pet-enabled";
     const STORAGE_KEY_PET_DATA = "virtual-pet-data";
     const STORAGE_KEY_CUSTOM_AVATAR = "virtual-pet-custom-avatar";
+    const STORAGE_KEY_API_ENDPOINT = "virtual-pet-api-endpoint";
+    const STORAGE_KEY_CUSTOM_API_URL = "virtual-pet-custom-api-url";
     
     // DOM IDs and Selectors
     const BUTTON_ID = "virtual-pet-button";
@@ -144,6 +146,35 @@ jQuery(async () => {
     // -----------------------------------------------------------------
 
     /**
+     * 获取用户配置的API端点
+     * @returns {string} 用户配置的API端点URL
+     */
+    function getUserApiEndpoint() {
+        const selectedEndpoint = localStorage.getItem(STORAGE_KEY_API_ENDPOINT) || '/api/v1/generate';
+
+        if (selectedEndpoint === 'custom') {
+            const customUrl = localStorage.getItem(STORAGE_KEY_CUSTOM_API_URL) || '/api/v1/generate';
+            return customUrl.trim() || '/api/v1/generate';
+        }
+
+        return selectedEndpoint;
+    }
+
+    /**
+     * 保存API端点配置
+     * @param {string} endpoint - 选择的端点类型
+     * @param {string} customUrl - 自定义URL（仅当endpoint为'custom'时使用）
+     */
+    function saveApiEndpointSettings(endpoint, customUrl = '') {
+        localStorage.setItem(STORAGE_KEY_API_ENDPOINT, endpoint);
+        if (endpoint === 'custom') {
+            localStorage.setItem(STORAGE_KEY_CUSTOM_API_URL, customUrl);
+        }
+
+        console.log(`[${extensionName}] API端点已更新为: ${endpoint === 'custom' ? customUrl : endpoint}`);
+    }
+
+    /**
      * 调用SillyTavern的AI生成API
      * @param {string} prompt - 要发送给AI的提示词
      * @param {number} timeout - 超时时间（毫秒），默认10秒
@@ -173,9 +204,11 @@ jQuery(async () => {
                     console.log(`[${extensionName}] 使用Generate API`);
                     result = await window.Generate(prompt);
                 } else {
-                    // 方法4：尝试通过fetch调用SillyTavern的内部API
-                    console.log(`[${extensionName}] 尝试通过fetch调用API`);
-                    const response = await fetch('/api/v1/generate', {
+                    // 方法4：使用用户配置的端点进行fetch调用
+                    const userEndpoint = getUserApiEndpoint();
+                    console.log(`[${extensionName}] 使用用户配置的端点: ${userEndpoint}`);
+
+                    const response = await fetch(userEndpoint, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -191,7 +224,7 @@ jQuery(async () => {
                         const data = await response.json();
                         result = data.text || data.response || data.result;
                     } else {
-                        throw new Error(`API调用失败: ${response.status}`);
+                        throw new Error(`API调用失败: ${response.status} (端点: ${userEndpoint})`);
                     }
                 }
 
@@ -355,13 +388,18 @@ jQuery(async () => {
         // 加载当前设置
         const currentPersonalityType = localStorage.getItem(`${extensionName}-personality-type`) || 'default';
         const customPersonality = localStorage.getItem(`${extensionName}-custom-personality`) || '';
+        const currentApiEndpoint = localStorage.getItem(STORAGE_KEY_API_ENDPOINT) || '/api/v1/generate';
+        const customApiUrl = localStorage.getItem(STORAGE_KEY_CUSTOM_API_URL) || '';
 
         // 设置下拉框的值
         $("#virtual-pet-personality-select").val(currentPersonalityType);
         $("#virtual-pet-custom-personality").val(customPersonality);
+        $("#virtual-pet-api-endpoint-select").val(currentApiEndpoint);
+        $("#virtual-pet-custom-api-url").val(customApiUrl);
 
         // 根据选择显示/隐藏自定义输入框
         toggleCustomPersonalityInput(currentPersonalityType === 'custom');
+        toggleCustomApiInput(currentApiEndpoint === 'custom');
 
         // 添加事件监听器
         $("#virtual-pet-personality-select").on('change', function() {
@@ -381,6 +419,26 @@ jQuery(async () => {
             // 自定义人设文本变化时保存
             const customText = $(this).val().trim();
             savePersonalitySettings('custom', customText);
+        });
+
+        // API端点配置事件监听器
+        $("#virtual-pet-api-endpoint-select").on('change', function() {
+            const selectedEndpoint = $(this).val();
+            const isCustom = selectedEndpoint === 'custom';
+
+            toggleCustomApiInput(isCustom);
+
+            if (!isCustom) {
+                // 如果选择了预设端点，立即保存
+                saveApiEndpointSettings(selectedEndpoint);
+                toastr.success(`API端点已切换到: ${selectedEndpoint}`);
+            }
+        });
+
+        $("#virtual-pet-custom-api-url").on('input', function() {
+            // 自定义API URL变化时保存
+            const customUrl = $(this).val().trim();
+            saveApiEndpointSettings('custom', customUrl);
         });
 
         // 启用/禁用虚拟宠物系统的事件监听器
@@ -408,6 +466,7 @@ jQuery(async () => {
         console.log(`[${extensionName}] 设置面板初始化完成`);
         console.log(`[${extensionName}] 当前人设类型: ${currentPersonalityType}`);
         console.log(`[${extensionName}] 当前人设内容: ${getCurrentPersonality()}`);
+        console.log(`[${extensionName}] 当前API端点: ${getUserApiEndpoint()}`);
     }
 
     /**
@@ -419,6 +478,18 @@ jQuery(async () => {
             $("#virtual-pet-custom-personality-container").show();
         } else {
             $("#virtual-pet-custom-personality-container").hide();
+        }
+    }
+
+    /**
+     * 切换自定义API输入框的显示状态
+     * @param {boolean} show 是否显示
+     */
+    function toggleCustomApiInput(show) {
+        if (show) {
+            $("#virtual-pet-custom-api-container").show();
+        } else {
+            $("#virtual-pet-custom-api-container").hide();
         }
     }
 
@@ -1839,6 +1910,35 @@ jQuery(async () => {
 
                         <small class="notes" style="margin-top: 10px; display: block;">
                             选择或自定义宠物的性格，AI会根据人设生成个性化回复
+                        </small>
+
+                        <hr style="margin: 15px 0; border: none; border-top: 1px solid #444;">
+
+                        <div class="flex-container">
+                            <label for="virtual-pet-api-endpoint-select" style="display: block; margin-bottom: 8px; font-weight: bold;">
+                                🔗 API端点配置
+                            </label>
+                            <select id="virtual-pet-api-endpoint-select" style="width: 100%; padding: 8px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+                                <option value="/api/v1/generate">📡 /api/v1/generate (默认)</option>
+                                <option value="/api/generate">📡 /api/generate (常见变体)</option>
+                                <option value="/completions">📡 /completions (OpenAI兼容)</option>
+                                <option value="/v1/completions">📡 /v1/completions (OpenAI v1)</option>
+                                <option value="custom">✏️ 自定义端点</option>
+                            </select>
+                        </div>
+
+                        <div id="virtual-pet-custom-api-container" style="display: none; margin-top: 10px;">
+                            <label for="virtual-pet-custom-api-url" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
+                                自定义API端点URL：
+                            </label>
+                            <input type="text" id="virtual-pet-custom-api-url"
+                                   placeholder="例如: /api/custom/generate"
+                                   style="width: 100%; padding: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px; font-family: monospace;">
+                            <small style="color: #888; font-size: 0.8em;">输入完整的API路径，例如 /api/v2/generate</small>
+                        </div>
+
+                        <small class="notes" style="margin-top: 10px; display: block;">
+                            当内置API调用失败时，插件会使用此端点进行HTTP请求。如果不确定，请保持默认设置。
                         </small>
                     </div>
                 </div>

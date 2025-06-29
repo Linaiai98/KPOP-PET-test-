@@ -139,6 +139,215 @@ jQuery(async () => {
         console.log(`[${extensionName}] 人设内容: ${petData.personality}`);
     }
 
+    // -----------------------------------------------------------------
+    // SillyTavern API 集成
+    // -----------------------------------------------------------------
+
+    /**
+     * 调用SillyTavern的AI生成API
+     * @param {string} prompt - 要发送给AI的提示词
+     * @param {number} timeout - 超时时间（毫秒），默认10秒
+     * @returns {Promise<string>} - AI生成的回复
+     */
+    async function callSillyTavernAPI(prompt, timeout = 10000) {
+        return new Promise(async (resolve, reject) => {
+            // 设置超时
+            const timeoutId = setTimeout(() => {
+                reject(new Error('API调用超时'));
+            }, timeout);
+
+            try {
+                let result = null;
+
+                // 检查SillyTavern的全局API是否可用
+                if (typeof window.generateReply === 'function') {
+                    // 方法1：直接调用generateReply函数
+                    console.log(`[${extensionName}] 使用generateReply API`);
+                    result = await window.generateReply(prompt);
+                } else if (typeof window.SillyTavern !== 'undefined' && window.SillyTavern.generateReply) {
+                    // 方法2：通过SillyTavern命名空间调用
+                    console.log(`[${extensionName}] 使用SillyTavern.generateReply API`);
+                    result = await window.SillyTavern.generateReply(prompt);
+                } else if (typeof window.Generate !== 'undefined') {
+                    // 方法3：使用Generate函数
+                    console.log(`[${extensionName}] 使用Generate API`);
+                    result = await window.Generate(prompt);
+                } else {
+                    // 方法4：尝试通过fetch调用SillyTavern的内部API
+                    console.log(`[${extensionName}] 尝试通过fetch调用API`);
+                    const response = await fetch('/api/v1/generate', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            prompt: prompt,
+                            max_length: 100,
+                            temperature: 0.8
+                        })
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        result = data.text || data.response || data.result;
+                    } else {
+                        throw new Error(`API调用失败: ${response.status}`);
+                    }
+                }
+
+                clearTimeout(timeoutId);
+
+                // 验证返回结果
+                if (typeof result === 'string' && result.trim().length > 0) {
+                    resolve(result.trim());
+                } else {
+                    reject(new Error('API返回了空的或无效的回复'));
+                }
+
+            } catch (error) {
+                clearTimeout(timeoutId);
+                console.error(`[${extensionName}] API调用失败:`, error);
+                reject(error);
+            }
+        });
+    }
+
+    /**
+     * 检查SillyTavern API是否可用
+     * @returns {boolean} - API是否可用
+     */
+    function isSillyTavernAPIAvailable() {
+        return (
+            typeof window.generateReply === 'function' ||
+            (typeof window.SillyTavern !== 'undefined' && window.SillyTavern.generateReply) ||
+            typeof window.Generate === 'function'
+        );
+    }
+
+    /**
+     * 构建互动Prompt
+     * @param {string} action - 用户的行为 ('feed', 'play', 'sleep')
+     * @returns {string} - 构建好的Prompt
+     */
+    function buildInteractionPrompt(action) {
+        // 获取当前时间信息
+        const now = new Date();
+        const timeOfDay = now.getHours() < 12 ? '上午' : now.getHours() < 18 ? '下午' : '晚上';
+
+        // 根据行为类型设置描述
+        const actionDescriptions = {
+            'feed': '给我喂了食物',
+            'play': '陪我玩耍',
+            'sleep': '让我休息'
+        };
+
+        // 根据状态值判断宠物的状态描述
+        const getStatusDescription = () => {
+            const statuses = [];
+
+            if (petData.health < 30) statuses.push('身体不太舒服');
+            else if (petData.health > 80) statuses.push('身体很健康');
+
+            if (petData.happiness < 30) statuses.push('心情不太好');
+            else if (petData.happiness > 80) statuses.push('心情很愉快');
+
+            if (petData.hunger < 30) statuses.push('很饿');
+            else if (petData.hunger > 80) statuses.push('很饱');
+
+            if (petData.energy < 30) statuses.push('很累');
+            else if (petData.energy > 80) statuses.push('精力充沛');
+
+            return statuses.length > 0 ? statuses.join('，') : '状态正常';
+        };
+
+        // 构建完整的Prompt
+        const prompt = `[系统指令：请你扮演以下角色并对用户的行为做出简短回应。回应应该符合角色性格，简洁生动，不超过30字。]
+
+宠物信息：
+- 名称：${petData.name}
+- 类型：${getPetTypeName(petData.type)}
+- 等级：${petData.level}级
+- 人设：${getCurrentPersonality()}
+
+当前状态：
+- 健康：${Math.round(petData.health)}/100
+- 快乐：${Math.round(petData.happiness)}/100
+- 饥饿：${Math.round(petData.hunger)}/100
+- 精力：${Math.round(petData.energy)}/100
+- 状态描述：${getStatusDescription()}
+
+情景：
+现在是${timeOfDay}，用户刚刚${actionDescriptions[action]}。
+
+请以${petData.name}的身份，根据上述人设和当前状态，对用户的行为做出简短的回应：`;
+
+        return prompt;
+    }
+
+    /**
+     * 处理AI回复的通用函数
+     * @param {string} action - 行为类型
+     * @param {string} fallbackMessage - 回退消息
+     * @returns {Promise<void>}
+     */
+    async function handleAIReply(action, fallbackMessage) {
+        try {
+            if (isSillyTavernAPIAvailable()) {
+                // 显示加载状态
+                const loadingToast = toastr.info(`${petData.name} 正在思考...`, "", {
+                    timeOut: 0,
+                    extendedTimeOut: 0,
+                    closeButton: false
+                });
+
+                try {
+                    // 构建Prompt并调用AI
+                    const prompt = buildInteractionPrompt(action);
+                    const aiReply = await callSillyTavernAPI(prompt, 8000); // 8秒超时
+
+                    // 清除加载提示
+                    toastr.clear(loadingToast);
+
+                    // 显示AI生成的回复
+                    toastr.success(aiReply || fallbackMessage, "", {
+                        timeOut: 5000,
+                        extendedTimeOut: 2000
+                    });
+
+                    console.log(`[${extensionName}] AI回复成功: ${aiReply}`);
+
+                } catch (apiError) {
+                    // 清除加载提示
+                    toastr.clear(loadingToast);
+
+                    console.warn(`[${extensionName}] AI回复失败，使用回退消息:`, apiError);
+                    toastr.success(fallbackMessage, "", {
+                        timeOut: 4000,
+                        extendedTimeOut: 1000
+                    });
+
+                    // 如果是超时错误，给用户一个提示
+                    if (apiError.message.includes('超时')) {
+                        setTimeout(() => {
+                            toastr.warning("AI回复超时，已使用默认回复", "", { timeOut: 3000 });
+                        }, 500);
+                    }
+                }
+            } else {
+                // API不可用，直接使用回退消息
+                console.log(`[${extensionName}] SillyTavern API不可用，使用静态回复`);
+                toastr.success(fallbackMessage, "", {
+                    timeOut: 4000,
+                    extendedTimeOut: 1000
+                });
+            }
+        } catch (error) {
+            console.error(`[${extensionName}] 处理AI回复时发生错误:`, error);
+            // 最终回退
+            toastr.success(fallbackMessage);
+        }
+    }
+
     /**
      * 初始化设置面板
      */
@@ -314,23 +523,26 @@ jQuery(async () => {
     /**
      * 喂食宠物
      */
-    function feedPet() {
+    async function feedPet() {
         const now = Date.now();
         const timeSinceLastFeed = now - petData.lastFeedTime;
-        
+
         if (timeSinceLastFeed < 20000) { // 20秒冷却
             toastr.warning("宠物还不饿，等一会再喂吧！");
             return;
         }
-        
+
+        // 更新宠物状态
         petData.hunger = Math.min(100, petData.hunger + 15);
         petData.happiness = Math.min(100, petData.happiness + 5);
         petData.lastFeedTime = now;
-        
+
         // 获得经验
         gainExperience(3);
-        
-        toastr.success(`${petData.name} 吃得很开心！`);
+
+        // 使用AI生成回复
+        await handleAIReply('feed', `${petData.name} 吃得很开心！`);
+
         savePetData();
         renderPetStatus();
     }
@@ -338,23 +550,26 @@ jQuery(async () => {
     /**
      * 和宠物玩耍
      */
-    function playWithPet() {
+    async function playWithPet() {
         const now = Date.now();
         const timeSinceLastPlay = now - petData.lastPlayTime;
-        
+
         if (timeSinceLastPlay < 40000) { // 40秒冷却
             toastr.warning("宠物需要休息一下！");
             return;
         }
-        
+
+        // 更新宠物状态
         petData.happiness = Math.min(100, petData.happiness + 12);
         petData.energy = Math.max(0, petData.energy - 8);
         petData.lastPlayTime = now;
-        
+
         // 获得经验
         gainExperience(4);
-        
-        toastr.success(`${petData.name} 玩得很开心！`);
+
+        // 使用AI生成回复
+        await handleAIReply('play', `${petData.name} 玩得很开心！`);
+
         savePetData();
         renderPetStatus();
     }
@@ -362,23 +577,26 @@ jQuery(async () => {
     /**
      * 让宠物休息
      */
-    function petSleep() {
+    async function petSleep() {
         const now = Date.now();
         const timeSinceLastSleep = now - petData.lastSleepTime;
-        
+
         if (timeSinceLastSleep < 80000) { // 80秒冷却
             toastr.warning("宠物还不困！");
             return;
         }
-        
+
+        // 更新宠物状态
         petData.energy = Math.min(100, petData.energy + 20);
         petData.health = Math.min(100, petData.health + 5);
         petData.lastSleepTime = now;
-        
+
         // 获得经验
         gainExperience(2);
-        
-        toastr.success(`${petData.name} 睡得很香！`);
+
+        // 使用AI生成回复
+        await handleAIReply('sleep', `${petData.name} 睡得很香！`);
+
         savePetData();
         renderPetStatus();
     }

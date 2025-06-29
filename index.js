@@ -19,6 +19,8 @@ jQuery(async () => {
     const STORAGE_KEY_ENABLED = "virtual-pet-enabled";
     const STORAGE_KEY_PET_DATA = "virtual-pet-data";
     const STORAGE_KEY_CUSTOM_AVATAR = "virtual-pet-custom-avatar";
+    const STORAGE_KEY_API_ENDPOINT = "virtual-pet-api-endpoint";
+    const STORAGE_KEY_CUSTOM_API_URL = "virtual-pet-custom-api-url";
     
     // DOM IDs and Selectors
     const BUTTON_ID = "virtual-pet-button";
@@ -140,8 +142,202 @@ jQuery(async () => {
     }
 
     // -----------------------------------------------------------------
-    // SillyTavern API 集成
+    // SillyTavern API 集成 - 智能内省系统
     // -----------------------------------------------------------------
+
+    /**
+     * 运行时内省 - 智能探测SillyTavern的API配置
+     * @returns {Object} 探测结果对象
+     */
+    function introspectSillyTavernAPI() {
+        const results = {
+            found: false,
+            endpoint: null,
+            source: null,
+            confidence: 0,
+            details: []
+        };
+
+        console.log(`[${extensionName}] 🕵️ 开始运行时内省，寻找SillyTavern的API配置...`);
+
+        // 探测策略1: 寻找常见的全局配置对象
+        const globalCandidates = [
+            'SillyTavern', 'st', 'config', 'settings', 'app', 'main',
+            'api_server_textgenerationwebui', 'textgen_settings', 'generation_settings'
+        ];
+
+        for (const candidate of globalCandidates) {
+            try {
+                const obj = window[candidate];
+                if (obj && typeof obj === 'object') {
+                    results.details.push(`✓ 找到全局对象: window.${candidate}`);
+
+                    // 深度搜索API相关配置
+                    const apiConfig = searchForApiConfig(obj, candidate);
+                    if (apiConfig.found) {
+                        results.found = true;
+                        results.endpoint = apiConfig.endpoint;
+                        results.source = `window.${candidate}.${apiConfig.path}`;
+                        results.confidence = apiConfig.confidence;
+                        results.details.push(`🎯 在 ${results.source} 找到API端点: ${results.endpoint}`);
+                        break;
+                    }
+                }
+            } catch (error) {
+                results.details.push(`✗ 访问 window.${candidate} 时出错: ${error.message}`);
+            }
+        }
+
+        // 探测策略2: 分析网络请求历史（如果可能）
+        if (!results.found) {
+            try {
+                const networkAnalysis = analyzeNetworkPatterns();
+                if (networkAnalysis.found) {
+                    results.found = true;
+                    results.endpoint = networkAnalysis.endpoint;
+                    results.source = 'network_analysis';
+                    results.confidence = networkAnalysis.confidence;
+                    results.details.push(`📡 通过网络模式分析找到: ${results.endpoint}`);
+                }
+            } catch (error) {
+                results.details.push(`✗ 网络分析失败: ${error.message}`);
+            }
+        }
+
+        console.log(`[${extensionName}] 🕵️ 内省完成，结果:`, results);
+        return results;
+    }
+
+    /**
+     * 在对象中深度搜索API配置
+     * @param {Object} obj - 要搜索的对象
+     * @param {string} objName - 对象名称（用于日志）
+     * @returns {Object} 搜索结果
+     */
+    function searchForApiConfig(obj, objName) {
+        const result = { found: false, endpoint: null, path: null, confidence: 0 };
+
+        // API相关的关键字
+        const apiKeywords = [
+            'api_endpoint', 'apiEndpoint', 'api_url', 'apiUrl', 'endpoint',
+            'generation_endpoint', 'textgen_endpoint', 'server_url', 'base_url',
+            'api_server', 'generation_api', 'completions_endpoint'
+        ];
+
+        // 递归搜索函数
+        function deepSearch(currentObj, currentPath, depth = 0) {
+            if (depth > 3 || !currentObj || typeof currentObj !== 'object') return;
+
+            for (const key in currentObj) {
+                try {
+                    const value = currentObj[key];
+                    const fullPath = currentPath ? `${currentPath}.${key}` : key;
+
+                    // 检查是否是API端点
+                    if (apiKeywords.includes(key.toLowerCase()) && typeof value === 'string') {
+                        if (value.includes('/api/') || value.includes('/generate') || value.includes('/completions')) {
+                            result.found = true;
+                            result.endpoint = value;
+                            result.path = fullPath;
+                            result.confidence = 90;
+                            return;
+                        }
+                    }
+
+                    // 检查值是否看起来像API端点
+                    if (typeof value === 'string' && value.startsWith('/') &&
+                        (value.includes('api') || value.includes('generate'))) {
+                        result.found = true;
+                        result.endpoint = value;
+                        result.path = fullPath;
+                        result.confidence = 70;
+                        return;
+                    }
+
+                    // 递归搜索子对象
+                    if (typeof value === 'object' && value !== null) {
+                        deepSearch(value, fullPath, depth + 1);
+                        if (result.found) return;
+                    }
+                } catch (error) {
+                    // 忽略访问错误
+                }
+            }
+        }
+
+        deepSearch(obj, objName);
+        return result;
+    }
+
+    /**
+     * 分析网络请求模式
+     * @returns {Object} 分析结果
+     */
+    function analyzeNetworkPatterns() {
+        const result = { found: false, endpoint: null, confidence: 0 };
+
+        // 检查是否有Performance API可用
+        if (window.performance && window.performance.getEntriesByType) {
+            try {
+                const resources = window.performance.getEntriesByType('resource');
+                const apiRequests = resources.filter(r =>
+                    r.name.includes('/api/') &&
+                    (r.name.includes('generate') || r.name.includes('completions'))
+                );
+
+                if (apiRequests.length > 0) {
+                    // 提取最常见的API端点模式
+                    const url = new URL(apiRequests[0].name);
+                    result.found = true;
+                    result.endpoint = url.pathname;
+                    result.confidence = 60;
+                }
+            } catch (error) {
+                console.warn(`[${extensionName}] 网络分析出错:`, error);
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 获取最佳API端点（智能版本）
+     * @returns {string} 最佳的API端点URL
+     */
+    function getSmartApiEndpoint() {
+        const userEndpoint = localStorage.getItem(STORAGE_KEY_API_ENDPOINT) || 'auto';
+
+        // 如果用户明确选择了非auto选项，直接使用用户配置
+        if (userEndpoint !== 'auto') {
+            if (userEndpoint === 'custom') {
+                const customUrl = localStorage.getItem(STORAGE_KEY_CUSTOM_API_URL);
+                if (customUrl && customUrl.trim()) {
+                    console.log(`[${extensionName}] 👤 使用用户自定义端点: ${customUrl.trim()}`);
+                    return customUrl.trim();
+                }
+            } else {
+                console.log(`[${extensionName}] 👤 使用用户配置的端点: ${userEndpoint}`);
+                return userEndpoint;
+            }
+        }
+
+        // 智能模式：尝试运行时内省
+        const introspection = introspectSillyTavernAPI();
+        if (introspection.found && introspection.confidence >= 70) {
+            console.log(`[${extensionName}] 🎯 智能探测发现端点: ${introspection.endpoint} (置信度: ${introspection.confidence}%)`);
+            return introspection.endpoint;
+        }
+
+        // 如果内省有低置信度结果，也可以尝试
+        if (introspection.found && introspection.confidence >= 50) {
+            console.log(`[${extensionName}] 🤔 使用低置信度探测结果: ${introspection.endpoint} (置信度: ${introspection.confidence}%)`);
+            return introspection.endpoint;
+        }
+
+        // 最终回退到默认值
+        console.log(`[${extensionName}] 📋 智能探测失败，使用默认端点: /api/v1/generate`);
+        return '/api/v1/generate';
+    }
 
     /**
      * 调用SillyTavern的AI生成API
@@ -173,9 +369,11 @@ jQuery(async () => {
                     console.log(`[${extensionName}] 使用Generate API`);
                     result = await window.Generate(prompt);
                 } else {
-                    // 方法4：尝试通过fetch调用SillyTavern的内部API
-                    console.log(`[${extensionName}] 尝试通过fetch调用API`);
-                    const response = await fetch('/api/v1/generate', {
+                    // 方法4：使用智能端点探测进行fetch调用
+                    const smartEndpoint = getSmartApiEndpoint();
+                    console.log(`[${extensionName}] 使用智能探测的端点: ${smartEndpoint}`);
+
+                    const response = await fetch(smartEndpoint, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -191,7 +389,7 @@ jQuery(async () => {
                         const data = await response.json();
                         result = data.text || data.response || data.result;
                     } else {
-                        throw new Error(`API调用失败: ${response.status}`);
+                        throw new Error(`API调用失败: ${response.status} (端点: ${smartEndpoint})`);
                     }
                 }
 
@@ -405,9 +603,50 @@ jQuery(async () => {
         const enabled = localStorage.getItem(`${extensionName}-enabled`) !== 'false';
         $("#virtual-pet-enabled-toggle").prop('checked', enabled);
 
+        // API配置相关设置
+        const currentApiEndpoint = localStorage.getItem(STORAGE_KEY_API_ENDPOINT) || 'auto';
+        const customApiUrl = localStorage.getItem(STORAGE_KEY_CUSTOM_API_URL) || '';
+
+        $("#virtual-pet-api-endpoint-select").val(currentApiEndpoint);
+        $("#virtual-pet-custom-api-url").val(customApiUrl);
+        toggleCustomApiInput(currentApiEndpoint === 'custom');
+
+        // API配置事件监听器
+        $("#virtual-pet-api-endpoint-select").on('change', function() {
+            const selectedEndpoint = $(this).val();
+            const isCustom = selectedEndpoint === 'custom';
+
+            toggleCustomApiInput(isCustom);
+
+            if (!isCustom) {
+                localStorage.setItem(STORAGE_KEY_API_ENDPOINT, selectedEndpoint);
+                if (selectedEndpoint === 'auto') {
+                    toastr.success("已启用智能API探测");
+                } else {
+                    toastr.success(`API端点已设置为: ${selectedEndpoint}`);
+                }
+            }
+        });
+
+        $("#virtual-pet-custom-api-url").on('input', function() {
+            const customUrl = $(this).val().trim();
+            localStorage.setItem(STORAGE_KEY_CUSTOM_API_URL, customUrl);
+            localStorage.setItem(STORAGE_KEY_API_ENDPOINT, 'custom');
+        });
+
+        // 调试功能事件监听器
+        $("#virtual-pet-test-introspection").on('click', function() {
+            testIntrospection();
+        });
+
+        $("#virtual-pet-show-debug").on('click', function() {
+            toggleDebugInfo();
+        });
+
         console.log(`[${extensionName}] 设置面板初始化完成`);
         console.log(`[${extensionName}] 当前人设类型: ${currentPersonalityType}`);
         console.log(`[${extensionName}] 当前人设内容: ${getCurrentPersonality()}`);
+        console.log(`[${extensionName}] 当前API配置: ${currentApiEndpoint}`);
     }
 
     /**
@@ -419,6 +658,73 @@ jQuery(async () => {
             $("#virtual-pet-custom-personality-container").show();
         } else {
             $("#virtual-pet-custom-personality-container").hide();
+        }
+    }
+
+    /**
+     * 切换自定义API输入框的显示状态
+     * @param {boolean} show 是否显示
+     */
+    function toggleCustomApiInput(show) {
+        if (show) {
+            $("#virtual-pet-custom-api-container").show();
+        } else {
+            $("#virtual-pet-custom-api-container").hide();
+        }
+    }
+
+    /**
+     * 测试智能内省功能
+     */
+    function testIntrospection() {
+        console.log(`[${extensionName}] 🕵️ 开始测试智能内省...`);
+
+        const results = introspectSillyTavernAPI();
+        const smartEndpoint = getSmartApiEndpoint();
+
+        let debugHtml = `<div style="color: #00ff00;">🕵️ 智能内省测试结果</div><br>`;
+        debugHtml += `<strong>最终选择的端点:</strong> <span style="color: #ffff00;">${smartEndpoint}</span><br><br>`;
+
+        debugHtml += `<strong>内省详情:</strong><br>`;
+        debugHtml += `- 是否找到配置: ${results.found ? '✅ 是' : '❌ 否'}<br>`;
+        if (results.found) {
+            debugHtml += `- 发现的端点: <span style="color: #00ffff;">${results.endpoint}</span><br>`;
+            debugHtml += `- 来源: ${results.source}<br>`;
+            debugHtml += `- 置信度: ${results.confidence}%<br>`;
+        }
+
+        debugHtml += `<br><strong>探测过程:</strong><br>`;
+        results.details.forEach(detail => {
+            debugHtml += `- ${detail}<br>`;
+        });
+
+        // 显示调试信息
+        $("#virtual-pet-debug-content").html(debugHtml);
+        $("#virtual-pet-debug-info").show();
+
+        // 显示toast通知
+        if (results.found) {
+            toastr.success(`智能探测成功！找到端点: ${results.endpoint}`, "内省测试", {
+                timeOut: 5000
+            });
+        } else {
+            toastr.warning("未找到API配置，将使用默认设置", "内省测试", {
+                timeOut: 5000
+            });
+        }
+    }
+
+    /**
+     * 切换调试信息显示
+     */
+    function toggleDebugInfo() {
+        const debugDiv = $("#virtual-pet-debug-info");
+        if (debugDiv.is(':visible')) {
+            debugDiv.hide();
+            $("#virtual-pet-show-debug").text("🔍 显示调试信息");
+        } else {
+            debugDiv.show();
+            $("#virtual-pet-show-debug").text("🙈 隐藏调试信息");
         }
     }
 
@@ -1839,6 +2145,49 @@ jQuery(async () => {
 
                         <small class="notes" style="margin-top: 10px; display: block;">
                             选择或自定义宠物的性格，AI会根据人设生成个性化回复
+                        </small>
+
+                        <hr style="margin: 15px 0; border: none; border-top: 1px solid #444;">
+
+                        <div class="flex-container">
+                            <label for="virtual-pet-api-endpoint-select" style="display: block; margin-bottom: 8px; font-weight: bold;">
+                                🔗 API端点配置 <span style="font-size: 0.8em; color: #888;">(高级)</span>
+                            </label>
+                            <select id="virtual-pet-api-endpoint-select" style="width: 100%; padding: 8px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+                                <option value="auto">🤖 智能探测 (推荐)</option>
+                                <option value="/api/v1/generate">📡 /api/v1/generate (默认)</option>
+                                <option value="/api/generate">📡 /api/generate (常见变体)</option>
+                                <option value="/completions">📡 /completions (OpenAI兼容)</option>
+                                <option value="/v1/completions">📡 /v1/completions (OpenAI v1)</option>
+                                <option value="custom">✏️ 自定义端点</option>
+                            </select>
+                        </div>
+
+                        <div id="virtual-pet-custom-api-container" style="display: none; margin-top: 10px;">
+                            <label for="virtual-pet-custom-api-url" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
+                                自定义API端点URL：
+                            </label>
+                            <input type="text" id="virtual-pet-custom-api-url"
+                                   placeholder="例如: /api/custom/generate"
+                                   style="width: 100%; padding: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px; font-family: monospace;">
+                            <small style="color: #888; font-size: 0.8em;">输入完整的API路径，例如 /api/v2/generate</small>
+                        </div>
+
+                        <div style="margin-top: 10px;">
+                            <button id="virtual-pet-test-introspection" style="padding: 6px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em;">
+                                🕵️ 测试智能探测
+                            </button>
+                            <button id="virtual-pet-show-debug" style="padding: 6px 12px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em; margin-left: 5px;">
+                                🔍 显示调试信息
+                            </button>
+                        </div>
+
+                        <div id="virtual-pet-debug-info" style="display: none; margin-top: 10px; padding: 10px; background: #1a1a1a; border-radius: 4px; font-family: monospace; font-size: 0.8em; max-height: 200px; overflow-y: auto;">
+                            <div id="virtual-pet-debug-content">点击"测试智能探测"查看结果...</div>
+                        </div>
+
+                        <small class="notes" style="margin-top: 10px; display: block;">
+                            <strong>智能探测</strong>会自动寻找SillyTavern的API配置。如果探测失败，可以手动选择端点。
                         </small>
                     </div>
                 </div>

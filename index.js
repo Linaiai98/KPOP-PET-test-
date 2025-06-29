@@ -237,6 +237,27 @@ jQuery(async () => {
     // -----------------------------------------------------------------
     
     /**
+     * 切换弹窗显示/隐藏
+     */
+    function togglePopup() {
+        console.log(`[${extensionName}] Toggling popup`);
+
+        // 检查是否已有弹窗显示
+        const existingOverlay = $(`#${OVERLAY_ID}`);
+        const anyOverlay = $(".virtual-pet-popup-overlay");
+
+        if (existingOverlay.length > 0 || anyOverlay.length > 0) {
+            // 弹窗已显示，关闭它
+            console.log(`[${extensionName}] Popup is open, closing it`);
+            closePopup();
+        } else {
+            // 弹窗未显示，打开它
+            console.log(`[${extensionName}] Popup is closed, opening it`);
+            showPopup();
+        }
+    }
+
+    /**
      * 打开弹窗并显示主视图
      */
     function showPopup() {
@@ -307,55 +328,15 @@ jQuery(async () => {
             $("body").append(unifiedPopupHtml);
             overlayElement = $(`#${OVERLAY_ID}`);
 
-            // 绑定统一的关闭事件 - iOS优化
-            const closeButton = overlayElement.find(".close-button");
-
-            // iOS需要特殊的事件处理
-            if (isIOS) {
-                // iOS使用touchstart而不是click，避免300ms延迟
-                closeButton.on("touchstart", function(e) {
+            // 点击外部关闭弹窗（所有平台统一）
+            overlayElement.on("click touchend", function(e) {
+                if (e.target === this) {
                     e.preventDefault();
                     e.stopPropagation();
-                    console.log(`[${extensionName}] iOS close button touched`);
+                    console.log(`[${extensionName}] Overlay clicked, closing popup`);
                     closePopup();
-                });
-
-                // 备用的click事件
-                closeButton.on("click", function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log(`[${extensionName}] iOS close button clicked`);
-                    closePopup();
-                });
-
-                // iOS外部点击关闭
-                overlayElement.on("touchstart", function(e) {
-                    if (e.target === this) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        console.log(`[${extensionName}] iOS overlay touched`);
-                        closePopup();
-                    }
-                });
-            } else {
-                // 非iOS设备的标准事件处理
-                closeButton.on("click touchend", function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log(`[${extensionName}] Close button activated`);
-                    closePopup();
-                });
-
-                // 点击外部关闭
-                overlayElement.on("click touchend", function(e) {
-                    if (e.target === this) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        console.log(`[${extensionName}] Overlay clicked`);
-                        closePopup();
-                    }
-                });
-            }
+                }
+            });
 
             // 绑定统一的操作按钮事件
             bindUnifiedUIEvents(overlayElement);
@@ -791,11 +772,11 @@ jQuery(async () => {
                     }, 100);
                 } else {
                     // 没有拖动，触发点击事件
-                    console.log(`[${extensionName}] Button clicked, showing popup`);
+                    console.log(`[${extensionName}] Button clicked, toggling popup`);
                     try {
-                        showPopup();
+                        togglePopup();
                     } catch (error) {
-                        console.error(`[${extensionName}] Error showing popup:`, error);
+                        console.error(`[${extensionName}] Error toggling popup:`, error);
                         alert("🐾 虚拟宠物系统\n\n弹窗功能正在加载中...\n请稍后再试！");
                     }
                 }
@@ -1113,7 +1094,6 @@ jQuery(async () => {
                     <div id="virtual-pet-popup" class="pet-popup-container">
                         <div class="pet-popup-header">
                             <div class="pet-popup-title">🐾 虚拟宠物</div>
-                            <button id="virtual-pet-popup-close-button" class="pet-popup-close-button">&times;</button>
                         </div>
                         <div class="pet-popup-body">
                             <div id="pet-main-view" class="pet-view">
@@ -1152,19 +1132,11 @@ jQuery(async () => {
 
         // 5. 只在非iOS设备上初始化原始弹窗功能
         if (!isIOS) {
-            // 使弹窗可拖拽
-            const $popup = $(`#${POPUP_ID}`);
-            if ($popup.length > 0) {
-                makePopupDraggable($popup);
-                console.log(`[${extensionName}] Popup drag functionality added`);
-            }
+            // 弹窗拖拽功能已移除（标题栏已移除）
+            console.log(`[${extensionName}] Popup drag functionality disabled (no header)`);
 
-            // 绑定事件 (同时绑定 click 和 touchend 以兼容移动端)
-            $(`#${CLOSE_BUTTON_ID}`).on("click touchend", (e) => {
-                e.preventDefault();
-                e.stopPropagation(); // 防止触发拖拽
-                closePopup();
-            });
+
+            // 关闭按钮已移除，使用悬浮按钮切换显示
 
             if (overlay && overlay.length > 0) {
                 overlay.on("click touchend", function (event) {
@@ -1363,10 +1335,10 @@ jQuery(async () => {
                 console.log("🐾 按钮被点击");
 
                 try {
-                    // 所有平台都使用统一的showPopup函数
-                    showPopup();
+                    // 所有平台都使用统一的togglePopup函数
+                    togglePopup();
                 } catch (error) {
-                    console.error("显示弹窗出错:", error);
+                    console.error("切换弹窗出错:", error);
                     alert("🐾 虚拟宠物\n\n弹窗功能正在加载中...");
                 }
             });
@@ -1610,9 +1582,9 @@ jQuery(async () => {
 
                 if (!wasDragged) {
                     // 没有拖动，触发点击
-                    console.log("🎯 触发弹窗");
+                    console.log("🎯 切换弹窗");
                     try {
-                        showPopup();
+                        togglePopup();
                     } catch (error) {
                         console.error("弹窗错误:", error);
                         alert("🐾 虚拟宠物系统\n\n弹窗功能正在加载中...");
@@ -1716,10 +1688,10 @@ jQuery(async () => {
                 });
 
                 if (!wasDragged) {
-                    console.log("🎯 触发弹窗");
+                    console.log("🎯 切换弹窗");
                     try {
-                        if (typeof showPopup === 'function') {
-                            showPopup();
+                        if (typeof togglePopup === 'function') {
+                            togglePopup();
                         } else {
                             alert("🐾 虚拟宠物系统\n\n弹窗功能正在加载中...");
                         }
@@ -2352,34 +2324,6 @@ jQuery(async () => {
     function generateMobileUI() {
         console.log(`[UI] Generating mobile UI`);
         return `
-            <div class="pet-popup-header" style="
-                display: flex !important;
-                justify-content: space-between !important;
-                align-items: center !important;
-                margin-bottom: 15px !important;
-                padding-bottom: 12px !important;
-                border-bottom: 1px solid #40444b !important;
-            ">
-                <h2 style="margin: 0 !important; color: #7289da !important; font-size: 1.2em !important;">🐾 虚拟宠物</h2>
-                <button class="close-button" style="
-                    background: rgba(255,255,255,0.1) !important;
-                    border: none !important;
-                    color: #99aab5 !important;
-                    font-size: 28px !important;
-                    cursor: pointer !important;
-                    padding: 12px !important;
-                    line-height: 1 !important;
-                    min-width: 48px !important;
-                    min-height: 48px !important;
-                    display: flex !important;
-                    align-items: center !important;
-                    justify-content: center !important;
-                    border-radius: 50% !important;
-                    -webkit-tap-highlight-color: transparent !important;
-                    touch-action: manipulation !important;
-                ">&times;</button>
-            </div>
-
             <div class="pet-main-content" style="
                 display: flex !important;
                 flex-direction: column !important;
@@ -2535,33 +2479,6 @@ jQuery(async () => {
     function generateDesktopUI() {
         console.log(`[UI] Generating desktop UI`);
         return `
-            <div class="pet-popup-header" style="
-                display: flex !important;
-                justify-content: space-between !important;
-                align-items: center !important;
-                margin-bottom: 20px !important;
-                padding-bottom: 15px !important;
-                border-bottom: 1px solid #40444b !important;
-            ">
-                <h2 style="margin: 0 !important; color: #7289da !important; font-size: 1.4em !important;">🐾 虚拟宠物</h2>
-                <button class="close-button" style="
-                    background: rgba(255,255,255,0.1) !important;
-                    border: none !important;
-                    color: #99aab5 !important;
-                    font-size: 28px !important;
-                    cursor: pointer !important;
-                    padding: 10px !important;
-                    line-height: 1 !important;
-                    min-width: 44px !important;
-                    min-height: 44px !important;
-                    display: flex !important;
-                    align-items: center !important;
-                    justify-content: center !important;
-                    border-radius: 50% !important;
-                    transition: background 0.2s ease !important;
-                ">&times;</button>
-            </div>
-
             <div class="pet-main-content" style="
                 display: flex !important;
                 flex-direction: column !important;
@@ -2656,7 +2573,7 @@ jQuery(async () => {
                         gap: 6px !important;
                         transition: background 0.2s ease !important;
                     ">
-                        <span style="font-size: 1.1em !important;">�</span>
+                        <span style="font-size: 1.1em !important;">🎮</span>
                         <span>玩耍</span>
                     </button>
                     <button class="action-btn sleep-btn" style="

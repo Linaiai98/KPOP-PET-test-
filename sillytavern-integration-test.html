@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>虚拟宠物系统 - SillyTavern集成测试</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #2b2b2b;
+            color: #fff;
+        }
+        .test-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #3b3b3b;
+            border-radius: 10px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #4b4b4b;
+            border-radius: 8px;
+        }
+        .test-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .log {
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        .status-card {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+        .success { color: #28a745; }
+        .warning { color: #ffc107; }
+        .error { color: #dc3545; }
+        .info { color: #17a2b8; }
+        .highlight { background: rgba(255, 255, 0, 0.2); }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🔗 虚拟宠物系统 - SillyTavern集成测试</h1>
+        
+        <div class="test-section">
+            <h2>1. SillyTavern环境模拟</h2>
+            <p>模拟不同的SillyTavern环境来测试API集成功能。</p>
+            <button onclick="simulateFullSillyTavern()">🎭 完整SillyTavern环境</button>
+            <button onclick="simulateMinimalSillyTavern()">🔧 最小SillyTavern环境</button>
+            <button onclick="simulateCustomConfig()">⚙️ 自定义配置环境</button>
+            <button onclick="clearAllSimulation()">🧹 清除所有模拟</button>
+            <div id="env-log" class="log"></div>
+        </div>
+
+        <div class="test-grid">
+            <div class="test-section">
+                <h2>2. API模式测试</h2>
+                <div class="status-card">
+                    <div><strong>当前模式:</strong> <span id="current-mode">未知</span></div>
+                    <div><strong>检测状态:</strong> <span id="detection-status">未检测</span></div>
+                </div>
+                <button onclick="testAutoMode()">🤖 测试智能集成</button>
+                <button onclick="testNativeMode()">🏠 测试原生调用</button>
+                <button onclick="testManualMode()">⚙️ 测试手动配置</button>
+                <button onclick="runFullDetection()">🔍 完整检测</button>
+                <div id="mode-log" class="log"></div>
+            </div>
+
+            <div class="test-section">
+                <h2>3. 配置检测测试</h2>
+                <button onclick="testConfigDetection()">🔍 测试配置检测</button>
+                <button onclick="testNativeFunctions()">🏠 测试原生函数</button>
+                <button onclick="testEndpointDetection()">📡 测试端点检测</button>
+                <button onclick="showDetectionDetails()">📋 显示检测详情</button>
+                <div id="detection-log" class="log"></div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>4. API调用测试</h2>
+            <button onclick="testApiCall()">📞 测试API调用</button>
+            <button onclick="testPetInteraction()">🐾 测试宠物互动</button>
+            <button onclick="testErrorHandling()">❌测试错误处理</button>
+            <div id="api-log" class="log"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>5. 实时监控</h2>
+            <button onclick="startRealTimeMonitoring()">📊 开始实时监控</button>
+            <button onclick="stopRealTimeMonitoring()">⏹️ 停止监控</button>
+            <div id="monitor-log" class="log" style="max-height: 200px;"></div>
+        </div>
+    </div>
+
+    <script src="index.js"></script>
+    <script>
+        let monitoringInterval = null;
+
+        function log(message, type = 'info', targetId = 'env-log') {
+            const logDiv = document.getElementById(targetId);
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type;
+            logDiv.innerHTML += `<span class="${className}">[${timestamp}] ${message}</span>\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function simulateFullSillyTavern() {
+            // 模拟完整的SillyTavern环境
+            window.SillyTavern = {
+                settings: {
+                    api_url: 'http://localhost:5000/api/v1/generate',
+                    api_endpoint: '/api/v1/generate',
+                    generation_settings: {
+                        endpoint: '/api/generate'
+                    }
+                },
+                config: {
+                    api_url: '/completions'
+                },
+                generateReply: async function(prompt) {
+                    return `[SillyTavern模拟回复] ${prompt.substring(0, 30)}...的回复`;
+                }
+            };
+
+            // 模拟全局函数
+            window.generateReply = async function(prompt) {
+                return `[全局generateReply] ${prompt.substring(0, 30)}...的回复`;
+            };
+
+            window.Generate = async function(prompt) {
+                return `[Generate函数] ${prompt.substring(0, 30)}...的回复`;
+            };
+
+            // 模拟getContext函数
+            window.getContext = function() {
+                return {
+                    settings: {
+                        api_endpoint: '/api/context/generate'
+                    },
+                    generate: async function(prompt) {
+                        return `[Context生成] ${prompt.substring(0, 30)}...的回复`;
+                    }
+                };
+            };
+
+            log('✅ 已模拟完整SillyTavern环境', 'success');
+            log('- window.SillyTavern.settings.api_url', 'info');
+            log('- window.generateReply 函数', 'info');
+            log('- window.Generate 函数', 'info');
+            log('- getContext() 函数', 'info');
+            updateStatus();
+        }
+
+        function simulateMinimalSillyTavern() {
+            clearAllSimulation();
+            
+            // 只模拟基本的SillyTavern对象
+            window.SillyTavern = {
+                settings: {
+                    api_endpoint: '/api/minimal/generate'
+                }
+            };
+
+            log('✅ 已模拟最小SillyTavern环境', 'success');
+            log('- 仅包含基本settings对象', 'info');
+            updateStatus();
+        }
+
+        function simulateCustomConfig() {
+            clearAllSimulation();
+            
+            // 模拟自定义配置
+            window.customAPI = {
+                endpoint: '/api/custom/generate',
+                url: 'http://localhost:8080/generate'
+            };
+
+            window.settings = {
+                textgen_url: 'http://localhost:7860/api/v1/generate'
+            };
+
+            log('✅ 已模拟自定义配置环境', 'success');
+            log('- window.customAPI.endpoint', 'info');
+            log('- window.settings.textgen_url', 'info');
+            updateStatus();
+        }
+
+        function clearAllSimulation() {
+            delete window.SillyTavern;
+            delete window.generateReply;
+            delete window.Generate;
+            delete window.getContext;
+            delete window.customAPI;
+            delete window.settings;
+            
+            log('🧹 已清除所有模拟环境', 'warning');
+            updateStatus();
+        }
+
+        function updateStatus() {
+            const currentMode = localStorage.getItem('virtual-pet-api-endpoint') || 'auto';
+            document.getElementById('current-mode').textContent = currentMode;
+            
+            // 运行检测
+            if (typeof detectSillyTavernNativeConfig === 'function') {
+                const detection = detectSillyTavernNativeConfig();
+                const status = detection.found ? 
+                    `✅ 检测成功 (${detection.nativeFunctions?.length || 0}个函数, 置信度: ${detection.confidence}%)` :
+                    '❌ 未检测到配置';
+                document.getElementById('detection-status').textContent = status;
+            }
+        }
+
+        function testAutoMode() {
+            localStorage.setItem('virtual-pet-api-endpoint', 'auto');
+            log('🤖 切换到智能集成模式', 'info', 'mode-log');
+            
+            if (typeof getSmartApiEndpoint === 'function') {
+                const endpoint = getSmartApiEndpoint();
+                log(`检测结果: ${JSON.stringify(endpoint)}`, 'success', 'mode-log');
+            }
+            updateStatus();
+        }
+
+        function testNativeMode() {
+            localStorage.setItem('virtual-pet-api-endpoint', 'native');
+            log('🏠 切换到原生调用模式', 'info', 'mode-log');
+            
+            if (typeof getSmartApiEndpoint === 'function') {
+                const endpoint = getSmartApiEndpoint();
+                log(`检测结果: ${JSON.stringify(endpoint)}`, 'success', 'mode-log');
+            }
+            updateStatus();
+        }
+
+        function testManualMode() {
+            localStorage.setItem('virtual-pet-api-endpoint', 'manual');
+            localStorage.setItem('virtual-pet-manual-endpoint', '/api/test/generate');
+            log('⚙️ 切换到手动配置模式', 'info', 'mode-log');
+            
+            if (typeof getSmartApiEndpoint === 'function') {
+                const endpoint = getSmartApiEndpoint();
+                log(`检测结果: ${endpoint}`, 'success', 'mode-log');
+            }
+            updateStatus();
+        }
+
+        function runFullDetection() {
+            log('🔍 开始完整检测...', 'info', 'mode-log');
+            
+            if (typeof detectSillyTavernNativeConfig === 'function') {
+                const detection = detectSillyTavernNativeConfig();
+                log(`检测完成: ${JSON.stringify(detection, null, 2)}`, 'info', 'mode-log');
+            }
+            updateStatus();
+        }
+
+        function testConfigDetection() {
+            if (typeof testIntrospection === 'function') {
+                testIntrospection();
+                log('✅ 配置检测测试完成，查看调试面板获取详情', 'success', 'detection-log');
+            } else {
+                log('❌ testIntrospection 函数不可用', 'error', 'detection-log');
+            }
+        }
+
+        function testApiCall() {
+            log('📞 开始API调用测试...', 'info', 'api-log');
+            
+            if (typeof callSillyTavernAPI === 'function') {
+                callSillyTavernAPI('测试提示词：你好，这是一个测试。')
+                    .then(result => {
+                        log(`✅ API调用成功: ${result}`, 'success', 'api-log');
+                    })
+                    .catch(error => {
+                        log(`❌ API调用失败: ${error.message}`, 'error', 'api-log');
+                    });
+            } else {
+                log('❌ callSillyTavernAPI 函数不可用', 'error', 'api-log');
+            }
+        }
+
+        function startRealTimeMonitoring() {
+            if (monitoringInterval) return;
+            
+            log('📊 开始实时监控...', 'info', 'monitor-log');
+            
+            monitoringInterval = setInterval(() => {
+                try {
+                    const mode = localStorage.getItem('virtual-pet-api-endpoint') || 'auto';
+                    if (typeof getSmartApiEndpoint === 'function') {
+                        const endpoint = getSmartApiEndpoint();
+                        const endpointStr = typeof endpoint === 'object' ? 
+                            `${endpoint.mode}模式` : endpoint;
+                        log(`[${mode}] 当前端点: ${endpointStr}`, 'info', 'monitor-log');
+                    }
+                } catch (error) {
+                    log(`监控错误: ${error.message}`, 'error', 'monitor-log');
+                }
+            }, 5000);
+        }
+
+        function stopRealTimeMonitoring() {
+            if (monitoringInterval) {
+                clearInterval(monitoringInterval);
+                monitoringInterval = null;
+                log('⏹️ 实时监控已停止', 'warning', 'monitor-log');
+            }
+        }
+
+        // 页面加载完成后的初始化
+        $(document).ready(function() {
+            log('🚀 SillyTavern集成测试页面加载完成', 'success');
+            
+            setTimeout(() => {
+                updateStatus();
+                log('✅ 系统初始化完成，可以开始测试', 'success');
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

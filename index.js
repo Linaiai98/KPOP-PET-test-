@@ -701,6 +701,21 @@ jQuery(async () => {
             return null;
         }
 
+        // 检查AI功能是否可用
+        if (!checkAIAvailability()) {
+            console.warn(`[${extensionName}] AI functionality not available for attention message`);
+            // 只在第一次失败时显示提示，避免频繁弹窗
+            if (!window.aiUnavailableWarningShown) {
+                showAIUnavailableMessage("撒娇");
+                window.aiUnavailableWarningShown = true;
+                // 5分钟后重置警告状态
+                setTimeout(() => {
+                    window.aiUnavailableWarningShown = false;
+                }, 300000);
+            }
+            return null;
+        }
+
         isGeneratingAIAttention = true;
 
         try {
@@ -741,105 +756,242 @@ jQuery(async () => {
      * 调用SillyTavern API
      */
     async function callSillyTavernAPI(prompt) {
+        console.log(`[${extensionName}] Attempting to call SillyTavern API...`);
+
         try {
-            // 检查SillyTavern的API配置
+            // 首先检查SillyTavern的全局对象和可用方法
+            console.log(`[${extensionName}] Checking SillyTavern environment...`);
+            console.log(`[${extensionName}] window.generateQuietPrompt:`, typeof window.generateQuietPrompt);
+            console.log(`[${extensionName}] window.Generate:`, typeof window.Generate);
+            console.log(`[${extensionName}] window.main_api:`, typeof window.main_api);
+            console.log(`[${extensionName}] window.eventSource:`, typeof window.eventSource);
+
+            // 方法1: 尝试使用generateQuietPrompt (SillyTavern的推荐方法)
             if (typeof window.generateQuietPrompt === 'function') {
-                // 使用SillyTavern的内置API函数
-                console.log(`[${extensionName}] Using SillyTavern generateQuietPrompt`);
-                const response = await window.generateQuietPrompt(prompt);
-                return response;
+                console.log(`[${extensionName}] Trying generateQuietPrompt...`);
+                try {
+                    // 使用简化的prompt以提高成功率
+                    const simplePrompt = `请生成一句可爱的宠物话语（不超过20字）：`;
+                    const response = await window.generateQuietPrompt(simplePrompt);
+
+                    if (response && typeof response === 'string' && response.trim()) {
+                        console.log(`[${extensionName}] generateQuietPrompt success: ${response.trim()}`);
+                        return response.trim();
+                    } else {
+                        console.warn(`[${extensionName}] generateQuietPrompt returned empty or invalid response:`, response);
+                    }
+                } catch (error) {
+                    console.warn(`[${extensionName}] generateQuietPrompt failed:`, error);
+                }
             }
 
-            // 备用方案：直接调用API端点
-            const apiUrl = '/api/completions/generate';
-            const requestBody = {
-                prompt: prompt,
-                max_tokens: 50,
-                temperature: 0.8,
-                top_p: 0.9,
-                stop: ['\n', '。', '！', '？'],
-                stream: false
-            };
-
-            console.log(`[${extensionName}] Calling API endpoint: ${apiUrl}`);
-
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody)
-            });
-
-            if (!response.ok) {
-                throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+            // 方法2: 检查是否有chat相关的全局变量
+            if (window.chat && Array.isArray(window.chat) && typeof window.Generate === 'function') {
+                console.log(`[${extensionName}] Trying Generate function...`);
+                try {
+                    // 尝试使用Generate函数
+                    const response = await window.Generate('', '', false, false, prompt);
+                    if (response && typeof response === 'string' && response.trim()) {
+                        console.log(`[${extensionName}] Generate function success`);
+                        return response.trim();
+                    }
+                } catch (error) {
+                    console.warn(`[${extensionName}] Generate function failed:`, error);
+                }
             }
 
-            const data = await response.json();
-
-            if (data && data.choices && data.choices[0] && data.choices[0].text) {
-                return data.choices[0].text.trim();
-            } else if (data && data.result) {
-                return data.result.trim();
-            } else {
-                console.warn(`[${extensionName}] Unexpected API response format:`, data);
-                return null;
+            // 方法3: 检查是否有API相关的全局对象
+            if (window.api_server && window.api_server !== '') {
+                console.log(`[${extensionName}] Found API server configuration`);
+                // 这里我们不直接调用HTTP API，因为可能没有权限
+                console.log(`[${extensionName}] API server found but skipping direct HTTP calls due to permission issues`);
             }
+
+            // 方法4: 尝试使用事件系统
+            if (window.eventSource && typeof window.eventSource.emit === 'function') {
+                console.log(`[${extensionName}] Trying eventSource...`);
+                try {
+                    // 发送一个生成请求事件
+                    window.eventSource.emit('generate_request', {
+                        prompt: prompt,
+                        max_length: 30
+                    });
+
+                    // 等待响应（这可能不会工作，但值得尝试）
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                } catch (error) {
+                    console.warn(`[${extensionName}] eventSource failed:`, error);
+                }
+            }
+
+            // 如果所有方法都失败，返回null
+            console.warn(`[${extensionName}] All API methods failed or unavailable. This might be because:`);
+            console.warn(`[${extensionName}] 1. No AI model is configured in SillyTavern`);
+            console.warn(`[${extensionName}] 2. The AI service is not running`);
+            console.warn(`[${extensionName}] 3. There are permission issues with the API`);
+            console.warn(`[${extensionName}] 4. The SillyTavern version doesn't support these API methods`);
+
+            return null;
 
         } catch (error) {
             console.error(`[${extensionName}] API call failed:`, error);
-
-            // 尝试其他可能的API接口
-            try {
-                console.log(`[${extensionName}] Trying alternative API...`);
-                return await callAlternativeAPI(prompt);
-            } catch (altError) {
-                console.error(`[${extensionName}] Alternative API also failed:`, altError);
-                return null;
-            }
+            return null;
         }
     }
 
     /**
-     * 备用API调用方法
+     * 调用OpenAI API
      */
-    async function callAlternativeAPI(prompt) {
-        // 尝试其他可能的SillyTavern API端点
-        const endpoints = [
-            '/api/v1/generate',
-            '/api/generate',
-            '/generate'
-        ];
+    async function callOpenAIAPI(prompt) {
+        console.log(`[${extensionName}] Calling OpenAI API`);
+        try {
+            // 使用SillyTavern的OpenAI设置
+            const response = await fetch('/api/openai/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    messages: [
+                        { role: 'system', content: prompt }
+                    ],
+                    max_tokens: 50,
+                    temperature: 0.8
+                })
+            });
 
-        for (const endpoint of endpoints) {
-            try {
-                console.log(`[${extensionName}] Trying endpoint: ${endpoint}`);
+            if (response.ok) {
+                const data = await response.json();
+                return data.choices?.[0]?.message?.content?.trim() || null;
+            }
+        } catch (error) {
+            console.warn(`[${extensionName}] OpenAI API failed:`, error);
+        }
+        return null;
+    }
 
-                const response = await fetch(endpoint, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        prompt: prompt,
+    /**
+     * 调用Kobold API
+     */
+    async function callKoboldAPI(prompt) {
+        console.log(`[${extensionName}] Calling Kobold API`);
+        try {
+            const response = await fetch('/api/kobold/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    prompt: prompt,
+                    max_length: 50,
+                    temperature: 0.8
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                return data.results?.[0]?.text?.trim() || null;
+            }
+        } catch (error) {
+            console.warn(`[${extensionName}] Kobold API failed:`, error);
+        }
+        return null;
+    }
+
+    /**
+     * 调用NovelAI API
+     */
+    async function callNovelAIAPI(prompt) {
+        console.log(`[${extensionName}] Calling NovelAI API`);
+        try {
+            const response = await fetch('/api/novelai/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    input: prompt,
+                    parameters: {
                         max_length: 50,
                         temperature: 0.8
-                    })
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data && (data.text || data.result || data.response)) {
-                        return (data.text || data.result || data.response).trim();
                     }
-                }
-            } catch (error) {
-                console.log(`[${extensionName}] Endpoint ${endpoint} failed:`, error.message);
-                continue;
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                return data.output?.trim() || null;
             }
+        } catch (error) {
+            console.warn(`[${extensionName}] NovelAI API failed:`, error);
+        }
+        return null;
+    }
+
+    /**
+     * 调用TextGen WebUI API
+     */
+    async function callTextGenAPI(prompt) {
+        console.log(`[${extensionName}] Calling TextGen WebUI API`);
+        try {
+            const response = await fetch('/api/textgenerationwebui/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    prompt: prompt,
+                    max_new_tokens: 50,
+                    temperature: 0.8,
+                    do_sample: true
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                return data.results?.[0]?.text?.trim() || null;
+            }
+        } catch (error) {
+            console.warn(`[${extensionName}] TextGen WebUI API failed:`, error);
+        }
+        return null;
+    }
+
+    /**
+     * 检查AI功能是否可用
+     */
+    function checkAIAvailability() {
+        const checks = {
+            generateQuietPrompt: typeof window.generateQuietPrompt === 'function',
+            Generate: typeof window.Generate === 'function',
+            main_api: !!window.main_api,
+            chat: window.chat && Array.isArray(window.chat)
+        };
+
+        console.log(`[${extensionName}] AI availability check:`, checks);
+
+        return Object.values(checks).some(available => available);
+    }
+
+    /**
+     * 显示AI不可用的提示
+     */
+    function showAIUnavailableMessage(interactionType) {
+        const message = `AI功能暂时不可用。请确保：
+1. SillyTavern已正确配置AI模型
+2. AI服务正在运行
+3. 网络连接正常
+
+当前将使用默认${interactionType}消息。`;
+
+        if (typeof toastr !== 'undefined') {
+            toastr.warning(message, "AI功能提示", {
+                timeOut: 8000,
+                extendedTimeOut: 3000
+            });
         }
 
-        throw new Error('All API endpoints failed');
+        console.warn(`[${extensionName}] ${message}`);
     }
 
     /**
@@ -847,6 +999,21 @@ jQuery(async () => {
      */
     async function generateAIInteractionMessage(interactionType, context = {}) {
         if (!aiInteractionsEnabled || !petPersona || isGeneratingAIInteraction) {
+            return null;
+        }
+
+        // 检查AI功能是否可用
+        if (!checkAIAvailability()) {
+            console.warn(`[${extensionName}] AI functionality not available for ${interactionType}`);
+            // 只在第一次失败时显示提示，避免频繁弹窗
+            if (!window.aiUnavailableWarningShown) {
+                showAIUnavailableMessage(interactionType);
+                window.aiUnavailableWarningShown = true;
+                // 5分钟后重置警告状态
+                setTimeout(() => {
+                    window.aiUnavailableWarningShown = false;
+                }, 300000);
+            }
             return null;
         }
 
@@ -1788,30 +1955,25 @@ jQuery(async () => {
     function initializeSettingsUI() {
         console.log(`[${extensionName}] Initializing settings UI...`);
 
-        // 设置AI功能开关的初始状态
-        $("#virtual-pet-ai-attention-toggle").prop("checked", aiAttentionEnabled);
-        $("#virtual-pet-ai-interactions-toggle").prop("checked", aiInteractionsEnabled);
+        // 设置AI功能开关的初始状态（合并后的开关）
+        const aiEnabled = aiAttentionEnabled && aiInteractionsEnabled;
+        $("#virtual-pet-ai-features-toggle").prop("checked", aiEnabled);
 
         // 设置人设文本框的初始内容
         $("#virtual-pet-persona-textarea").val(petPersona);
 
-        // 绑定AI功能开关事件
-        $("#virtual-pet-ai-attention-toggle").off("change").on("change", function() {
+        // 绑定合并后的AI功能开关事件
+        $("#virtual-pet-ai-features-toggle").off("change").on("change", function() {
             const enabled = $(this).is(":checked");
+
+            // 同时控制撒娇和互动功能
             aiAttentionEnabled = enabled;
-            saveAIAttentionSettings();
-            console.log(`[${extensionName}] AI撒娇功能: ${enabled ? '启用' : '禁用'}`);
-
-            if (enabled && !petPersona) {
-                loadPetPersona();
-            }
-        });
-
-        $("#virtual-pet-ai-interactions-toggle").off("change").on("change", function() {
-            const enabled = $(this).is(":checked");
             aiInteractionsEnabled = enabled;
+
+            saveAIAttentionSettings();
             saveAIInteractionSettings();
-            console.log(`[${extensionName}] AI互动功能: ${enabled ? '启用' : '禁用'}`);
+
+            console.log(`[${extensionName}] AI功能: ${enabled ? '启用' : '禁用'} (包括撒娇和互动)`);
 
             if (enabled && !petPersona) {
                 loadPetPersona();
@@ -2546,23 +2708,13 @@ jQuery(async () => {
                         <h4 style="margin: 10px 0 5px 0; color: #fff;">🤖 AI智能功能</h4>
 
                         <div class="flex-container">
-                            <label class="checkbox_label" for="virtual-pet-ai-attention-toggle">
-                                <input id="virtual-pet-ai-attention-toggle" type="checkbox" checked>
-                                <span>启用AI撒娇功能</span>
+                            <label class="checkbox_label" for="virtual-pet-ai-features-toggle">
+                                <input id="virtual-pet-ai-features-toggle" type="checkbox" checked>
+                                <span>启用AI功能</span>
                             </label>
                         </div>
                         <small class="notes">
-                            启用后宠物会使用AI生成个性化的撒娇消息
-                        </small>
-
-                        <div class="flex-container" style="margin-top: 10px;">
-                            <label class="checkbox_label" for="virtual-pet-ai-interactions-toggle">
-                                <input id="virtual-pet-ai-interactions-toggle" type="checkbox" checked>
-                                <span>启用AI互动回应</span>
-                            </label>
-                        </div>
-                        <small class="notes">
-                            启用后喂食、玩耍、休息等互动会有AI生成的个性化回应
+                            启用后宠物会使用AI生成个性化的撒娇消息和互动回应
                         </small>
 
                         <hr style="margin: 15px 0; border: none; border-top: 1px solid #444;">
@@ -2634,7 +2786,7 @@ jQuery(async () => {
                 <div id="virtual-pet-popup-overlay" class="virtual-pet-popup-overlay">
                     <div id="virtual-pet-popup" class="pet-popup-container">
                         <div class="pet-popup-header">
-                            <div class="pet-popup-title">🐾 虚拟宠物</div>
+                            <div class="pet-popup-title">🐾</div>
                         </div>
                         <div class="pet-popup-body">
                             <div id="pet-main-view" class="pet-view">
@@ -4496,7 +4648,7 @@ jQuery(async () => {
                 padding-bottom: 12px !important;
                 border-bottom: 1px solid #40444b !important;
             ">
-                <h2 style="margin: 0 !important; color: #7289da !important; font-size: 1.2em !important;">🐾 虚拟宠物</h2>
+                <h2 style="margin: 0 !important; color: #7289da !important; font-size: 1.2em !important;">🐾</h2>
             </div>
 
             <div class="pet-main-content" style="
@@ -4673,7 +4825,7 @@ jQuery(async () => {
                 padding-bottom: 15px !important;
                 border-bottom: 1px solid #40444b !important;
             ">
-                <h2 style="margin: 0 !important; color: #7289da !important; font-size: 1.4em !important;">🐾 虚拟宠物</h2>
+                <h2 style="margin: 0 !important; color: #7289da !important; font-size: 1.4em !important;">🐾</h2>
             </div>
 
             <div class="pet-main-content" style="
@@ -5334,25 +5486,44 @@ jQuery(async () => {
     };
 
     /**
-     * 切换AI撒娇功能的全局函数
+     * 切换AI功能的全局函数（合并版本）
      */
-    window.toggleAIAttention = function(enabled) {
+    window.toggleAIFeatures = function(enabled) {
         if (typeof enabled === 'undefined') {
-            aiAttentionEnabled = !aiAttentionEnabled;
+            // 如果没有指定，则切换状态
+            const newState = !(aiAttentionEnabled && aiInteractionsEnabled);
+            aiAttentionEnabled = newState;
+            aiInteractionsEnabled = newState;
         } else {
+            // 同时设置两个功能
             aiAttentionEnabled = !!enabled;
+            aiInteractionsEnabled = !!enabled;
         }
 
         saveAIAttentionSettings();
+        saveAIInteractionSettings();
 
-        console.log(`${aiAttentionEnabled ? '✅ 启用' : '❌ 禁用'} AI撒娇功能`);
+        // 更新设置界面的开关状态
+        if ($("#virtual-pet-ai-features-toggle").length > 0) {
+            $("#virtual-pet-ai-features-toggle").prop("checked", aiAttentionEnabled && aiInteractionsEnabled);
+        }
+
+        console.log(`${(aiAttentionEnabled && aiInteractionsEnabled) ? '✅ 启用' : '❌ 禁用'} AI功能 (包括撒娇和互动)`);
 
         if (aiAttentionEnabled && !petPersona) {
             console.log("💡 正在加载默认人设...");
             loadPetPersona();
         }
 
-        return aiAttentionEnabled;
+        return aiAttentionEnabled && aiInteractionsEnabled;
+    };
+
+    /**
+     * 切换AI撒娇功能的全局函数（保持向后兼容）
+     */
+    window.toggleAIAttention = function(enabled) {
+        console.log("💡 建议使用 toggleAIFeatures() 来统一管理AI功能");
+        return window.toggleAIFeatures(enabled);
     };
 
     /**
@@ -5398,25 +5569,11 @@ jQuery(async () => {
     };
 
     /**
-     * 切换AI互动功能的全局函数
+     * 切换AI互动功能的全局函数（保持向后兼容）
      */
     window.toggleAIInteractions = function(enabled) {
-        if (typeof enabled === 'undefined') {
-            aiInteractionsEnabled = !aiInteractionsEnabled;
-        } else {
-            aiInteractionsEnabled = !!enabled;
-        }
-
-        saveAIInteractionSettings();
-
-        console.log(`${aiInteractionsEnabled ? '✅ 启用' : '❌ 禁用'} AI互动功能`);
-
-        if (aiInteractionsEnabled && !petPersona) {
-            console.log("💡 正在加载默认人设...");
-            loadPetPersona();
-        }
-
-        return aiInteractionsEnabled;
+        console.log("💡 建议使用 toggleAIFeatures() 来统一管理AI功能");
+        return window.toggleAIFeatures(enabled);
     };
 
     /**
@@ -5494,13 +5651,101 @@ jQuery(async () => {
         return results;
     };
 
+    /**
+     * AI功能诊断工具
+     */
+    window.diagnoseAIFeatures = function() {
+        console.log("🔍 AI功能诊断开始...");
+        console.log("=====================================");
+
+        const diagnosis = {
+            environment: {},
+            settings: {},
+            availability: {},
+            recommendations: []
+        };
+
+        // 1. 环境检查
+        console.log("\n📋 环境检查:");
+        diagnosis.environment = {
+            generateQuietPrompt: typeof window.generateQuietPrompt === 'function',
+            Generate: typeof window.Generate === 'function',
+            main_api: !!window.main_api,
+            chat: window.chat && Array.isArray(window.chat),
+            eventSource: !!(window.eventSource || window.EventSource)
+        };
+
+        Object.entries(diagnosis.environment).forEach(([key, value]) => {
+            console.log(`${value ? '✅' : '❌'} ${key}: ${value}`);
+        });
+
+        // 2. 设置检查
+        console.log("\n⚙️ 设置检查:");
+        diagnosis.settings = {
+            aiAttentionEnabled,
+            aiInteractionsEnabled,
+            personaLength: petPersona.length,
+            personaValid: petPersona.length > 0
+        };
+
+        Object.entries(diagnosis.settings).forEach(([key, value]) => {
+            console.log(`${key}: ${value}`);
+        });
+
+        // 3. 可用性评估
+        console.log("\n🎯 可用性评估:");
+        const hasAnyAPI = Object.values(diagnosis.environment).some(v => v);
+        diagnosis.availability = {
+            hasAnyAPI,
+            canUseAI: hasAnyAPI && diagnosis.settings.personaValid,
+            overallStatus: hasAnyAPI && diagnosis.settings.personaValid ? '可用' : '不可用'
+        };
+
+        Object.entries(diagnosis.availability).forEach(([key, value]) => {
+            console.log(`${key}: ${value}`);
+        });
+
+        // 4. 建议
+        console.log("\n💡 建议:");
+        if (!hasAnyAPI) {
+            diagnosis.recommendations.push("❌ 未检测到可用的AI API，请确保SillyTavern已正确配置AI模型");
+            diagnosis.recommendations.push("🔧 检查SillyTavern的AI设置页面，确保已连接到AI服务");
+            diagnosis.recommendations.push("🌐 确认网络连接正常，AI服务可访问");
+        }
+
+        if (!diagnosis.settings.aiAttentionEnabled) {
+            diagnosis.recommendations.push("⚙️ AI撒娇功能未启用，请在设置中启用");
+        }
+
+        if (!diagnosis.settings.aiInteractionsEnabled) {
+            diagnosis.recommendations.push("⚙️ AI互动功能未启用，请在设置中启用");
+        }
+
+        if (!diagnosis.settings.personaValid) {
+            diagnosis.recommendations.push("📝 宠物人设为空，请在设置中编写人设或重置为默认");
+        }
+
+        if (diagnosis.recommendations.length === 0) {
+            diagnosis.recommendations.push("✅ 所有检查通过，AI功能应该可以正常工作");
+            diagnosis.recommendations.push("🧪 如果仍有问题，请尝试运行 testAIAttention() 或 testAIInteraction()");
+        }
+
+        diagnosis.recommendations.forEach(rec => console.log(rec));
+
+        console.log("\n=====================================");
+        console.log("🔍 AI功能诊断完成");
+
+        return diagnosis;
+    };
+
     console.log("🐾 虚拟宠物系统加载完成！");
     console.log("🐾 如果没有看到按钮，请在控制台运行: testVirtualPet()");
     console.log("🎛️ 设置管理：请在SillyTavern扩展设置中找到'🐾 虚拟宠物系统'进行配置");
     console.log("😽 撒娇功能：15分钟不理宠物会自动撒娇求关注！");
-    console.log("🤖 AI撒娇功能：" + (aiAttentionEnabled ? "已启用" : "已禁用"));
-    console.log("🎮 AI互动功能：" + (aiInteractionsEnabled ? "已启用" : "已禁用"));
+    console.log("🤖 AI功能：" + ((aiAttentionEnabled && aiInteractionsEnabled) ? "已启用" : "已禁用") + " (包括撒娇和互动)");
     console.log("💡 提示：所有AI和人设功能都可以在设置界面中管理，无需使用控制台命令");
+    console.log("🔍 AI故障排除：如果AI功能不工作，请运行 diagnoseAIFeatures() 进行诊断");
+    console.log("⚙️ AI功能控制：toggleAIFeatures() | 人设管理：setPetPersona('人设')");
     console.log("💡 卸载提示：如需完全卸载，请在控制台运行：uninstallVirtualPetSystem()");
 });
 

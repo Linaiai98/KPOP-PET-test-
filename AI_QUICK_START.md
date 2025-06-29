@@ -20,8 +20,7 @@ checkAttentionStatus()
 撒娇阈值: 15 分钟
 当前状态: 正常
 定时器状态: 运行中
-AI撒娇功能: 启用
-AI互动功能: 启用
+AI功能: 启用 (包括撒娇和互动)
 宠物人设长度: 245 字符
 ```
 
@@ -142,15 +141,14 @@ checkAttentionStatus()  // 查看完整状态
 
 ### 功能控制
 ```javascript
-// AI撒娇功能
-toggleAIAttention(true)   // 启用AI撒娇
-toggleAIAttention(false)  // 禁用AI撒娇
-toggleAIAttention()       // 切换状态
+// AI功能（包括撒娇和互动）
+toggleAIFeatures(true)   // 启用AI功能
+toggleAIFeatures(false)  // 禁用AI功能
+toggleAIFeatures()       // 切换状态
 
-// AI互动功能
-toggleAIInteractions(true)   // 启用AI互动
-toggleAIInteractions(false)  // 禁用AI互动
-toggleAIInteractions()       // 切换状态
+// 向后兼容的旧函数（建议使用上面的新函数）
+toggleAIAttention(true)      // 启用AI功能
+toggleAIInteractions(true)   // 启用AI功能
 ```
 
 ### 人设管理

@@ -90,216 +90,126 @@ jQuery(async () => {
         lastSleepTime: Date.now(),
         lastUpdateTime: Date.now(),
         created: Date.now(),
-        personality: "一只高冷但内心温柔的猫，喜欢被投喂，但嘴上不承认。", // 新增：自定义人设
-        dataVersion: 2.1 // 数据版本标记，升级到2.1以支持人设功能
+        dataVersion: 2.0 // 数据版本标记
     };
     
     // -----------------------------------------------------------------
-    // 2. SillyTavern API 集成
+    // 2. 预设人设定义
     // -----------------------------------------------------------------
 
+    const PRESET_PERSONALITIES = {
+        'default': "一只高冷但内心温柔的猫，喜欢被投喂，但嘴上不承认。说话时经常用'哼'开头，偶尔会露出可爱的一面。",
+        'cheerful': "一只活泼可爱的小狗，总是充满活力，喜欢和主人玩耍。说话热情洋溢，经常用感叹号，喜欢撒娇卖萌。",
+        'elegant': "一只优雅的龙，说话古典文雅，有着高贵的气质。喜欢用文言文或古风词汇，举止优雅，但内心其实很温暖。",
+        'shy': "一只害羞的兔子，说话轻声细语，容易脸红。性格温柔内向，喜欢用'...'和颜文字，偶尔会结巴。",
+        'smart': "一只聪明的鸟，喜欢说俏皮话，有时会调皮捣蛋。说话机智幽默，喜欢用双关语和小聪明，偶尔会炫耀知识。"
+    };
+
     /**
-     * 调用SillyTavern的AI生成API
-     * @param {string} prompt - 要发送给AI的提示词
-     * @param {number} timeout - 超时时间（毫秒），默认10秒
-     * @returns {Promise<string>} - AI生成的回复
+     * 获取当前有效的人设
+     * @returns {string} 当前人设描述
      */
-    async function callSillyTavernAPI(prompt, timeout = 10000) {
-        return new Promise(async (resolve, reject) => {
-            // 设置超时
-            const timeoutId = setTimeout(() => {
-                reject(new Error('API调用超时'));
-            }, timeout);
+    function getCurrentPersonality() {
+        const selectedType = localStorage.getItem(`${extensionName}-personality-type`) || 'default';
 
-            try {
-                let result = null;
+        if (selectedType === 'custom') {
+            const customPersonality = localStorage.getItem(`${extensionName}-custom-personality`) || '';
+            return customPersonality || PRESET_PERSONALITIES.default;
+        } else {
+            return PRESET_PERSONALITIES[selectedType] || PRESET_PERSONALITIES.default;
+        }
+    }
 
-                // 检查SillyTavern的全局API是否可用
-                if (typeof window.generateReply === 'function') {
-                    // 方法1：直接调用generateReply函数
-                    console.log(`[${extensionName}] 使用generateReply API`);
-                    result = await window.generateReply(prompt);
-                } else if (typeof window.SillyTavern !== 'undefined' && window.SillyTavern.generateReply) {
-                    // 方法2：通过SillyTavern命名空间调用
-                    console.log(`[${extensionName}] 使用SillyTavern.generateReply API`);
-                    result = await window.SillyTavern.generateReply(prompt);
-                } else if (typeof window.Generate !== 'undefined') {
-                    // 方法3：使用Generate函数
-                    console.log(`[${extensionName}] 使用Generate API`);
-                    result = await window.Generate(prompt);
-                } else {
-                    // 方法4：尝试通过fetch调用SillyTavern的内部API
-                    console.log(`[${extensionName}] 尝试通过fetch调用API`);
-                    const response = await fetch('/api/v1/generate', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            prompt: prompt,
-                            max_length: 100,
-                            temperature: 0.8
-                        })
-                    });
+    /**
+     * 保存人设设置
+     * @param {string} type 人设类型
+     * @param {string} customText 自定义人设文本（仅当type为'custom'时使用）
+     */
+    function savePersonalitySettings(type, customText = '') {
+        localStorage.setItem(`${extensionName}-personality-type`, type);
+        if (type === 'custom') {
+            localStorage.setItem(`${extensionName}-custom-personality`, customText);
+        }
 
-                    if (response.ok) {
-                        const data = await response.json();
-                        result = data.text || data.response || data.result;
-                    } else {
-                        throw new Error(`API调用失败: ${response.status}`);
-                    }
-                }
+        // 更新petData中的personality字段
+        petData.personality = getCurrentPersonality();
+        savePetData();
 
-                clearTimeout(timeoutId);
+        console.log(`[${extensionName}] 人设已更新为: ${type === 'custom' ? '自定义' : type}`);
+        console.log(`[${extensionName}] 人设内容: ${petData.personality}`);
+    }
 
-                // 验证返回结果
-                if (typeof result === 'string' && result.trim().length > 0) {
-                    resolve(result.trim());
-                } else {
-                    reject(new Error('API返回了空的或无效的回复'));
-                }
+    /**
+     * 初始化设置面板
+     */
+    function initializeSettingsPanel() {
+        // 加载当前设置
+        const currentPersonalityType = localStorage.getItem(`${extensionName}-personality-type`) || 'default';
+        const customPersonality = localStorage.getItem(`${extensionName}-custom-personality`) || '';
 
-            } catch (error) {
-                clearTimeout(timeoutId);
-                console.error(`[${extensionName}] API调用失败:`, error);
-                reject(error);
+        // 设置下拉框的值
+        $("#virtual-pet-personality-select").val(currentPersonalityType);
+        $("#virtual-pet-custom-personality").val(customPersonality);
+
+        // 根据选择显示/隐藏自定义输入框
+        toggleCustomPersonalityInput(currentPersonalityType === 'custom');
+
+        // 添加事件监听器
+        $("#virtual-pet-personality-select").on('change', function() {
+            const selectedType = $(this).val();
+            const isCustom = selectedType === 'custom';
+
+            toggleCustomPersonalityInput(isCustom);
+
+            if (!isCustom) {
+                // 如果选择了预设人设，立即保存
+                savePersonalitySettings(selectedType);
+                toastr.success(`已切换到${$(this).find('option:selected').text()}人设`);
             }
         });
-    }
 
-    /**
-     * 检查SillyTavern API是否可用
-     * @returns {boolean} - API是否可用
-     */
-    function isSillyTavernAPIAvailable() {
-        return (
-            typeof window.generateReply === 'function' ||
-            (typeof window.SillyTavern !== 'undefined' && window.SillyTavern.generateReply) ||
-            typeof window.Generate === 'function'
-        );
-    }
+        $("#virtual-pet-custom-personality").on('input', function() {
+            // 自定义人设文本变化时保存
+            const customText = $(this).val().trim();
+            savePersonalitySettings('custom', customText);
+        });
 
-    /**
-     * 构建互动Prompt
-     * @param {string} action - 用户的行为 ('feed', 'play', 'sleep')
-     * @returns {string} - 构建好的Prompt
-     */
-    function buildInteractionPrompt(action) {
-        // 获取当前时间信息
-        const now = new Date();
-        const timeOfDay = now.getHours() < 12 ? '上午' : now.getHours() < 18 ? '下午' : '晚上';
+        // 启用/禁用虚拟宠物系统的事件监听器
+        $("#virtual-pet-enabled-toggle").on('change', function() {
+            const enabled = $(this).is(':checked');
+            localStorage.setItem(`${extensionName}-enabled`, enabled);
 
-        // 根据行为类型设置描述
-        const actionDescriptions = {
-            'feed': '给我喂了食物',
-            'play': '陪我玩耍',
-            'sleep': '让我休息'
-        };
-
-        // 根据状态值判断宠物的状态描述
-        const getStatusDescription = () => {
-            const statuses = [];
-
-            if (petData.health < 30) statuses.push('身体不太舒服');
-            else if (petData.health > 80) statuses.push('身体很健康');
-
-            if (petData.happiness < 30) statuses.push('心情不太好');
-            else if (petData.happiness > 80) statuses.push('心情很愉快');
-
-            if (petData.hunger < 30) statuses.push('很饿');
-            else if (petData.hunger > 80) statuses.push('很饱');
-
-            if (petData.energy < 30) statuses.push('很累');
-            else if (petData.energy > 80) statuses.push('精力充沛');
-
-            return statuses.length > 0 ? statuses.join('，') : '状态正常';
-        };
-
-        // 构建完整的Prompt
-        const prompt = `[系统指令：请你扮演以下角色并对用户的行为做出简短回应。回应应该符合角色性格，简洁生动，不超过30字。]
-
-宠物信息：
-- 名称：${petData.name}
-- 类型：${getPetTypeName(petData.type)}
-- 等级：${petData.level}级
-- 人设：${petData.personality}
-
-当前状态：
-- 健康：${Math.round(petData.health)}/100
-- 快乐：${Math.round(petData.happiness)}/100
-- 饥饿：${Math.round(petData.hunger)}/100
-- 精力：${Math.round(petData.energy)}/100
-- 状态描述：${getStatusDescription()}
-
-情景：
-现在是${timeOfDay}，用户刚刚${actionDescriptions[action]}。
-
-请以${petData.name}的身份，根据上述人设和当前状态，对用户的行为做出简短的回应：`;
-
-        return prompt;
-    }
-
-    /**
-     * 处理AI回复的通用函数
-     * @param {string} action - 行为类型
-     * @param {string} fallbackMessage - 回退消息
-     * @returns {Promise<void>}
-     */
-    async function handleAIReply(action, fallbackMessage) {
-        try {
-            if (isSillyTavernAPIAvailable()) {
-                // 显示加载状态
-                const loadingToast = toastr.info(`${petData.name} 正在思考...`, "", {
-                    timeOut: 0,
-                    extendedTimeOut: 0,
-                    closeButton: false
-                });
-
-                try {
-                    // 构建Prompt并调用AI
-                    const prompt = buildInteractionPrompt(action);
-                    const aiReply = await callSillyTavernAPI(prompt, 8000); // 8秒超时
-
-                    // 清除加载提示
-                    toastr.clear(loadingToast);
-
-                    // 显示AI生成的回复
-                    toastr.success(aiReply || fallbackMessage, "", {
-                        timeOut: 5000,
-                        extendedTimeOut: 2000
-                    });
-
-                    console.log(`[${extensionName}] AI回复成功: ${aiReply}`);
-
-                } catch (apiError) {
-                    // 清除加载提示
-                    toastr.clear(loadingToast);
-
-                    console.warn(`[${extensionName}] AI回复失败，使用回退消息:`, apiError);
-                    toastr.success(fallbackMessage, "", {
-                        timeOut: 4000,
-                        extendedTimeOut: 1000
-                    });
-
-                    // 如果是超时错误，给用户一个提示
-                    if (apiError.message.includes('超时')) {
-                        setTimeout(() => {
-                            toastr.warning("AI回复超时，已使用默认回复", "", { timeOut: 3000 });
-                        }, 500);
-                    }
+            if (enabled) {
+                toastr.success("虚拟宠物系统已启用");
+                // 如果当前没有显示宠物按钮，重新创建
+                if ($("#virtual-pet-button").length === 0) {
+                    createPetButton();
                 }
             } else {
-                // API不可用，直接使用回退消息
-                console.log(`[${extensionName}] SillyTavern API不可用，使用静态回复`);
-                toastr.success(fallbackMessage, "", {
-                    timeOut: 4000,
-                    extendedTimeOut: 1000
-                });
+                toastr.info("虚拟宠物系统已禁用");
+                // 隐藏宠物按钮
+                $("#virtual-pet-button").hide();
             }
-        } catch (error) {
-            console.error(`[${extensionName}] 处理AI回复时发生错误:`, error);
-            // 最终回退
-            toastr.success(fallbackMessage);
+        });
+
+        // 加载启用状态
+        const enabled = localStorage.getItem(`${extensionName}-enabled`) !== 'false';
+        $("#virtual-pet-enabled-toggle").prop('checked', enabled);
+
+        console.log(`[${extensionName}] 设置面板初始化完成`);
+        console.log(`[${extensionName}] 当前人设类型: ${currentPersonalityType}`);
+        console.log(`[${extensionName}] 当前人设内容: ${getCurrentPersonality()}`);
+    }
+
+    /**
+     * 切换自定义人设输入框的显示状态
+     * @param {boolean} show 是否显示
+     */
+    function toggleCustomPersonalityInput(show) {
+        if (show) {
+            $("#virtual-pet-custom-personality-container").show();
+        } else {
+            $("#virtual-pet-custom-personality-container").hide();
         }
     }
 
@@ -316,8 +226,8 @@ jQuery(async () => {
             try {
                 const savedData = JSON.parse(saved);
 
-                // 检查是否需要数据迁移（版本2.1 - 支持人设功能）
-                const needsMigration = !savedData.dataVersion || savedData.dataVersion < 2.1;
+                // 检查是否需要数据迁移（版本2.0 - 新的数值平衡）
+                const needsMigration = !savedData.dataVersion || savedData.dataVersion < 2.0;
 
                 if (needsMigration) {
                     console.log(`[${extensionName}] 检测到旧数据，执行数据迁移...`);
@@ -334,8 +244,7 @@ jQuery(async () => {
                         lastPlayTime: savedData.lastPlayTime || petData.lastPlayTime,
                         lastSleepTime: savedData.lastSleepTime || petData.lastSleepTime,
                         lastUpdateTime: savedData.lastUpdateTime || petData.lastUpdateTime,
-                        personality: savedData.personality || petData.personality, // 保留或使用默认人设
-                        dataVersion: 2.1 // 标记为新版本数据
+                        dataVersion: 2.0 // 标记为新版本数据
                     };
 
                     petData = migratedData;
@@ -347,12 +256,15 @@ jQuery(async () => {
                     // 数据版本正确，直接加载
                     petData = { ...petData, ...savedData };
                 }
+
+                // 确保使用当前选择的人设
+                petData.personality = getCurrentPersonality();
             } catch (error) {
                 console.error(`[${extensionName}] Error loading pet data:`, error);
             }
         } else {
             // 没有保存的数据，添加版本标记
-            petData.dataVersion = 2.1;
+            petData.dataVersion = 2.0;
             savePetData();
         }
     }
@@ -402,26 +314,23 @@ jQuery(async () => {
     /**
      * 喂食宠物
      */
-    async function feedPet() {
+    function feedPet() {
         const now = Date.now();
         const timeSinceLastFeed = now - petData.lastFeedTime;
-
+        
         if (timeSinceLastFeed < 20000) { // 20秒冷却
             toastr.warning("宠物还不饿，等一会再喂吧！");
             return;
         }
-
-        // 更新宠物状态
+        
         petData.hunger = Math.min(100, petData.hunger + 15);
         petData.happiness = Math.min(100, petData.happiness + 5);
         petData.lastFeedTime = now;
-
+        
         // 获得经验
         gainExperience(3);
-
-        // 使用AI生成回复
-        await handleAIReply('feed', `${petData.name} 吃得很开心！`);
-
+        
+        toastr.success(`${petData.name} 吃得很开心！`);
         savePetData();
         renderPetStatus();
     }
@@ -429,26 +338,23 @@ jQuery(async () => {
     /**
      * 和宠物玩耍
      */
-    async function playWithPet() {
+    function playWithPet() {
         const now = Date.now();
         const timeSinceLastPlay = now - petData.lastPlayTime;
-
+        
         if (timeSinceLastPlay < 40000) { // 40秒冷却
             toastr.warning("宠物需要休息一下！");
             return;
         }
-
-        // 更新宠物状态
+        
         petData.happiness = Math.min(100, petData.happiness + 12);
         petData.energy = Math.max(0, petData.energy - 8);
         petData.lastPlayTime = now;
-
+        
         // 获得经验
         gainExperience(4);
-
-        // 使用AI生成回复
-        await handleAIReply('play', `${petData.name} 玩得很开心！`);
-
+        
+        toastr.success(`${petData.name} 玩得很开心！`);
         savePetData();
         renderPetStatus();
     }
@@ -456,26 +362,23 @@ jQuery(async () => {
     /**
      * 让宠物休息
      */
-    async function petSleep() {
+    function petSleep() {
         const now = Date.now();
         const timeSinceLastSleep = now - petData.lastSleepTime;
-
+        
         if (timeSinceLastSleep < 80000) { // 80秒冷却
             toastr.warning("宠物还不困！");
             return;
         }
-
-        // 更新宠物状态
+        
         petData.energy = Math.min(100, petData.energy + 20);
         petData.health = Math.min(100, petData.health + 5);
         petData.lastSleepTime = now;
-
+        
         // 获得经验
         gainExperience(2);
-
-        // 使用AI生成回复
-        await handleAIReply('sleep', `${petData.name} 睡得很香！`);
-
+        
+        toastr.success(`${petData.name} 睡得很香！`);
         savePetData();
         renderPetStatus();
     }
@@ -1184,7 +1087,6 @@ jQuery(async () => {
     function renderSettings() {
         $("#pet-name-input").val(petData.name);
         $("#pet-type-select").val(petData.type);
-        $("#pet-personality-input").val(petData.personality || "");
 
         // 从localStorage加载设置
         const autoSave = localStorage.getItem(`${extensionName}-auto-save`) !== "false";
@@ -1200,7 +1102,6 @@ jQuery(async () => {
     function saveSettings() {
         const newName = $("#pet-name-input").val().trim();
         const newType = $("#pet-type-select").val();
-        const newPersonality = $("#pet-personality-input").val().trim();
 
         if (newName && newName !== petData.name) {
             petData.name = newName;
@@ -1210,11 +1111,6 @@ jQuery(async () => {
         if (newType !== petData.type) {
             petData.type = newType;
             toastr.success(`宠物类型已更改为 "${getPetTypeName(newType)}"`);
-        }
-
-        if (newPersonality !== petData.personality) {
-            petData.personality = newPersonality;
-            toastr.success("宠物人设已更新！");
         }
 
         // 保存其他设置
@@ -1252,8 +1148,7 @@ jQuery(async () => {
             lastSleepTime: Date.now(),
             created: Date.now(),
             lastUpdateTime: Date.now(),
-            personality: "一只高冷但内心温柔的猫，喜欢被投喂，但嘴上不承认。",
-            dataVersion: 2.1 // 数据版本标记
+            dataVersion: 2.0 // 数据版本标记
         };
 
         savePetData();
@@ -1695,12 +1590,47 @@ jQuery(async () => {
                         <small class="notes">
                             启用后会在屏幕上显示一个可拖动的宠物按钮（🐾）
                         </small>
+
+                        <hr style="margin: 15px 0; border: none; border-top: 1px solid #444;">
+
+                        <div class="flex-container">
+                            <label for="virtual-pet-personality-select" style="display: block; margin-bottom: 8px; font-weight: bold;">
+                                🎭 宠物人设选择
+                            </label>
+                            <select id="virtual-pet-personality-select" style="width: 100%; padding: 8px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+                                <option value="default">🐱 默认 - 高冷但温柔的猫</option>
+                                <option value="cheerful">🐶 活泼 - 热情洋溢的小狗</option>
+                                <option value="elegant">🐉 优雅 - 古典文雅的龙</option>
+                                <option value="shy">🐰 害羞 - 轻声细语的兔子</option>
+                                <option value="smart">🐦 聪明 - 机智幽默的鸟</option>
+                                <option value="custom">✏️ 自定义人设</option>
+                            </select>
+                        </div>
+
+                        <div id="virtual-pet-custom-personality-container" style="display: none; margin-top: 10px;">
+                            <label for="virtual-pet-custom-personality" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
+                                自定义人设描述：
+                            </label>
+                            <textarea id="virtual-pet-custom-personality"
+                                      placeholder="描述你的宠物性格、喜好和特点..."
+                                      rows="3"
+                                      maxlength="500"
+                                      style="width: 100%; padding: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px; resize: vertical; font-family: inherit;"></textarea>
+                            <small style="color: #888; font-size: 0.8em;">最多500字符，这将影响宠物与你互动时的回复风格</small>
+                        </div>
+
+                        <small class="notes" style="margin-top: 10px; display: block;">
+                            选择或自定义宠物的性格，AI会根据人设生成个性化回复
+                        </small>
                     </div>
                 </div>
             </div>
         `;
         $("#extensions_settings2").append(simpleSettingsHtml);
         console.log(`[${extensionName}] Settings panel created`);
+
+        // 初始化设置面板
+        initializeSettingsPanel();
 
         // 3. 加载弹窗HTML（如果失败就使用简单版本）
         // 检测是否为iOS设备，如果是则跳过原始弹窗创建
@@ -1907,122 +1837,6 @@ jQuery(async () => {
             toastr.error(`Extension "${extensionName}" failed to initialize: ${error.message}`);
         }
     }
-
-    // -----------------------------------------------------------------
-    // 测试和调试功能
-    // -----------------------------------------------------------------
-
-    /**
-     * 测试AI回复功能
-     */
-    window.testVirtualPetAI = function() {
-        console.log("🤖 测试虚拟宠物AI回复功能...");
-
-        // 检查API可用性
-        const apiAvailable = isSillyTavernAPIAvailable();
-        console.log(`API可用性: ${apiAvailable ? '✅ 可用' : '❌ 不可用'}`);
-
-        if (!apiAvailable) {
-            console.log("可用的API检查:");
-            console.log(`- window.generateReply: ${typeof window.generateReply}`);
-            console.log(`- window.SillyTavern: ${typeof window.SillyTavern}`);
-            console.log(`- window.Generate: ${typeof window.Generate}`);
-        }
-
-        // 显示当前宠物信息
-        console.log("当前宠物信息:");
-        console.log(`- 名称: ${petData.name}`);
-        console.log(`- 类型: ${getPetTypeName(petData.type)}`);
-        console.log(`- 等级: ${petData.level}`);
-        console.log(`- 人设: ${petData.personality}`);
-        console.log(`- 健康: ${Math.round(petData.health)}/100`);
-        console.log(`- 快乐: ${Math.round(petData.happiness)}/100`);
-        console.log(`- 饥饿: ${Math.round(petData.hunger)}/100`);
-        console.log(`- 精力: ${Math.round(petData.energy)}/100`);
-
-        // 生成测试Prompt
-        const testPrompt = buildInteractionPrompt('feed');
-        console.log("生成的测试Prompt:");
-        console.log(testPrompt);
-
-        return {
-            apiAvailable,
-            petData: { ...petData },
-            testPrompt
-        };
-    };
-
-    /**
-     * 手动测试AI回复
-     */
-    window.testAIReply = async function(action = 'feed') {
-        console.log(`🎯 手动测试AI回复 - 行为: ${action}`);
-
-        try {
-            const fallbackMessages = {
-                'feed': `${petData.name} 吃得很开心！`,
-                'play': `${petData.name} 玩得很开心！`,
-                'sleep': `${petData.name} 睡得很香！`
-            };
-
-            await handleAIReply(action, fallbackMessages[action] || '宠物很开心！');
-            console.log("✅ AI回复测试完成");
-        } catch (error) {
-            console.error("❌ AI回复测试失败:", error);
-        }
-    };
-
-    /**
-     * 测试不同人设的回复效果
-     */
-    window.testPersonalities = async function() {
-        console.log("🎭 测试不同人设的回复效果...");
-
-        const testPersonalities = [
-            "一只高冷但内心温柔的猫，喜欢被投喂，但嘴上不承认。",
-            "一只活泼可爱的小狗，总是充满活力，喜欢和主人玩耍。",
-            "一只优雅的龙，说话古典文雅，有着高贵的气质。",
-            "一只害羞的兔子，说话轻声细语，容易脸红。",
-            "一只聪明的鸟，喜欢说俏皮话，有时会调皮捣蛋。"
-        ];
-
-        const originalPersonality = petData.personality;
-
-        for (let i = 0; i < testPersonalities.length; i++) {
-            const personality = testPersonalities[i];
-            console.log(`\n测试人设 ${i + 1}: ${personality}`);
-
-            // 临时更改人设
-            petData.personality = personality;
-
-            // 生成测试Prompt
-            const prompt = buildInteractionPrompt('feed');
-            console.log("生成的Prompt:", prompt);
-
-            // 如果API可用，尝试生成回复
-            if (isSillyTavernAPIAvailable()) {
-                try {
-                    const reply = await callSillyTavernAPI(prompt, 5000);
-                    console.log(`AI回复: ${reply}`);
-                } catch (error) {
-                    console.log(`AI回复失败: ${error.message}`);
-                }
-            }
-
-            // 等待一下再测试下一个
-            await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-
-        // 恢复原始人设
-        petData.personality = originalPersonality;
-        console.log("\n✅ 人设测试完成，已恢复原始人设");
-    };
-
-    console.log(`[${extensionName}] 🎉 AI回复功能已加载！`);
-    console.log(`[${extensionName}] 💡 可用的测试命令:`);
-    console.log(`[${extensionName}]   - testVirtualPetAI() - 检查AI功能状态`);
-    console.log(`[${extensionName}]   - testAIReply('feed'|'play'|'sleep') - 手动测试AI回复`);
-    console.log(`[${extensionName}]   - testPersonalities() - 测试不同人设效果`);
 
     // 全局测试函数
     window.testVirtualPet = function() {
@@ -4352,8 +4166,102 @@ jQuery(async () => {
         return true;
     };
 
+    // -----------------------------------------------------------------
+    // 测试和调试功能
+    // -----------------------------------------------------------------
+
+    /**
+     * 测试AI回复功能
+     */
+    window.testVirtualPetAI = function() {
+        console.log("🤖 测试虚拟宠物AI回复功能...");
+
+        // 检查API可用性
+        const apiAvailable = isSillyTavernAPIAvailable();
+        console.log(`API可用性: ${apiAvailable ? '✅ 可用' : '❌ 不可用'}`);
+
+        if (!apiAvailable) {
+            console.log("可用的API检查:");
+            console.log(`- window.generateReply: ${typeof window.generateReply}`);
+            console.log(`- window.SillyTavern: ${typeof window.SillyTavern}`);
+            console.log(`- window.Generate: ${typeof window.Generate}`);
+        }
+
+        // 显示当前宠物信息
+        console.log("当前宠物信息:");
+        console.log(`- 名称: ${petData.name}`);
+        console.log(`- 类型: ${getPetTypeName(petData.type)}`);
+        console.log(`- 等级: ${petData.level}`);
+        console.log(`- 人设类型: ${localStorage.getItem(`${extensionName}-personality-type`) || 'default'}`);
+        console.log(`- 人设内容: ${getCurrentPersonality()}`);
+        console.log(`- 健康: ${Math.round(petData.health)}/100`);
+        console.log(`- 快乐: ${Math.round(petData.happiness)}/100`);
+        console.log(`- 饥饿: ${Math.round(petData.hunger)}/100`);
+        console.log(`- 精力: ${Math.round(petData.energy)}/100`);
+
+        // 生成测试Prompt
+        const testPrompt = buildInteractionPrompt('feed');
+        console.log("生成的测试Prompt:");
+        console.log(testPrompt);
+
+        return {
+            apiAvailable,
+            petData: { ...petData },
+            personalityType: localStorage.getItem(`${extensionName}-personality-type`) || 'default',
+            currentPersonality: getCurrentPersonality(),
+            testPrompt
+        };
+    };
+
+    /**
+     * 手动测试AI回复
+     */
+    window.testAIReply = async function(action = 'feed') {
+        console.log(`🎯 手动测试AI回复 - 行为: ${action}`);
+
+        try {
+            const fallbackMessages = {
+                'feed': `${petData.name} 吃得很开心！`,
+                'play': `${petData.name} 玩得很开心！`,
+                'sleep': `${petData.name} 睡得很香！`
+            };
+
+            await handleAIReply(action, fallbackMessages[action] || '宠物很开心！');
+            console.log("✅ AI回复测试完成");
+        } catch (error) {
+            console.error("❌ AI回复测试失败:", error);
+        }
+    };
+
+    /**
+     * 测试人设切换功能
+     */
+    window.testPersonalitySwitch = function(personalityType = 'default') {
+        console.log(`🎭 测试人设切换: ${personalityType}`);
+
+        if (personalityType === 'custom') {
+            const customText = prompt("请输入自定义人设:", "一只特别的宠物");
+            if (customText) {
+                savePersonalitySettings('custom', customText);
+            }
+        } else if (PRESET_PERSONALITIES[personalityType]) {
+            savePersonalitySettings(personalityType);
+        } else {
+            console.error("❌ 无效的人设类型:", personalityType);
+            console.log("可用的人设类型:", Object.keys(PRESET_PERSONALITIES));
+            return;
+        }
+
+        console.log("✅ 人设切换完成");
+        console.log("当前人设:", getCurrentPersonality());
+    };
+
     console.log("🐾 虚拟宠物系统加载完成！");
     console.log("🐾 如果没有看到按钮，请在控制台运行: testVirtualPet()");
+    console.log("🎉 AI人设功能已加载！可用测试命令:");
+    console.log("  - testVirtualPetAI() - 检查AI功能状态");
+    console.log("  - testAIReply('feed'|'play'|'sleep') - 手动测试AI回复");
+    console.log("  - testPersonalitySwitch('default'|'cheerful'|'elegant'|'shy'|'smart'|'custom') - 测试人设切换");
 });
 
 console.log("🐾 虚拟宠物系统脚本已加载完成");

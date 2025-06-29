@@ -19,8 +19,6 @@ jQuery(async () => {
     const STORAGE_KEY_ENABLED = "virtual-pet-enabled";
     const STORAGE_KEY_PET_DATA = "virtual-pet-data";
     const STORAGE_KEY_CUSTOM_AVATAR = "virtual-pet-custom-avatar";
-    const STORAGE_KEY_API_ENDPOINT = "virtual-pet-api-endpoint";
-    const STORAGE_KEY_CUSTOM_API_URL = "virtual-pet-custom-api-url";
     
     // DOM IDs and Selectors
     const BUTTON_ID = "virtual-pet-button";
@@ -146,219 +144,6 @@ jQuery(async () => {
     // -----------------------------------------------------------------
 
     /**
-     * 获取用户配置的API端点和相关信息
-     * @returns {object} 包含URL、API密钥等信息的对象
-     */
-    function getUserApiEndpoint() {
-        const selectedEndpoint = localStorage.getItem(STORAGE_KEY_API_ENDPOINT) || '/api/v1/generate';
-
-        // 处理自定义端点
-        if (selectedEndpoint === 'custom') {
-            const customUrl = localStorage.getItem(STORAGE_KEY_CUSTOM_API_URL) || '/api/v1/generate';
-            return {
-                url: customUrl.trim() || '/api/v1/generate',
-                apiKey: null,
-                source: 'custom'
-            };
-        }
-
-        // 处理SillyTavern检测到的配置
-        if (selectedEndpoint.startsWith('sillytavern:')) {
-            const configIndex = parseInt(selectedEndpoint.split(':')[1]);
-            const detectedConfigs = window.virtualPetDetectedConfigs;
-
-            if (detectedConfigs && detectedConfigs[configIndex]) {
-                const config = detectedConfigs[configIndex];
-                return {
-                    url: config.uri || config.url || config.endpoint || config.api_url || '/api/v1/generate',
-                    apiKey: config.api_key || config.apiKey || config.key || null,
-                    source: 'sillytavern',
-                    name: config.name || config.title || `配置 ${configIndex + 1}`
-                };
-            }
-        }
-
-        // 处理预设端点
-        return {
-            url: selectedEndpoint,
-            apiKey: null,
-            source: 'preset'
-        };
-    }
-
-    /**
-     * 保存API端点配置
-     * @param {string} endpoint - 选择的端点类型
-     * @param {string} customUrl - 自定义URL（仅当endpoint为'custom'时使用）
-     */
-    function saveApiEndpointSettings(endpoint, customUrl = '') {
-        localStorage.setItem(STORAGE_KEY_API_ENDPOINT, endpoint);
-        if (endpoint === 'custom') {
-            localStorage.setItem(STORAGE_KEY_CUSTOM_API_URL, customUrl);
-        }
-
-        console.log(`[${extensionName}] API端点已更新为: ${endpoint === 'custom' ? customUrl : endpoint}`);
-    }
-
-    /**
-     * 侦测SillyTavern的配置数据结构
-     * 这个函数会尝试找到SillyTavern存储API配置的地方
-     */
-    function detectSillyTavernConfigs() {
-        console.log(`[${extensionName}] 🕵️ 开始侦测SillyTavern配置...`);
-
-        const detectionResults = {
-            found: false,
-            configs: [],
-            dataPath: null,
-            rawData: null
-        };
-
-        // 侦测方法1: 检查 window.stores (最可能的位置)
-        if (typeof window.stores !== 'undefined') {
-            console.log(`[${extensionName}] ✅ 发现 window.stores`);
-            detectionResults.rawData = window.stores;
-
-            // 尝试不同的可能路径
-            const possiblePaths = [
-                'connections.connections',
-                'connections',
-                'presets.presets',
-                'presets',
-                'settings.connections',
-                'api.connections'
-            ];
-
-            for (const path of possiblePaths) {
-                const value = getNestedProperty(window.stores, path);
-                if (Array.isArray(value) && value.length > 0) {
-                    console.log(`[${extensionName}] 🎯 在 window.stores.${path} 找到配置数组:`, value);
-                    detectionResults.found = true;
-                    detectionResults.configs = value;
-                    detectionResults.dataPath = `window.stores.${path}`;
-                    break;
-                }
-            }
-        }
-
-        // 侦测方法2: 检查 window.SillyTavern
-        if (!detectionResults.found && typeof window.SillyTavern !== 'undefined') {
-            console.log(`[${extensionName}] ✅ 发现 window.SillyTavern`);
-            const stPaths = [
-                'settings.connections',
-                'config.connections',
-                'api.connections'
-            ];
-
-            for (const path of stPaths) {
-                const value = getNestedProperty(window.SillyTavern, path);
-                if (Array.isArray(value) && value.length > 0) {
-                    console.log(`[${extensionName}] 🎯 在 window.SillyTavern.${path} 找到配置数组:`, value);
-                    detectionResults.found = true;
-                    detectionResults.configs = value;
-                    detectionResults.dataPath = `window.SillyTavern.${path}`;
-                    break;
-                }
-            }
-        }
-
-        // 侦测方法3: 检查 localStorage
-        if (!detectionResults.found) {
-            console.log(`[${extensionName}] 🔍 检查 localStorage...`);
-            const storageKeys = Object.keys(localStorage);
-            const relevantKeys = storageKeys.filter(key =>
-                key.toLowerCase().includes('connection') ||
-                key.toLowerCase().includes('api') ||
-                key.toLowerCase().includes('sillytavern')
-            );
-
-            for (const key of relevantKeys) {
-                try {
-                    const data = JSON.parse(localStorage.getItem(key));
-                    if (Array.isArray(data) && data.length > 0) {
-                        console.log(`[${extensionName}] 🎯 在 localStorage.${key} 找到可能的配置:`, data);
-                        detectionResults.found = true;
-                        detectionResults.configs = data;
-                        detectionResults.dataPath = `localStorage.${key}`;
-                        break;
-                    }
-                } catch (e) {
-                    // 忽略JSON解析错误
-                }
-            }
-        }
-
-        return detectionResults;
-    }
-
-    /**
-     * 安全地获取嵌套对象属性
-     * @param {object} obj - 目标对象
-     * @param {string} path - 属性路径，如 'a.b.c'
-     */
-    function getNestedProperty(obj, path) {
-        return path.split('.').reduce((current, key) => {
-            return current && current[key] !== undefined ? current[key] : undefined;
-        }, obj);
-    }
-
-    /**
-     * 动态填充API下拉框，使用从SillyTavern侦测到的配置
-     */
-    function populateApiDropdownFromSillyTavern() {
-        console.log(`[${extensionName}] 🔄 开始动态填充API下拉框...`);
-
-        const dropdown = $("#virtual-pet-api-endpoint-select");
-        if (dropdown.length === 0) {
-            console.log(`[${extensionName}] ⚠️ 未找到API下拉框，跳过填充`);
-            return;
-        }
-
-        // 侦测SillyTavern配置
-        const detection = detectSillyTavernConfigs();
-
-        // 清空现有选项（保留一个默认选项）
-        dropdown.empty();
-        dropdown.append('<option value="/api/v1/generate">📡 /api/v1/generate (默认)</option>');
-
-        if (detection.found && detection.configs.length > 0) {
-            console.log(`[${extensionName}] 🎯 找到 ${detection.configs.length} 个SillyTavern配置`);
-
-            // 为每个检测到的配置添加选项
-            detection.configs.forEach((config, index) => {
-                // 尝试提取配置信息
-                const name = config.name || config.title || config.label || `配置 ${index + 1}`;
-                const url = config.uri || config.url || config.endpoint || config.api_url;
-
-                if (url) {
-                    const displayName = `🔗 ${name}`;
-                    const optionValue = `sillytavern:${index}`; // 使用特殊前缀标识这是SillyTavern配置
-
-                    dropdown.append(`<option value="${optionValue}">${displayName}</option>`);
-                    console.log(`[${extensionName}] ➕ 添加配置: ${displayName} -> ${url}`);
-                }
-            });
-
-            // 存储检测到的配置供后续使用
-            window.virtualPetDetectedConfigs = detection.configs;
-
-            toastr.success(`发现 ${detection.configs.length} 个SillyTavern API配置！`, "配置侦测成功");
-        } else {
-            console.log(`[${extensionName}] ℹ️ 未检测到SillyTavern配置，使用默认选项`);
-
-            // 添加一些常见的备用选项
-            dropdown.append('<option value="/api/generate">📡 /api/generate (常见变体)</option>');
-            dropdown.append('<option value="/completions">📡 /completions (OpenAI兼容)</option>');
-            dropdown.append('<option value="/v1/completions">📡 /v1/completions (OpenAI v1)</option>');
-        }
-
-        // 总是添加自定义选项
-        dropdown.append('<option value="custom">✏️ 自定义端点</option>');
-
-        console.log(`[${extensionName}] ✅ API下拉框填充完成`);
-    }
-
-    /**
      * 调用SillyTavern的AI生成API
      * @param {string} prompt - 要发送给AI的提示词
      * @param {number} timeout - 超时时间（毫秒），默认10秒
@@ -388,24 +173,13 @@ jQuery(async () => {
                     console.log(`[${extensionName}] 使用Generate API`);
                     result = await window.Generate(prompt);
                 } else {
-                    // 方法4：使用用户配置的端点进行智能fetch调用
-                    const endpointInfo = getUserApiEndpoint();
-                    console.log(`[${extensionName}] 使用${endpointInfo.source}配置: ${endpointInfo.url}`);
-
-                    // 动态构建请求头
-                    const headers = {
-                        'Content-Type': 'application/json',
-                    };
-
-                    // 如果有API密钥，添加授权头
-                    if (endpointInfo.apiKey) {
-                        headers['Authorization'] = `Bearer ${endpointInfo.apiKey}`;
-                        console.log(`[${extensionName}] 使用API密钥进行授权`);
-                    }
-
-                    const response = await fetch(endpointInfo.url, {
+                    // 方法4：尝试通过fetch调用SillyTavern的内部API
+                    console.log(`[${extensionName}] 尝试通过fetch调用API`);
+                    const response = await fetch('/api/v1/generate', {
                         method: 'POST',
-                        headers: headers,
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
                         body: JSON.stringify({
                             prompt: prompt,
                             max_length: 100,
@@ -417,7 +191,7 @@ jQuery(async () => {
                         const data = await response.json();
                         result = data.text || data.response || data.result;
                     } else {
-                        throw new Error(`API调用失败: ${response.status} (端点: ${endpointInfo.url}, 来源: ${endpointInfo.source})`);
+                        throw new Error(`API调用失败: ${response.status}`);
                     }
                 }
 
@@ -578,24 +352,16 @@ jQuery(async () => {
      * 初始化设置面板
      */
     function initializeSettingsPanel() {
-        // 首先动态填充API下拉框
-        populateApiDropdownFromSillyTavern();
-
         // 加载当前设置
         const currentPersonalityType = localStorage.getItem(`${extensionName}-personality-type`) || 'default';
         const customPersonality = localStorage.getItem(`${extensionName}-custom-personality`) || '';
-        const currentApiEndpoint = localStorage.getItem(STORAGE_KEY_API_ENDPOINT) || '/api/v1/generate';
-        const customApiUrl = localStorage.getItem(STORAGE_KEY_CUSTOM_API_URL) || '';
 
         // 设置下拉框的值
         $("#virtual-pet-personality-select").val(currentPersonalityType);
         $("#virtual-pet-custom-personality").val(customPersonality);
-        $("#virtual-pet-api-endpoint-select").val(currentApiEndpoint);
-        $("#virtual-pet-custom-api-url").val(customApiUrl);
 
         // 根据选择显示/隐藏自定义输入框
         toggleCustomPersonalityInput(currentPersonalityType === 'custom');
-        toggleCustomApiInput(currentApiEndpoint === 'custom');
 
         // 添加事件监听器
         $("#virtual-pet-personality-select").on('change', function() {
@@ -615,33 +381,6 @@ jQuery(async () => {
             // 自定义人设文本变化时保存
             const customText = $(this).val().trim();
             savePersonalitySettings('custom', customText);
-        });
-
-        // API端点配置事件监听器
-        $("#virtual-pet-api-endpoint-select").on('change', function() {
-            const selectedEndpoint = $(this).val();
-            const isCustom = selectedEndpoint === 'custom';
-
-            toggleCustomApiInput(isCustom);
-
-            if (!isCustom) {
-                // 如果选择了预设端点，立即保存
-                saveApiEndpointSettings(selectedEndpoint);
-
-                // 获取端点信息用于显示
-                const endpointInfo = getUserApiEndpoint();
-                let message = `API端点已切换到: ${endpointInfo.url}`;
-                if (endpointInfo.source === 'sillytavern' && endpointInfo.name) {
-                    message = `已切换到SillyTavern配置: ${endpointInfo.name}`;
-                }
-                toastr.success(message);
-            }
-        });
-
-        $("#virtual-pet-custom-api-url").on('input', function() {
-            // 自定义API URL变化时保存
-            const customUrl = $(this).val().trim();
-            saveApiEndpointSettings('custom', customUrl);
         });
 
         // 启用/禁用虚拟宠物系统的事件监听器
@@ -669,13 +408,6 @@ jQuery(async () => {
         console.log(`[${extensionName}] 设置面板初始化完成`);
         console.log(`[${extensionName}] 当前人设类型: ${currentPersonalityType}`);
         console.log(`[${extensionName}] 当前人设内容: ${getCurrentPersonality()}`);
-
-        // 显示当前API配置信息
-        const endpointInfo = getUserApiEndpoint();
-        console.log(`[${extensionName}] 当前API端点: ${endpointInfo.url} (来源: ${endpointInfo.source})`);
-        if (endpointInfo.apiKey) {
-            console.log(`[${extensionName}] 已配置API密钥`);
-        }
     }
 
     /**

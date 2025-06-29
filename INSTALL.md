@@ -154,29 +154,15 @@
 
 ## 🗑️ 卸载插件
 
-⚠️ **重要提示**：为了避免卸载后留下空文件夹导致重新安装失败，请使用完整卸载方法。
-
-### 推荐方法：完整卸载
-1. 在浏览器控制台（F12）中运行：
-   ```javascript
-   uninstallVirtualPetSystem()
-   ```
-2. 确认卸载对话框
-3. 按提示删除插件文件夹
-4. 重启SillyTavern
-
 ### 通过扩展管理器
 1. 在扩展列表中找到插件
 2. 取消勾选启用选项
-3. **必须**删除扩展文件夹：`scripts/extensions/third-party/virtual-pet-system/`
-4. 重启SillyTavern
+3. 删除扩展文件夹（可选）
 
 ### 手动卸载
-1. 运行清理命令：`forceCleanVirtualPetData()`
-2. 删除`virtual-pet-system`文件夹
-3. 重启SillyTavern
-
-📖 **详细说明**：查看 [完整卸载指南](UNINSTALL.md) 了解更多信息。
+1. 删除`virtual-pet-system`文件夹
+2. 重启SillyTavern
+3. 清理浏览器localStorage（可选）
 
 ## 💾 数据备份
 

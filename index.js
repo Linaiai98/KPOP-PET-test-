@@ -616,6 +616,24 @@ jQuery(async () => {
     }
 
     /**
+     * 更新人设中的宠物名字
+     */
+    function updatePersonaName(newName) {
+        if (petPersona && petPersona.includes('{petName}')) {
+            // 如果人设中还有模板标记，替换它
+            petPersona = petPersona.replace('{petName}', newName);
+            savePetPersona();
+
+            // 更新设置界面中的人设文本
+            if ($("#virtual-pet-persona-textarea").length > 0) {
+                $("#virtual-pet-persona-textarea").val(petPersona);
+            }
+
+            console.log(`[${extensionName}] 人设中的宠物名字已更新为: ${newName}`);
+        }
+    }
+
+    /**
      * 加载AI撒娇设置
      */
     function loadAIAttentionSettings() {
@@ -1332,6 +1350,9 @@ jQuery(async () => {
             petData.name = trimmedName;
             savePetData();
 
+            // 更新人设中的宠物名字
+            updatePersonaName(trimmedName);
+
             // 更新所有UI中的名字显示
             updateUnifiedUIStatus();
 
@@ -1762,6 +1783,119 @@ jQuery(async () => {
     }
 
     /**
+     * 初始化设置界面
+     */
+    function initializeSettingsUI() {
+        console.log(`[${extensionName}] Initializing settings UI...`);
+
+        // 设置AI功能开关的初始状态
+        $("#virtual-pet-ai-attention-toggle").prop("checked", aiAttentionEnabled);
+        $("#virtual-pet-ai-interactions-toggle").prop("checked", aiInteractionsEnabled);
+
+        // 设置人设文本框的初始内容
+        $("#virtual-pet-persona-textarea").val(petPersona);
+
+        // 绑定AI功能开关事件
+        $("#virtual-pet-ai-attention-toggle").off("change").on("change", function() {
+            const enabled = $(this).is(":checked");
+            aiAttentionEnabled = enabled;
+            saveAIAttentionSettings();
+            console.log(`[${extensionName}] AI撒娇功能: ${enabled ? '启用' : '禁用'}`);
+
+            if (enabled && !petPersona) {
+                loadPetPersona();
+            }
+        });
+
+        $("#virtual-pet-ai-interactions-toggle").off("change").on("change", function() {
+            const enabled = $(this).is(":checked");
+            aiInteractionsEnabled = enabled;
+            saveAIInteractionSettings();
+            console.log(`[${extensionName}] AI互动功能: ${enabled ? '启用' : '禁用'}`);
+
+            if (enabled && !petPersona) {
+                loadPetPersona();
+            }
+        });
+
+        // 绑定人设保存按钮事件
+        $("#virtual-pet-save-persona-btn").off("click").on("click", function() {
+            const newPersona = $("#virtual-pet-persona-textarea").val().trim();
+
+            if (newPersona.length === 0) {
+                toastr.warning("人设内容不能为空！");
+                return;
+            }
+
+            if (newPersona.length > 2000) {
+                toastr.warning("人设内容过长，建议控制在2000字符以内！");
+                return;
+            }
+
+            petPersona = newPersona;
+            savePetPersona();
+            toastr.success("宠物人设已保存！");
+            console.log(`[${extensionName}] 人设已保存 (${newPersona.length} 字符)`);
+        });
+
+        // 绑定人设重置按钮事件
+        $("#virtual-pet-reset-persona-btn").off("click").on("click", function() {
+            if (confirm("确定要重置为默认人设吗？\n当前的自定义人设将会丢失。")) {
+                const template = defaultPersonaTemplates[petData.type] || defaultPersonaTemplates.cat;
+                const newPersona = template.replace('{petName}', petData.name);
+
+                petPersona = newPersona;
+                savePetPersona();
+                $("#virtual-pet-persona-textarea").val(petPersona);
+
+                toastr.success("已重置为默认人设！");
+                console.log(`[${extensionName}] 人设已重置为默认`);
+            }
+        });
+
+        // 绑定测试按钮事件
+        $("#virtual-pet-test-ai-attention-btn").off("click").on("click", async function() {
+            const btn = $(this);
+            btn.prop("disabled", true).text("🔄 测试中...");
+
+            try {
+                const result = await window.testAIAttention();
+                if (result) {
+                    toastr.success("AI撒娇测试成功！");
+                } else {
+                    toastr.error("AI撒娇测试失败，请检查控制台日志。");
+                }
+            } catch (error) {
+                console.error("AI撒娇测试错误:", error);
+                toastr.error("AI撒娇测试出错！");
+            } finally {
+                btn.prop("disabled", false).text("🧪 测试AI撒娇");
+            }
+        });
+
+        $("#virtual-pet-test-ai-interaction-btn").off("click").on("click", async function() {
+            const btn = $(this);
+            btn.prop("disabled", true).text("🔄 测试中...");
+
+            try {
+                const result = await window.testAIInteraction('greeting');
+                if (result) {
+                    toastr.success("AI互动测试成功！");
+                } else {
+                    toastr.error("AI互动测试失败，请检查控制台日志。");
+                }
+            } catch (error) {
+                console.error("AI互动测试错误:", error);
+                toastr.error("AI互动测试出错！");
+            } finally {
+                btn.prop("disabled", false).text("🎮 测试AI互动");
+            }
+        });
+
+        console.log(`[${extensionName}] Settings UI initialized successfully`);
+    }
+
+    /**
      * 保存设置
      */
     function saveSettings() {
@@ -1776,6 +1910,21 @@ jQuery(async () => {
         if (newType !== petData.type) {
             petData.type = newType;
             toastr.success(`宠物类型已更改为 "${getPetTypeName(newType)}"`);
+
+            // 如果用户使用的是默认人设，更新为新类型的默认人设
+            const currentPersona = $("#virtual-pet-persona-textarea").val();
+            const isDefaultPersona = !currentPersona || Object.values(defaultPersonaTemplates).some(template =>
+                currentPersona.includes(template.substring(0, 50))
+            );
+
+            if (isDefaultPersona) {
+                const template = defaultPersonaTemplates[newType] || defaultPersonaTemplates.cat;
+                const newPersona = template.replace('{petName}', petData.name);
+                petPersona = newPersona;
+                savePetPersona();
+                $("#virtual-pet-persona-textarea").val(petPersona);
+                console.log(`[${extensionName}] 已更新为 ${newType} 类型的默认人设`);
+            }
         }
 
         // 保存其他设置
@@ -2380,6 +2529,7 @@ jQuery(async () => {
                         <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                     </div>
                     <div class="inline-drawer-content">
+                        <!-- 基础设置 -->
                         <div class="flex-container">
                             <label class="checkbox_label" for="virtual-pet-enabled-toggle">
                                 <input id="virtual-pet-enabled-toggle" type="checkbox" checked>
@@ -2389,12 +2539,83 @@ jQuery(async () => {
                         <small class="notes">
                             启用后会在屏幕上显示一个可拖动的宠物按钮（🐾）
                         </small>
+
+                        <hr style="margin: 15px 0; border: none; border-top: 1px solid #444;">
+
+                        <!-- AI功能设置 -->
+                        <h4 style="margin: 10px 0 5px 0; color: #fff;">🤖 AI智能功能</h4>
+
+                        <div class="flex-container">
+                            <label class="checkbox_label" for="virtual-pet-ai-attention-toggle">
+                                <input id="virtual-pet-ai-attention-toggle" type="checkbox" checked>
+                                <span>启用AI撒娇功能</span>
+                            </label>
+                        </div>
+                        <small class="notes">
+                            启用后宠物会使用AI生成个性化的撒娇消息
+                        </small>
+
+                        <div class="flex-container" style="margin-top: 10px;">
+                            <label class="checkbox_label" for="virtual-pet-ai-interactions-toggle">
+                                <input id="virtual-pet-ai-interactions-toggle" type="checkbox" checked>
+                                <span>启用AI互动回应</span>
+                            </label>
+                        </div>
+                        <small class="notes">
+                            启用后喂食、玩耍、休息等互动会有AI生成的个性化回应
+                        </small>
+
+                        <hr style="margin: 15px 0; border: none; border-top: 1px solid #444;">
+
+                        <!-- 人设设置 -->
+                        <h4 style="margin: 10px 0 5px 0; color: #fff;">🎭 宠物人设</h4>
+
+                        <div style="margin: 10px 0;">
+                            <label for="virtual-pet-persona-textarea" style="display: block; margin-bottom: 5px; color: #fff;">
+                                自定义宠物人设：
+                            </label>
+                            <textarea
+                                id="virtual-pet-persona-textarea"
+                                placeholder="在这里输入您的宠物人设描述..."
+                                style="width: 100%; height: 120px; background: #2a2a2a; color: #fff; border: 1px solid #555; border-radius: 4px; padding: 8px; resize: vertical; font-family: inherit; font-size: 12px;"
+                            ></textarea>
+                            <small class="notes">
+                                描述宠物的性格、说话风格、行为特点等。留空将使用默认人设。
+                            </small>
+                        </div>
+
+                        <div style="margin: 10px 0; display: flex; gap: 10px; flex-wrap: wrap;">
+                            <button id="virtual-pet-save-persona-btn" class="menu_button" style="flex: 1; min-width: 100px;">
+                                💾 保存人设
+                            </button>
+                            <button id="virtual-pet-reset-persona-btn" class="menu_button" style="flex: 1; min-width: 100px;">
+                                🔄 重置默认
+                            </button>
+                        </div>
+
+                        <div style="margin: 10px 0; display: flex; gap: 10px; flex-wrap: wrap;">
+                            <button id="virtual-pet-test-ai-attention-btn" class="menu_button" style="flex: 1; min-width: 100px;">
+                                🧪 测试AI撒娇
+                            </button>
+                            <button id="virtual-pet-test-ai-interaction-btn" class="menu_button" style="flex: 1; min-width: 100px;">
+                                🎮 测试AI互动
+                            </button>
+                        </div>
+
+                        <small class="notes">
+                            💡 提示：设置人设后建议先测试效果。需要SillyTavern已配置AI模型。
+                        </small>
                     </div>
                 </div>
             </div>
         `;
         $("#extensions_settings2").append(simpleSettingsHtml);
         console.log(`[${extensionName}] Settings panel created`);
+
+        // 初始化设置界面
+        setTimeout(() => {
+            initializeSettingsUI();
+        }, 100);
 
         // 3. 加载弹窗HTML（如果失败就使用简单版本）
         // 检测是否为iOS设备，如果是则跳过原始弹窗创建
@@ -5275,12 +5496,12 @@ jQuery(async () => {
 
     console.log("🐾 虚拟宠物系统加载完成！");
     console.log("🐾 如果没有看到按钮，请在控制台运行: testVirtualPet()");
-    console.log("💡 卸载提示：如需完全卸载，请在控制台运行：uninstallVirtualPetSystem()");
+    console.log("🎛️ 设置管理：请在SillyTavern扩展设置中找到'🐾 虚拟宠物系统'进行配置");
     console.log("😽 撒娇功能：15分钟不理宠物会自动撒娇求关注！");
-    console.log("🤖 AI撒娇功能：" + (aiAttentionEnabled ? "已启用" : "已禁用") + " | 切换：toggleAIAttention()");
-    console.log("🎮 AI互动功能：" + (aiInteractionsEnabled ? "已启用" : "已禁用") + " | 切换：toggleAIInteractions()");
-    console.log("🧪 功能测试：testAIAttention() | testAIInteraction('feed') | testAllAIInteractions()");
-    console.log("📝 人设管理：setPetPersona('人设') | getPetPersona() | resetPetPersona()");
+    console.log("🤖 AI撒娇功能：" + (aiAttentionEnabled ? "已启用" : "已禁用"));
+    console.log("🎮 AI互动功能：" + (aiInteractionsEnabled ? "已启用" : "已禁用"));
+    console.log("💡 提示：所有AI和人设功能都可以在设置界面中管理，无需使用控制台命令");
+    console.log("💡 卸载提示：如需完全卸载，请在控制台运行：uninstallVirtualPetSystem()");
 });
 
 console.log("🐾 虚拟宠物系统脚本已加载完成");

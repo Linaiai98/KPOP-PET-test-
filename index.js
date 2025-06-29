@@ -12,13 +12,23 @@ jQuery(async () => {
 
     // 创建安全的toastr包装函数
     function safeToastr(type, message, title, options = {}) {
-        if (typeof toastr === 'undefined') return;
+        if (typeof toastr === 'undefined') {
+            console.warn(`[${extensionName}] toastr is not available`);
+            return;
+        }
+
+        // 验证type参数
+        const validTypes = ['success', 'info', 'warning', 'error'];
+        if (!validTypes.includes(type)) {
+            console.error(`[${extensionName}] Invalid toastr type: ${type}`);
+            return;
+        }
 
         // 清理消息和标题中的控制字符
         const cleanMessage = typeof message === 'string' ?
-            message.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim() : message;
+            message.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim() : String(message);
         const cleanTitle = typeof title === 'string' ?
-            title.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim() : title;
+            title.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim() : String(title || '');
 
         // 设置默认选项
         const safeOptions = {
@@ -28,8 +38,14 @@ jQuery(async () => {
 
         console.log(`[${extensionName}] SafeToastr ${type}:`, { cleanMessage, cleanTitle, safeOptions });
 
-        // 调用toastr
-        return toastr[type](cleanMessage, cleanTitle, safeOptions);
+        try {
+            // 调用toastr
+            return toastr[type](cleanMessage, cleanTitle, safeOptions);
+        } catch (error) {
+            console.error(`[${extensionName}] SafeToastr error:`, error);
+            // 回退到基本调用
+            return toastr[type](cleanMessage, cleanTitle);
+        }
     }
     const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 
@@ -1539,15 +1555,30 @@ jQuery(async () => {
                 `${petData.name} 正在${action} ✨` :
                 `${petData.name} 正在${action}`;
 
-            safeToastr('info', message, title, {
-                timeOut: 8000, // AI消息显示时间稍长
-                extendedTimeOut: 3000,
-                onclick: function() {
-                    // 点击通知时打开宠物界面
-                    updateLastAttentionTime();
-                    showPopup();
-                }
-            });
+            if (typeof toastr !== 'undefined') {
+                // 特别处理撒娇消息的编码
+                const cleanMessage = message
+                    .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // 移除控制字符
+                    .replace(/[^\u0000-\u007F]/g, function(char) {
+                        // 确保中文字符正确编码
+                        return char;
+                    })
+                    .trim();
+
+                console.log(`[${extensionName}] 显示撒娇消息:`, cleanMessage);
+
+                toastr.info(cleanMessage, title, {
+                    timeOut: 8000, // AI消息显示时间稍长
+                    extendedTimeOut: 3000,
+                    escapeHtml: false,
+                    preventDuplicates: true,
+                    onclick: function() {
+                        // 点击通知时打开宠物界面
+                        updateLastAttentionTime();
+                        showPopup();
+                    }
+                });
+            }
         }
 
         // 让按钮产生撒娇动画效果
@@ -1672,10 +1703,27 @@ jQuery(async () => {
                     console.log(`[${extensionName}] AI问候: ${aiMessage}`);
                     // 延迟显示问候，让弹窗先打开
                     setTimeout(() => {
-                        safeToastr('info', aiMessage, `${petData.name} 的问候 ✨`, {
-                            timeOut: 5000,
-                            extendedTimeOut: 2000
-                        });
+                        if (typeof toastr !== 'undefined') {
+                            // 特别处理问候消息的编码
+                            const cleanMessage = aiMessage
+                                .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // 移除控制字符
+                                .replace(/[^\u0000-\u007F]/g, function(char) {
+                                    // 确保中文字符正确编码
+                                    return char;
+                                })
+                                .trim();
+
+                            const cleanTitle = `${petData.name} 的问候 ✨`;
+
+                            console.log(`[${extensionName}] 显示问候消息:`, cleanMessage);
+
+                            toastr.info(cleanMessage, cleanTitle, {
+                                timeOut: 5000,
+                                extendedTimeOut: 2000,
+                                escapeHtml: false,
+                                preventDuplicates: true
+                            });
+                        }
                     }, 800);
                 }
             } catch (error) {
@@ -6120,6 +6168,40 @@ jQuery(async () => {
     };
 
     /**
+     * 简化的问候消息测试
+     */
+    window.testGreetingFixed = function() {
+        console.log("🔍 测试修复后的问候消息...");
+
+        const testMessage = "主人好呀nya~";
+        console.log("原始消息:", testMessage);
+
+        if (typeof toastr !== 'undefined') {
+            // 使用修复后的编码处理
+            const cleanMessage = testMessage
+                .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // 移除控制字符
+                .replace(/[^\u0000-\u007F]/g, function(char) {
+                    // 确保中文字符正确编码
+                    return char;
+                })
+                .trim();
+
+            console.log("处理后消息:", cleanMessage);
+            console.log("字符编码:", cleanMessage.split('').map(c => c.charCodeAt(0)));
+
+            toastr.success(cleanMessage, "修复后的问候测试 ✨", {
+                timeOut: 8000,
+                escapeHtml: false,
+                preventDuplicates: true
+            });
+
+            console.log("✅ 修复后的问候消息已显示");
+        } else {
+            console.log("❌ toastr未定义");
+        }
+    };
+
+    /**
      * 测试问候消息编码
      */
     window.testGreetingMessage = function() {
@@ -6194,9 +6276,15 @@ jQuery(async () => {
 
             // 测试4: 使用safeToastr
             setTimeout(() => {
-                safeToastr('info', testMessage, "测试4: safeToastr", {
-                    timeOut: 5000
-                });
+                try {
+                    console.log("🔄 测试safeToastr函数...");
+                    const result = safeToastr('info', testMessage, "测试4: safeToastr", {
+                        timeOut: 5000
+                    });
+                    console.log("✅ safeToastr调用成功:", result);
+                } catch (error) {
+                    console.error("❌ safeToastr调用失败:", error);
+                }
             }, 3000);
 
             console.log("将显示4个测试通知，观察哪个显示正常");
@@ -6438,7 +6526,7 @@ jQuery(async () => {
     console.log("🛡️ 智能回退：当AI不可用时自动使用基于人设的智能回应");
     console.log("💡 提示：所有AI和人设功能都可以在设置界面中管理，无需使用控制台命令");
     console.log("🔍 AI故障排除：diagnoseAIFeatures() | 智能回退测试：testIntelligentFallback()");
-    console.log("🐛 界面调试：debugPopupContent() | 问候测试：testGreetingMessage()");
+    console.log("🐛 界面调试：debugPopupContent() | 问候测试：testGreetingFixed()");
     console.log("⚙️ AI功能控制：toggleAIFeatures() | 人设管理：setPetPersona('人设')");
     console.log("💡 卸载提示：如需完全卸载，请在控制台运行：uninstallVirtualPetSystem()");
 });

@@ -150,28 +150,7 @@ jQuery(async () => {
         try {
             console.log(`[${extensionName}] 开始检测SillyTavern配置...`);
 
-            // 方法1: 通过SillyTavern的getContext()函数 - 最可靠的方法
-            if (window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
-                try {
-                    const context = window.SillyTavern.getContext();
-                    console.log(`[${extensionName}] SillyTavern上下文:`, context);
-
-                    const config = {
-                        api_type: context.main_api,
-                        model: context.online_status || context.model_name,
-                        url: context.api_server,
-                        available: true,
-                        source: 'sillytavern_context',
-                        context: context
-                    };
-                    console.log(`[${extensionName}] 通过SillyTavern上下文检测到配置:`, config);
-                    return config;
-                } catch (e) {
-                    console.log(`[${extensionName}] SillyTavern上下文读取失败:`, e.message);
-                }
-            }
-
-            // 方法2: 检查全局变量
+            // 方法1: 检查全局变量 - 最直接的方法
             if (typeof window.main_api !== 'undefined') {
                 const config = {
                     api_type: window.main_api,
@@ -182,6 +161,36 @@ jQuery(async () => {
                 };
                 console.log(`[${extensionName}] 通过全局变量检测到配置:`, config);
                 return config;
+            }
+
+            // 方法2: 通过SillyTavern的getContext()函数
+            if (window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
+                try {
+                    const context = window.SillyTavern.getContext();
+                    console.log(`[${extensionName}] SillyTavern完整上下文:`, context);
+
+                    // 尝试从上下文的不同位置获取配置
+                    const api_type = context.main_api || context.api_type || context.selectedAPI;
+                    const model = context.online_status || context.model_name || context.model || context.selectedModel;
+                    const url = context.api_server || context.server_url || context.apiUrl;
+
+                    if (api_type) {
+                        const config = {
+                            api_type: api_type,
+                            model: model,
+                            url: url,
+                            available: true,
+                            source: 'sillytavern_context',
+                            context: context
+                        };
+                        console.log(`[${extensionName}] 通过SillyTavern上下文检测到配置:`, config);
+                        return config;
+                    } else {
+                        console.log(`[${extensionName}] 上下文中未找到API配置，可用字段:`, Object.keys(context));
+                    }
+                } catch (e) {
+                    console.log(`[${extensionName}] SillyTavern上下文读取失败:`, e.message);
+                }
             }
 
             // 方法3: 检查settings对象
@@ -197,7 +206,23 @@ jQuery(async () => {
                 return config;
             }
 
-            // 方法4: 从localStorage读取
+            // 方法4: 检查其他可能的全局变量
+            const apiVars = ['api_type', 'current_api', 'selected_api'];
+            for (const varName of apiVars) {
+                if (typeof window[varName] !== 'undefined') {
+                    const config = {
+                        api_type: window[varName],
+                        model: window.online_status || window.model_name || 'unknown',
+                        url: window.api_server || '',
+                        available: true,
+                        source: `global_${varName}`
+                    };
+                    console.log(`[${extensionName}] 通过全局变量${varName}检测到配置:`, config);
+                    return config;
+                }
+            }
+
+            // 方法5: 从localStorage读取
             try {
                 const savedSettings = localStorage.getItem('SillyTavern_Settings');
                 if (savedSettings) {
@@ -539,16 +564,24 @@ jQuery(async () => {
         try {
             $('#connection-status').text('🔄 检测配置中...').css('color', '#ffa500');
 
+            // 先运行调试
+            debugSillyTavernState();
+
             const config = await detectSillyTavernConfig();
-            if (config.available) {
-                const message = `检测到配置: ${config.api_type || '未知'} (${config.source || '未知来源'})`;
+            if (config.available && config.api_type) {
+                const message = `检测到配置: ${config.api_type} (${config.source})`;
                 $('#connection-status').text(`✅ ${message}`).css('color', '#48bb78');
                 toastr.success(`自动检测成功！${message}`);
 
                 console.log(`[${extensionName}] 检测到的完整配置:`, config);
             } else {
-                $('#connection-status').text('❌ 未检测到配置').css('color', '#f56565');
-                toastr.warning('未能检测到SillyTavern配置，请确保SillyTavern正在运行并已配置API');
+                $('#connection-status').text('❌ 未检测到有效配置').css('color', '#f56565');
+                toastr.warning('未能检测到有效的SillyTavern API配置，请查看控制台调试信息');
+
+                // 提供详细的帮助信息
+                setTimeout(() => {
+                    toastr.info('请确保：1. SillyTavern正在运行 2. 已在SillyTavern中配置并连接API 3. 刷新页面重试', '', { timeOut: 8000 });
+                }, 1000);
             }
         } catch (error) {
             $('#connection-status').text('❌ 检测失败').css('color', '#f56565');
@@ -566,14 +599,34 @@ jQuery(async () => {
         console.log(`[${extensionName}] window.SillyTavern:`, !!window.SillyTavern);
         console.log(`[${extensionName}] window.characters:`, window.characters ? `数组长度: ${window.characters.length}` : '未定义');
         console.log(`[${extensionName}] window.main_api:`, window.main_api);
+        console.log(`[${extensionName}] window.api_server:`, window.api_server);
+        console.log(`[${extensionName}] window.online_status:`, window.online_status);
         console.log(`[${extensionName}] window.settings:`, !!window.settings);
+
+        // 检查API相关的全局变量
+        const apiVars = ['main_api', 'api_server', 'online_status', 'model_name', 'api_type', 'current_api', 'selected_api'];
+        apiVars.forEach(varName => {
+            if (typeof window[varName] !== 'undefined') {
+                console.log(`[${extensionName}] window.${varName}:`, window[varName]);
+            }
+        });
 
         // 检查SillyTavern上下文
         if (window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
             try {
                 const context = window.SillyTavern.getContext();
-                console.log(`[${extensionName}] SillyTavern上下文可用，main_api:`, context.main_api);
+                console.log(`[${extensionName}] SillyTavern上下文键:`, Object.keys(context));
+                console.log(`[${extensionName}] 上下文.main_api:`, context.main_api);
+                console.log(`[${extensionName}] 上下文.api_server:`, context.api_server);
+                console.log(`[${extensionName}] 上下文.online_status:`, context.online_status);
                 console.log(`[${extensionName}] 上下文中的characters:`, context.characters ? `数组长度: ${context.characters.length}` : '未定义');
+
+                // 查找包含'api'的字段
+                const apiFields = Object.keys(context).filter(key => key.toLowerCase().includes('api'));
+                console.log(`[${extensionName}] 上下文中包含'api'的字段:`, apiFields);
+                apiFields.forEach(field => {
+                    console.log(`[${extensionName}] 上下文.${field}:`, context[field]);
+                });
             } catch (e) {
                 console.log(`[${extensionName}] 获取SillyTavern上下文失败:`, e.message);
             }

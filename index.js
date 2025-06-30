@@ -148,38 +148,79 @@ jQuery(async () => {
      */
     async function detectSillyTavernConfig() {
         try {
-            // 方法1: 尝试读取SillyTavern的全局配置
-            if (window.SillyTavern && window.SillyTavern.getContext) {
-                const context = window.SillyTavern.getContext();
-                return {
-                    api_type: context.main_api,
-                    model: context.model,
-                    available: true
+            console.log(`[${extensionName}] 开始检测SillyTavern配置...`);
+
+            // 方法1: 检查全局变量 - 最常用的方法
+            if (typeof window.main_api !== 'undefined') {
+                const config = {
+                    api_type: window.main_api,
+                    model: window.online_status || window.model_name || 'unknown',
+                    url: window.api_server || '',
+                    available: true,
+                    source: 'global_variables'
                 };
+                console.log(`[${extensionName}] 通过全局变量检测到配置:`, config);
+                return config;
             }
 
-            // 方法2: 通过API调用获取配置
+            // 方法2: 尝试读取SillyTavern的上下文
+            if (window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
+                try {
+                    const context = window.SillyTavern.getContext();
+                    const config = {
+                        api_type: context.main_api || context.api_type,
+                        model: context.model || context.online_status,
+                        url: context.api_server || context.server_url,
+                        available: true,
+                        source: 'sillytavern_context'
+                    };
+                    console.log(`[${extensionName}] 通过SillyTavern上下文检测到配置:`, config);
+                    return config;
+                } catch (e) {
+                    console.log(`[${extensionName}] SillyTavern上下文读取失败:`, e.message);
+                }
+            }
+
+            // 方法3: 通过API调用获取配置
             try {
-                const response = await fetch('/api/v1/config');
+                const response = await fetch('/api/v1/config', {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                });
                 if (response.ok) {
                     const config = await response.json();
-                    return { ...config, available: true };
+                    console.log(`[${extensionName}] 通过API获取到配置:`, config);
+                    return { ...config, available: true, source: 'api_call' };
                 }
             } catch (e) {
-                console.log('API配置获取失败:', e.message);
+                console.log(`[${extensionName}] API配置获取失败:`, e.message);
             }
 
-            // 方法3: 检查全局变量
-            if (window.main_api) {
-                return {
-                    api_type: window.main_api,
-                    available: true
-                };
+            // 方法4: 从localStorage读取
+            try {
+                const savedSettings = localStorage.getItem('SillyTavern_Settings');
+                if (savedSettings) {
+                    const settings = JSON.parse(savedSettings);
+                    if (settings.main_api) {
+                        const config = {
+                            api_type: settings.main_api,
+                            model: settings.model || settings.online_status,
+                            url: settings.api_server,
+                            available: true,
+                            source: 'localStorage'
+                        };
+                        console.log(`[${extensionName}] 通过localStorage检测到配置:`, config);
+                        return config;
+                    }
+                }
+            } catch (e) {
+                console.log(`[${extensionName}] localStorage读取失败:`, e.message);
             }
 
-            return { available: false };
+            console.log(`[${extensionName}] 未能检测到SillyTavern配置`);
+            return { available: false, error: '未能检测到SillyTavern配置' };
         } catch (error) {
-            console.error('检测SillyTavern配置失败:', error);
+            console.error(`[${extensionName}] 检测SillyTavern配置失败:`, error);
             return { available: false, error: error.message };
         }
     }
@@ -189,46 +230,122 @@ jQuery(async () => {
      */
     async function getSillyTavernCharacters() {
         try {
-            // 方法1: 通过SillyTavern API获取
+            console.log(`[${extensionName}] 开始获取SillyTavern角色卡列表...`);
+
+            // 方法1: 通过SillyTavern API获取 - 最可靠的方法
             try {
-                const response = await fetch('/api/v1/characters');
+                console.log(`[${extensionName}] 尝试通过API获取角色列表...`);
+                const response = await fetch('/api/characters/all', {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
                 if (response.ok) {
-                    const characters = await response.json();
-                    return characters.map(char => ({
-                        name: char.name || char.character_name || '未知角色',
-                        id: char.avatar || char.name || char.character_name,
-                        description: char.description || char.char_persona || ''
-                    }));
+                    const data = await response.json();
+                    console.log(`[${extensionName}] API返回数据:`, data);
+
+                    // 处理不同的响应格式
+                    let characters = [];
+                    if (Array.isArray(data)) {
+                        characters = data;
+                    } else if (data.characters && Array.isArray(data.characters)) {
+                        characters = data.characters;
+                    } else if (data.results && Array.isArray(data.results)) {
+                        characters = data.results;
+                    }
+
+                    if (characters.length > 0) {
+                        const result = characters.map(char => ({
+                            name: char.name || char.character_name || char.char_name || '未知角色',
+                            id: char.avatar || char.filename || char.name || char.character_name,
+                            description: (char.description || char.char_persona || char.personality || '').substring(0, 100)
+                        }));
+                        console.log(`[${extensionName}] 通过API获取到 ${result.length} 个角色`);
+                        return result;
+                    }
                 }
             } catch (e) {
-                console.log('API角色列表获取失败:', e.message);
+                console.log(`[${extensionName}] API角色列表获取失败:`, e.message);
             }
 
-            // 方法2: 从全局变量获取
+            // 方法2: 尝试其他API端点
+            try {
+                console.log(`[${extensionName}] 尝试备用API端点...`);
+                const response = await fetch('/api/v1/characters', {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (response.ok) {
+                    const characters = await response.json();
+                    if (Array.isArray(characters) && characters.length > 0) {
+                        const result = characters.map(char => ({
+                            name: char.name || char.character_name || '未知角色',
+                            id: char.avatar || char.name || char.character_name,
+                            description: (char.description || char.char_persona || '').substring(0, 100)
+                        }));
+                        console.log(`[${extensionName}] 通过备用API获取到 ${result.length} 个角色`);
+                        return result;
+                    }
+                }
+            } catch (e) {
+                console.log(`[${extensionName}] 备用API失败:`, e.message);
+            }
+
+            // 方法3: 从全局变量获取
+            console.log(`[${extensionName}] 尝试从全局变量获取角色...`);
             if (window.characters && Array.isArray(window.characters)) {
-                return window.characters.map(char => ({
+                const result = window.characters.map(char => ({
                     name: char.name || char.character_name || '未知角色',
                     id: char.avatar || char.name,
-                    description: char.description || char.char_persona || ''
+                    description: (char.description || char.char_persona || '').substring(0, 100)
                 }));
+                console.log(`[${extensionName}] 从全局变量获取到 ${result.length} 个角色`);
+                return result;
             }
 
-            // 方法3: 从localStorage获取
-            const savedChars = localStorage.getItem('characters');
-            if (savedChars) {
-                const characters = JSON.parse(savedChars);
-                if (Array.isArray(characters)) {
-                    return characters.map(char => ({
-                        name: char.name || '未知角色',
+            // 方法4: 检查其他可能的全局变量
+            const possibleVars = ['character_list', 'characterList', 'chars', 'allCharacters'];
+            for (const varName of possibleVars) {
+                if (window[varName] && Array.isArray(window[varName])) {
+                    console.log(`[${extensionName}] 在全局变量 ${varName} 中找到角色数据`);
+                    const result = window[varName].map(char => ({
+                        name: char.name || char.character_name || '未知角色',
                         id: char.avatar || char.name,
-                        description: char.description || ''
+                        description: (char.description || char.char_persona || '').substring(0, 100)
                     }));
+                    console.log(`[${extensionName}] 从 ${varName} 获取到 ${result.length} 个角色`);
+                    return result;
                 }
             }
 
+            // 方法5: 从localStorage获取
+            console.log(`[${extensionName}] 尝试从localStorage获取角色...`);
+            const possibleKeys = ['characters', 'SillyTavern_characters', 'character_data'];
+            for (const key of possibleKeys) {
+                try {
+                    const savedChars = localStorage.getItem(key);
+                    if (savedChars) {
+                        const characters = JSON.parse(savedChars);
+                        if (Array.isArray(characters) && characters.length > 0) {
+                            const result = characters.map(char => ({
+                                name: char.name || '未知角色',
+                                id: char.avatar || char.name,
+                                description: (char.description || '').substring(0, 100)
+                            }));
+                            console.log(`[${extensionName}] 从localStorage(${key})获取到 ${result.length} 个角色`);
+                            return result;
+                        }
+                    }
+                } catch (e) {
+                    console.log(`[${extensionName}] localStorage(${key})解析失败:`, e.message);
+                }
+            }
+
+            console.log(`[${extensionName}] 未能获取到任何角色卡`);
             return [];
         } catch (error) {
-            console.error('获取角色卡列表失败:', error);
+            console.error(`[${extensionName}] 获取角色卡列表失败:`, error);
             return [];
         }
     }
@@ -239,42 +356,71 @@ jQuery(async () => {
     async function testSillyTavernConnection() {
         const statusElement = $('#connection-status');
         const testButton = $('#test-connection-btn');
+        const settings = loadSillyTavernSettings();
 
         // 更新状态为测试中
         statusElement.text('🔄 测试中...').css('color', '#ffa500');
         testButton.prop('disabled', true);
 
         try {
-            // 1. 检测API可用性
-            const apiAvailable = isSillyTavernAPIAvailable();
-            if (!apiAvailable) {
-                throw new Error('SillyTavern API不可用，请确保SillyTavern正在运行');
-            }
+            // 1. 根据选择的API类型进行不同的测试
+            if (settings.apiType === 'auto') {
+                // 使用SillyTavern已配置的API
+                console.log(`[${extensionName}] 测试SillyTavern已配置的API...`);
 
-            // 2. 检测配置
-            const config = await detectSillyTavernConfig();
-            if (!config.available) {
-                throw new Error('无法检测到SillyTavern配置');
-            }
+                // 检测API可用性
+                const apiAvailable = isSillyTavernAPIAvailable();
+                if (!apiAvailable) {
+                    throw new Error('SillyTavern API不可用，请确保SillyTavern正在运行');
+                }
 
-            // 3. 尝试发送测试请求
-            const testPrompt = "请简单回复'测试成功'，不超过10个字。";
-            const response = await callSillyTavernAPI(testPrompt, 8000);
+                // 检测配置
+                const config = await detectSillyTavernConfig();
+                if (!config.available) {
+                    throw new Error('无法检测到SillyTavern配置，请确保已在SillyTavern中配置API');
+                }
 
-            if (response && response.trim()) {
-                statusElement.text('✅ 连接成功').css('color', '#48bb78');
-                toastr.success('SillyTavern连接测试成功！AI回复: ' + response.substring(0, 50));
+                // 尝试发送测试请求
+                const testPrompt = "请简单回复'测试成功'，不超过10个字。";
+                const response = await callSillyTavernAPI(testPrompt, 8000);
 
-                // 保存测试结果
-                saveSillyTavernSettings();
-                return true;
+                if (response && response.trim()) {
+                    statusElement.text('✅ 连接成功').css('color', '#48bb78');
+                    toastr.success(`SillyTavern连接测试成功！使用API: ${config.api_type}，AI回复: ${response.substring(0, 50)}`);
+                } else {
+                    throw new Error('API返回空响应');
+                }
+
             } else {
-                throw new Error('API返回空响应');
+                // 使用用户自定义的API配置
+                console.log(`[${extensionName}] 测试用户自定义API配置...`);
+
+                if (!settings.apiUrl || !settings.apiKey) {
+                    throw new Error('请填写完整的API配置信息（URL和密钥）');
+                }
+
+                // 这里可以添加对自定义API的测试逻辑
+                // 目前先显示配置验证成功
+                statusElement.text('✅ 配置验证成功').css('color', '#48bb78');
+                toastr.success(`API配置验证成功！类型: ${settings.apiType}，URL: ${settings.apiUrl}`);
+                toastr.info('注意：自定义API配置功能正在开发中，目前仅验证配置完整性');
             }
+
+            // 保存测试结果
+            saveSillyTavernSettings();
+            return true;
 
         } catch (error) {
             statusElement.text('❌ 连接失败').css('color', '#f56565');
             toastr.error('连接测试失败: ' + error.message);
+
+            // 提供详细的错误帮助
+            if (error.message.includes('API不可用')) {
+                setTimeout(() => {
+                    toastr.info('请确保：1. SillyTavern正在运行 2. 已在SillyTavern中配置并连接API 3. 刷新页面重试', '', { timeOut: 8000 });
+                }, 1000);
+            }
+
             return false;
         } finally {
             testButton.prop('disabled', false);
@@ -326,6 +472,9 @@ jQuery(async () => {
         const settings = {
             apiType: $('#sillytavern-api-select').val(),
             selectedCharacter: $('#sillytavern-character-select').val(),
+            apiUrl: $('#api-url-input').val(),
+            apiKey: $('#api-key-input').val(),
+            apiModel: $('#api-model-input').val(),
             lastTestTime: Date.now(),
             lastTestResult: $('#connection-status').text().includes('✅')
         };
@@ -344,6 +493,12 @@ jQuery(async () => {
                 const settings = JSON.parse(saved);
                 $('#sillytavern-api-select').val(settings.apiType || '');
                 $('#sillytavern-character-select').val(settings.selectedCharacter || '');
+                $('#api-url-input').val(settings.apiUrl || '');
+                $('#api-key-input').val(settings.apiKey || '');
+                $('#api-model-input').val(settings.apiModel || '');
+
+                // 根据API类型显示/隐藏配置输入框
+                toggleApiConfigInputs(settings.apiType);
 
                 // 显示上次测试结果
                 if (settings.lastTestResult && settings.lastTestTime) {
@@ -357,6 +512,59 @@ jQuery(async () => {
             console.error(`[${extensionName}] 加载SillyTavern设置失败:`, error);
         }
         return {};
+    }
+
+    /**
+     * 切换API配置输入框的显示状态
+     */
+    function toggleApiConfigInputs(apiType) {
+        const container = $('#api-config-container');
+        if (apiType && apiType !== 'auto' && apiType !== '') {
+            container.show();
+
+            // 根据API类型设置默认值
+            const defaults = {
+                'openai': { url: 'https://api.openai.com/v1', model: 'gpt-4' },
+                'claude': { url: 'https://api.anthropic.com', model: 'claude-3-sonnet-20240229' },
+                'google': { url: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-pro' },
+                'mistral': { url: 'https://api.mistral.ai/v1', model: 'mistral-medium' },
+                'kobold': { url: 'http://localhost:5001', model: 'kobold' },
+                'ollama': { url: 'http://localhost:11434', model: 'llama2' },
+                'tabby': { url: 'http://localhost:5000', model: 'tabby' },
+                'horde': { url: 'https://horde.koboldai.net', model: 'horde' }
+            };
+
+            if (defaults[apiType] && !$('#api-url-input').val()) {
+                $('#api-url-input').attr('placeholder', defaults[apiType].url);
+                $('#api-model-input').attr('placeholder', defaults[apiType].model);
+            }
+        } else {
+            container.hide();
+        }
+    }
+
+    /**
+     * 检测并显示SillyTavern配置
+     */
+    async function detectAndShowConfig() {
+        try {
+            $('#connection-status').text('🔄 检测配置中...').css('color', '#ffa500');
+
+            const config = await detectSillyTavernConfig();
+            if (config.available) {
+                const message = `检测到配置: ${config.api_type || '未知'} (${config.source || '未知来源'})`;
+                $('#connection-status').text(`✅ ${message}`).css('color', '#48bb78');
+                toastr.success(`自动检测成功！${message}`);
+
+                console.log(`[${extensionName}] 检测到的完整配置:`, config);
+            } else {
+                $('#connection-status').text('❌ 未检测到配置').css('color', '#f56565');
+                toastr.warning('未能检测到SillyTavern配置，请确保SillyTavern正在运行并已配置API');
+            }
+        } catch (error) {
+            $('#connection-status').text('❌ 检测失败').css('color', '#f56565');
+            toastr.error('配置检测失败: ' + error.message);
+        }
     }
 
     /**
@@ -652,9 +860,16 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
 
         // 绑定SillyTavern相关事件
         $('#sillytavern-api-select').on('change', function() {
+            const apiType = $(this).val();
+            toggleApiConfigInputs(apiType);
             saveSillyTavernSettings();
             // 清除之前的测试结果
             $('#connection-status').text('未测试').css('color', '#888');
+
+            // 如果选择了自动读取，尝试检测配置
+            if (apiType === 'auto') {
+                detectAndShowConfig();
+            }
         });
 
         $('#sillytavern-character-select').on('change', function() {
@@ -663,6 +878,11 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
             if ($(this).val()) {
                 toastr.success(`已选择角色卡: ${selectedChar.split(' - ')[0]}`);
             }
+        });
+
+        // 绑定API配置输入框事件
+        $('#api-url-input, #api-key-input, #api-model-input').on('input', function() {
+            saveSillyTavernSettings();
         });
 
         $('#test-connection-btn').on('click', function(e) {
@@ -2120,6 +2340,7 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
                             </label>
                             <select id="sillytavern-api-select" style="width: 100%; padding: 8px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
                                 <option value="">请选择API类型...</option>
+                                <option value="auto">🔄 读取SillyTavern已配置的API</option>
                                 <option value="openai">OpenAI (ChatGPT)</option>
                                 <option value="claude">Claude (Anthropic)</option>
                                 <option value="google">Google AI Studio</option>
@@ -2130,6 +2351,34 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
                                 <option value="horde">AI Horde (免费)</option>
                                 <option value="custom">自定义API</option>
                             </select>
+                        </div>
+
+                        <!-- API配置输入框 -->
+                        <div id="api-config-container" style="display: none; margin-top: 10px;">
+                            <div style="margin-bottom: 10px;">
+                                <label for="api-url-input" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
+                                    API URL:
+                                </label>
+                                <input id="api-url-input" type="text" placeholder="例如: https://api.openai.com/v1"
+                                       style="width: 100%; padding: 6px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+                            </div>
+                            <div style="margin-bottom: 10px;">
+                                <label for="api-key-input" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
+                                    API Key:
+                                </label>
+                                <input id="api-key-input" type="password" placeholder="输入你的API密钥"
+                                       style="width: 100%; padding: 6px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+                            </div>
+                            <div style="margin-bottom: 10px;">
+                                <label for="api-model-input" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
+                                    模型名称:
+                                </label>
+                                <input id="api-model-input" type="text" placeholder="例如: gpt-4, claude-3-sonnet"
+                                       style="width: 100%; padding: 6px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+                            </div>
+                            <small style="color: #888; font-size: 0.8em;">
+                                仅在选择非"读取SillyTavern已配置的API"选项时需要填写
+                            </small>
                         </div>
 
                         <div class="flex-container">

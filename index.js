@@ -19,8 +19,6 @@ jQuery(async () => {
     const STORAGE_KEY_ENABLED = "virtual-pet-enabled";
     const STORAGE_KEY_PET_DATA = "virtual-pet-data";
     const STORAGE_KEY_CUSTOM_AVATAR = "virtual-pet-custom-avatar";
-    const STORAGE_KEY_API_TYPE = "virtual-pet-api-type";
-    const STORAGE_KEY_API_CONFIG = "virtual-pet-api-config";
     
     // DOM IDs and Selectors
     const BUTTON_ID = "virtual-pet-button";
@@ -107,18 +105,6 @@ jQuery(async () => {
         'smart': "一只聪明的鸟，喜欢说俏皮话，有时会调皮捣蛋。说话机智幽默，喜欢用双关语和小聪明，偶尔会炫耀知识。"
     };
 
-    // -----------------------------------------------------------------
-    // 3. API类型定义
-    // -----------------------------------------------------------------
-
-    const API_TYPES = {
-        'sillytavern': '🎭 SillyTavern当前API',
-        'openai': '🤖 OpenAI API',
-        'claude': '🧠 Claude API',
-        'local': '🏠 本地模型API',
-        'custom': '⚙️ 自定义API'
-    };
-
     /**
      * 获取当前有效的人设
      * @returns {string} 当前人设描述
@@ -153,69 +139,9 @@ jQuery(async () => {
         console.log(`[${extensionName}] 人设内容: ${petData.personality}`);
     }
 
-    /**
-     * 获取当前选择的API类型
-     * @returns {string} 当前API类型
-     */
-    function getCurrentAPIType() {
-        return localStorage.getItem(STORAGE_KEY_API_TYPE) || 'sillytavern';
-    }
-
-    /**
-     * 保存API设置
-     * @param {string} type API类型
-     * @param {object} config API配置
-     */
-    function saveAPISettings(type, config = {}) {
-        localStorage.setItem(STORAGE_KEY_API_TYPE, type);
-        localStorage.setItem(STORAGE_KEY_API_CONFIG, JSON.stringify(config));
-
-        console.log(`[${extensionName}] API已更新为: ${API_TYPES[type] || type}`);
-        console.log(`[${extensionName}] API配置:`, config);
-    }
-
-    /**
-     * 获取API配置
-     * @returns {object} API配置对象
-     */
-    function getAPIConfig() {
-        try {
-            const config = localStorage.getItem(STORAGE_KEY_API_CONFIG);
-            return config ? JSON.parse(config) : {};
-        } catch (error) {
-            console.warn(`[${extensionName}] 解析API配置失败:`, error);
-            return {};
-        }
-    }
-
     // -----------------------------------------------------------------
     // SillyTavern API 集成
     // -----------------------------------------------------------------
-
-    /**
-     * 调用AI生成API（支持多种后端）
-     * @param {string} prompt - 要发送给AI的提示词
-     * @param {number} timeout - 超时时间（毫秒），默认10秒
-     * @returns {Promise<string>} - AI生成的回复
-     */
-    async function callAI(prompt, timeout = 10000) {
-        const apiType = getCurrentAPIType();
-
-        switch(apiType) {
-            case 'sillytavern':
-                return await callSillyTavernAPI(prompt, timeout);
-            case 'openai':
-                return await callOpenAIAPI(prompt, timeout);
-            case 'claude':
-                return await callClaudeAPI(prompt, timeout);
-            case 'local':
-            case 'custom':
-                return await callCustomAPI(prompt, timeout);
-            default:
-                console.warn(`[${extensionName}] 未知的API类型: ${apiType}，回退到SillyTavern API`);
-                return await callSillyTavernAPI(prompt, timeout);
-        }
-    }
 
     /**
      * 调用SillyTavern的AI生成API
@@ -287,112 +213,6 @@ jQuery(async () => {
     }
 
     /**
-     * 调用OpenAI API
-     * @param {string} prompt - 提示词
-     * @param {number} timeout - 超时时间
-     * @returns {Promise<string>} - AI回复
-     */
-    async function callOpenAIAPI(prompt, timeout = 10000) {
-        const config = getAPIConfig();
-        if (!config.apiKey) {
-            throw new Error('OpenAI API密钥未配置');
-        }
-
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${config.apiKey}`
-            },
-            body: JSON.stringify({
-                model: config.model || 'gpt-3.5-turbo',
-                messages: [{ role: 'user', content: prompt }],
-                max_tokens: 100,
-                temperature: 0.8
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error(`OpenAI API调用失败: ${response.status}`);
-        }
-
-        const data = await response.json();
-        return data.choices[0]?.message?.content || '无回复';
-    }
-
-    /**
-     * 调用Claude API
-     * @param {string} prompt - 提示词
-     * @param {number} timeout - 超时时间
-     * @returns {Promise<string>} - AI回复
-     */
-    async function callClaudeAPI(prompt, timeout = 10000) {
-        const config = getAPIConfig();
-        if (!config.apiKey) {
-            throw new Error('Claude API密钥未配置');
-        }
-
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': config.apiKey,
-                'anthropic-version': '2023-06-01'
-            },
-            body: JSON.stringify({
-                model: config.model || 'claude-3-haiku-20240307',
-                max_tokens: 100,
-                messages: [{ role: 'user', content: prompt }]
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error(`Claude API调用失败: ${response.status}`);
-        }
-
-        const data = await response.json();
-        return data.content[0]?.text || '无回复';
-    }
-
-    /**
-     * 调用自定义API（本地或自定义）
-     * @param {string} prompt - 提示词
-     * @param {number} timeout - 超时时间
-     * @returns {Promise<string>} - AI回复
-     */
-    async function callCustomAPI(prompt, timeout = 10000) {
-        const config = getAPIConfig();
-        if (!config.apiUrl) {
-            throw new Error('API地址未配置');
-        }
-
-        const headers = {
-            'Content-Type': 'application/json'
-        };
-
-        if (config.apiKey) {
-            headers['Authorization'] = `Bearer ${config.apiKey}`;
-        }
-
-        const response = await fetch(config.apiUrl, {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify({
-                messages: [{ role: 'user', content: prompt }],
-                max_tokens: 100,
-                temperature: 0.8
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error(`自定义API调用失败: ${response.status}`);
-        }
-
-        const data = await response.json();
-        return data.choices?.[0]?.message?.content || data.content?.[0]?.text || '无回复';
-    }
-
-    /**
      * 检查SillyTavern API是否可用
      * @returns {boolean} - API是否可用
      */
@@ -402,27 +222,6 @@ jQuery(async () => {
             (typeof window.SillyTavern !== 'undefined' && window.SillyTavern.generateReply) ||
             typeof window.Generate === 'function'
         );
-    }
-
-    /**
-     * 检查当前选择的API是否可用
-     * @returns {boolean} - API是否可用
-     */
-    function isCurrentAPIAvailable() {
-        const apiType = getCurrentAPIType();
-
-        switch(apiType) {
-            case 'sillytavern':
-                return isSillyTavernAPIAvailable();
-            case 'openai':
-            case 'claude':
-            case 'local':
-            case 'custom':
-                const config = getAPIConfig();
-                return !!(config.apiKey || config.apiUrl);
-            default:
-                return false;
-        }
     }
 
     /**
@@ -493,10 +292,7 @@ jQuery(async () => {
      */
     async function handleAIReply(action, fallbackMessage) {
         try {
-            const apiType = getCurrentAPIType();
-            const apiAvailable = isCurrentAPIAvailable();
-
-            if (apiAvailable) {
+            if (isSillyTavernAPIAvailable()) {
                 // 显示加载状态
                 const loadingToast = toastr.info(`${petData.name} 正在思考...`, "", {
                     timeOut: 0,
@@ -507,7 +303,7 @@ jQuery(async () => {
                 try {
                     // 构建Prompt并调用AI
                     const prompt = buildInteractionPrompt(action);
-                    const aiReply = await callAI(prompt, 8000); // 8秒超时
+                    const aiReply = await callSillyTavernAPI(prompt, 8000); // 8秒超时
 
                     // 清除加载提示
                     toastr.clear(loadingToast);
@@ -518,32 +314,28 @@ jQuery(async () => {
                         extendedTimeOut: 2000
                     });
 
-                    console.log(`[${extensionName}] AI回复成功 (${API_TYPES[apiType]}): ${aiReply}`);
+                    console.log(`[${extensionName}] AI回复成功: ${aiReply}`);
 
                 } catch (apiError) {
                     // 清除加载提示
                     toastr.clear(loadingToast);
 
-                    console.warn(`[${extensionName}] AI回复失败 (${API_TYPES[apiType]})，使用回退消息:`, apiError);
+                    console.warn(`[${extensionName}] AI回复失败，使用回退消息:`, apiError);
                     toastr.success(fallbackMessage, "", {
                         timeOut: 4000,
                         extendedTimeOut: 1000
                     });
 
-                    // 如果是超时或配置错误，给用户提示
+                    // 如果是超时错误，给用户一个提示
                     if (apiError.message.includes('超时')) {
                         setTimeout(() => {
                             toastr.warning("AI回复超时，已使用默认回复", "", { timeOut: 3000 });
-                        }, 500);
-                    } else if (apiError.message.includes('未配置') || apiError.message.includes('密钥')) {
-                        setTimeout(() => {
-                            toastr.warning("API配置有误，请检查设置", "", { timeOut: 3000 });
                         }, 500);
                     }
                 }
             } else {
                 // API不可用，直接使用回退消息
-                console.log(`[${extensionName}] ${API_TYPES[apiType]} 不可用，使用静态回复`);
+                console.log(`[${extensionName}] SillyTavern API不可用，使用静态回复`);
                 toastr.success(fallbackMessage, "", {
                     timeOut: 4000,
                     extendedTimeOut: 1000
@@ -563,7 +355,7 @@ jQuery(async () => {
         // 加载当前设置
         const currentPersonalityType = localStorage.getItem(`${extensionName}-personality-type`) || 'default';
         const customPersonality = localStorage.getItem(`${extensionName}-custom-personality`) || '';
-        const currentAPIType = getCurrentAPIType();
+        const currentAPIType = localStorage.getItem(STORAGE_KEY_API_TYPE) || 'sillytavern';
 
         // 设置下拉框的值
         $("#virtual-pet-personality-select").val(currentPersonalityType);
@@ -574,7 +366,7 @@ jQuery(async () => {
         toggleCustomPersonalityInput(currentPersonalityType === 'custom');
         toggleAPIConfigInput(currentAPIType);
 
-        // 人设选择事件监听器
+        // 添加事件监听器
         $("#virtual-pet-personality-select").on('change', function() {
             const selectedType = $(this).val();
             const isCustom = selectedType === 'custom';
@@ -730,15 +522,26 @@ jQuery(async () => {
 
         if (formHTML) {
             formHTML += `
-                <button id="save-api-config-btn" style="
-                    padding: 6px 12px;
-                    background: #43b581;
-                    color: white;
-                    border: none;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    margin-top: 8px;
-                ">保存配置</button>
+                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                    <button id="save-api-config-btn" style="
+                        padding: 6px 12px;
+                        background: #43b581;
+                        color: white;
+                        border: none;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        flex: 1;
+                    ">保存配置</button>
+                    <button id="test-api-connection-btn" style="
+                        padding: 6px 12px;
+                        background: #7289da;
+                        color: white;
+                        border: none;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        flex: 1;
+                    ">测试连接</button>
+                </div>
             `;
         }
 
@@ -747,6 +550,11 @@ jQuery(async () => {
         // 绑定保存配置事件
         $("#save-api-config-btn").on('click', function() {
             saveCurrentAPIConfig(apiType);
+        });
+
+        // 绑定测试连接事件
+        $("#test-api-connection-btn").on('click', function() {
+            testAPIConnection(apiType);
         });
     }
 
@@ -767,6 +575,82 @@ jQuery(async () => {
 
         saveAPISettings(apiType, config);
         toastr.success("API配置已保存！");
+    }
+
+    /**
+     * 测试API连接
+     * @param {string} apiType API类型
+     */
+    async function testAPIConnection(apiType) {
+        const testButton = $("#test-api-connection-btn");
+        const originalText = testButton.text();
+
+        // 显示测试中状态
+        testButton.text("测试中...").prop('disabled', true);
+
+        try {
+            // 先保存当前配置
+            saveCurrentAPIConfig(apiType);
+
+            // 构建测试提示词
+            const testPrompt = "请简单回复'连接成功'来确认API工作正常。";
+
+            // 根据API类型调用相应的测试函数
+            let result;
+            switch(apiType) {
+                case 'openai':
+                    result = await callOpenAIAPI(testPrompt, 10000);
+                    break;
+                case 'claude':
+                    result = await callClaudeAPI(testPrompt, 10000);
+                    break;
+                case 'local':
+                case 'custom':
+                    result = await callCustomAPI(testPrompt, 10000);
+                    break;
+                default:
+                    throw new Error('不支持的API类型');
+            }
+
+            // 测试成功
+            toastr.success(`🎉 ${API_TYPES[apiType]} 连接测试成功！\n回复: ${result}`, "", {
+                timeOut: 8000,
+                extendedTimeOut: 3000
+            });
+
+            console.log(`[${extensionName}] API连接测试成功 (${apiType}):`, result);
+
+        } catch (error) {
+            // 测试失败
+            console.error(`[${extensionName}] API连接测试失败 (${apiType}):`, error);
+
+            let errorMessage = "连接测试失败";
+            if (error.message.includes('密钥')) {
+                errorMessage = "API密钥无效或未配置";
+            } else if (error.message.includes('地址')) {
+                errorMessage = "API地址无效或无法访问";
+            } else if (error.message.includes('401')) {
+                errorMessage = "API密钥无效，请检查密钥是否正确";
+            } else if (error.message.includes('403')) {
+                errorMessage = "API访问被拒绝，请检查权限";
+            } else if (error.message.includes('429')) {
+                errorMessage = "API请求频率过高，请稍后再试";
+            } else if (error.message.includes('500')) {
+                errorMessage = "API服务器内部错误";
+            } else if (error.message.includes('网络')) {
+                errorMessage = "网络连接失败，请检查网络设置";
+            } else {
+                errorMessage = `连接失败: ${error.message}`;
+            }
+
+            toastr.error(`❌ ${API_TYPES[apiType]} ${errorMessage}`, "", {
+                timeOut: 10000,
+                extendedTimeOut: 5000
+            });
+        } finally {
+            // 恢复按钮状态
+            testButton.text(originalText).prop('disabled', false);
+        }
     }
 
     // -----------------------------------------------------------------
@@ -2186,29 +2070,6 @@ jQuery(async () => {
 
                         <small class="notes" style="margin-top: 10px; display: block;">
                             选择或自定义宠物的性格，AI会根据人设生成个性化回复
-                        </small>
-
-                        <hr style="margin: 15px 0; border: none; border-top: 1px solid #444;">
-
-                        <div class="flex-container">
-                            <label for="virtual-pet-api-select" style="display: block; margin-bottom: 8px; font-weight: bold;">
-                                🔌 AI API选择
-                            </label>
-                            <select id="virtual-pet-api-select" style="width: 100%; padding: 8px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
-                                <option value="sillytavern">🎭 SillyTavern当前API</option>
-                                <option value="openai">🤖 OpenAI API</option>
-                                <option value="claude">🧠 Claude API</option>
-                                <option value="local">🏠 本地模型API</option>
-                                <option value="custom">⚙️ 自定义API</option>
-                            </select>
-                        </div>
-
-                        <div id="virtual-pet-api-config-container" style="display: none; margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 4px; border: 1px solid #555;">
-                            <!-- API配置表单将在这里动态生成 -->
-                        </div>
-
-                        <small class="notes" style="margin-top: 10px; display: block;">
-                            选择AI后端服务，SillyTavern API使用当前连接的模型，其他选项需要配置相应的API密钥
                         </small>
                     </div>
                 </div>

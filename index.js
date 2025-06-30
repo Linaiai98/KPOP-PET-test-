@@ -267,16 +267,42 @@ jQuery(async () => {
         try {
             console.log(`[${extensionName}] 开始获取SillyTavern角色卡列表...`);
 
-            // 方法1: 通过SillyTavern上下文获取 - 最可靠的方法
+            // 方法1: 通过SillyTavern的getCharacters函数 - 最直接的方法
             if (window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
                 try {
                     const context = window.SillyTavern.getContext();
+
+                    // 尝试使用getCharacters函数
+                    if (typeof context.getCharacters === 'function') {
+                        console.log(`[${extensionName}] 使用getCharacters()函数获取角色...`);
+                        try {
+                            const characters = await context.getCharacters();
+                            if (Array.isArray(characters) && characters.length > 0) {
+                                console.log(`[${extensionName}] getCharacters()返回数据示例:`, characters.slice(0, 1));
+                                const result = characters
+                                    .filter(char => char && (char.name || char.data?.name))
+                                    .map(char => ({
+                                        name: char.data?.name || char.name || '未知角色',
+                                        id: char.avatar || char.name || char.data?.name,
+                                        description: (char.data?.description || char.description || char.data?.personality || char.personality || '').substring(0, 100),
+                                        creator: char.data?.creator || char.creator || '',
+                                        tags: char.data?.tags || char.tags || []
+                                    }));
+                                console.log(`[${extensionName}] 通过getCharacters()获取到 ${result.length} 个角色`);
+                                return result;
+                            }
+                        } catch (e) {
+                            console.log(`[${extensionName}] getCharacters()调用失败:`, e.message);
+                        }
+                    }
+
+                    // 回退到上下文中的characters数组
                     if (context.characters && Array.isArray(context.characters)) {
                         console.log(`[${extensionName}] 从SillyTavern上下文获取角色...`);
                         console.log(`[${extensionName}] 原始角色数据示例:`, context.characters.slice(0, 1));
 
                         const result = context.characters
-                            .filter(char => char && (char.name || char.data?.name)) // 过滤无效角色
+                            .filter(char => char && (char.name || char.data?.name))
                             .map(char => ({
                                 name: char.data?.name || char.name || '未知角色',
                                 id: char.avatar || char.name || char.data?.name,
@@ -310,37 +336,52 @@ jQuery(async () => {
                 return result;
             }
 
-            // 方法3: 通过SillyTavern API获取
-            try {
-                console.log(`[${extensionName}] 尝试通过API获取角色列表...`);
-                const response = await fetch('/api/characters/all', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({})
-                });
+            // 方法3: 通过SillyTavern API获取 - 使用正确的认证
+            if (window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
+                try {
+                    console.log(`[${extensionName}] 尝试通过API获取角色列表...`);
+                    const context = window.SillyTavern.getContext();
 
-                if (response.ok) {
-                    const characters = await response.json();
-                    console.log(`[${extensionName}] API返回数据示例:`, characters.slice(0, 1));
-
-                    if (Array.isArray(characters) && characters.length > 0) {
-                        const result = characters
-                            .filter(char => char && (char.name || char.data?.name))
-                            .map(char => ({
-                                name: char.data?.name || char.name || '未知角色',
-                                id: char.avatar || char.name,
-                                description: (char.data?.description || char.description || '').substring(0, 100),
-                                creator: char.data?.creator || char.creator || '',
-                                tags: char.data?.tags || char.tags || []
-                            }));
-                        console.log(`[${extensionName}] 通过API获取到 ${result.length} 个角色`);
-                        return result;
+                    // 获取正确的请求头
+                    let headers = { 'Content-Type': 'application/json' };
+                    if (context.getRequestHeaders && typeof context.getRequestHeaders === 'function') {
+                        try {
+                            const stHeaders = context.getRequestHeaders();
+                            headers = { ...headers, ...stHeaders };
+                        } catch (e) {
+                            console.log(`[${extensionName}] 获取请求头失败:`, e.message);
+                        }
                     }
-                } else {
-                    console.log(`[${extensionName}] API请求失败:`, response.status, response.statusText);
+
+                    const response = await fetch('/api/characters/all', {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify({})
+                    });
+
+                    if (response.ok) {
+                        const characters = await response.json();
+                        console.log(`[${extensionName}] API返回数据示例:`, characters.slice(0, 1));
+
+                        if (Array.isArray(characters) && characters.length > 0) {
+                            const result = characters
+                                .filter(char => char && (char.name || char.data?.name))
+                                .map(char => ({
+                                    name: char.data?.name || char.name || '未知角色',
+                                    id: char.avatar || char.name,
+                                    description: (char.data?.description || char.description || '').substring(0, 100),
+                                    creator: char.data?.creator || char.creator || '',
+                                    tags: char.data?.tags || char.tags || []
+                                }));
+                            console.log(`[${extensionName}] 通过API获取到 ${result.length} 个角色`);
+                            return result;
+                        }
+                    } else {
+                        console.log(`[${extensionName}] API请求失败:`, response.status, response.statusText);
+                    }
+                } catch (e) {
+                    console.log(`[${extensionName}] API角色列表获取失败:`, e.message);
                 }
-            } catch (e) {
-                console.log(`[${extensionName}] API角色列表获取失败:`, e.message);
             }
 
             // 方法4: 检查其他可能的全局变量
@@ -755,12 +796,25 @@ jQuery(async () => {
             console.log(`[${extensionName}] 角色相关函数:`, charFunctions);
         }
 
-        // 2. 尝试通过API获取角色
+        // 2. 尝试通过API获取角色 - 使用正确的认证
         try {
             console.log(`[${extensionName}] 尝试API调用 /api/characters/all...`);
+
+            // 获取SillyTavern的请求头
+            let headers = { 'Content-Type': 'application/json' };
+            if (context.getRequestHeaders && typeof context.getRequestHeaders === 'function') {
+                try {
+                    const stHeaders = context.getRequestHeaders();
+                    headers = { ...headers, ...stHeaders };
+                    console.log(`[${extensionName}] 使用SillyTavern请求头:`, headers);
+                } catch (e) {
+                    console.log(`[${extensionName}] 获取请求头失败:`, e.message);
+                }
+            }
+
             const response = await fetch('/api/characters/all', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: headers,
                 body: JSON.stringify({})
             });
 
@@ -771,6 +825,26 @@ jQuery(async () => {
             } else {
                 const errorText = await response.text();
                 console.log(`[${extensionName}] API错误响应:`, errorText);
+
+                // 尝试其他API端点
+                console.log(`[${extensionName}] 尝试备用API端点...`);
+                const endpoints = ['/api/characters', '/characters', '/api/v1/characters'];
+                for (const endpoint of endpoints) {
+                    try {
+                        const altResponse = await fetch(endpoint, {
+                            method: 'GET',
+                            headers: headers
+                        });
+                        console.log(`[${extensionName}] ${endpoint} 响应状态:`, altResponse.status);
+                        if (altResponse.ok) {
+                            const altData = await altResponse.json();
+                            console.log(`[${extensionName}] ${endpoint} 返回数据:`, altData);
+                            break;
+                        }
+                    } catch (e) {
+                        console.log(`[${extensionName}] ${endpoint} 调用失败:`, e.message);
+                    }
+                }
             }
         } catch (e) {
             console.log(`[${extensionName}] API调用异常:`, e.message);

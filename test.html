@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>虚拟宠物系统 - API选择测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #2f3136;
+            color: #dcddde;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: #36393f;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        
+        h1 {
+            color: #7289da;
+            text-align: center;
+        }
+        
+        .settings-panel {
+            background: #40444b;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        
+        select, input, textarea {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 8px;
+            background: #2f3136;
+            color: #dcddde;
+            border: 1px solid #444;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        
+        button {
+            padding: 8px 16px;
+            background: #43b581;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+        
+        button:hover {
+            background: #3ca374;
+        }
+        
+        .config-container {
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 4px;
+            border: 1px solid #555;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        hr {
+            margin: 15px 0;
+            border: none;
+            border-top: 1px solid #444;
+        }
+        
+        small {
+            color: #888;
+            font-size: 0.8em;
+        }
+        
+        .test-section {
+            background: #40444b;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        
+        .status.success {
+            background: rgba(67, 181, 129, 0.2);
+            border: 1px solid #43b581;
+        }
+        
+        .status.error {
+            background: rgba(240, 71, 71, 0.2);
+            border: 1px solid #f04747;
+        }
+        
+        .status.info {
+            background: rgba(114, 137, 218, 0.2);
+            border: 1px solid #7289da;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐾 虚拟宠物系统 - API选择功能测试</h1>
+        
+        <div class="settings-panel">
+            <h3>🎭 人设选择</h3>
+            <label for="personality-select">宠物人设选择</label>
+            <select id="personality-select">
+                <option value="default">🐱 默认 - 高冷但温柔的猫</option>
+                <option value="cheerful">🐶 活泼 - 热情洋溢的小狗</option>
+                <option value="elegant">🐉 优雅 - 古典文雅的龙</option>
+                <option value="shy">🐰 害羞 - 轻声细语的兔子</option>
+                <option value="smart">🐦 聪明 - 机智幽默的鸟</option>
+                <option value="custom">✏️ 自定义人设</option>
+            </select>
+            
+            <div id="custom-personality-container" class="hidden">
+                <label for="custom-personality">自定义人设描述：</label>
+                <textarea id="custom-personality" 
+                          placeholder="描述你的宠物性格、喜好和特点..."
+                          rows="3"
+                          maxlength="500"></textarea>
+                <small>最多500字符，这将影响宠物与你互动时的回复风格</small>
+            </div>
+            
+            <hr>
+            
+            <h3>🔌 AI API选择</h3>
+            <label for="api-select">AI API选择</label>
+            <select id="api-select">
+                <option value="sillytavern">🎭 SillyTavern当前API</option>
+                <option value="openai">🤖 OpenAI API</option>
+                <option value="claude">🧠 Claude API</option>
+                <option value="local">🏠 本地模型API</option>
+                <option value="custom">⚙️ 自定义API</option>
+            </select>
+            
+            <div id="api-config-container" class="config-container hidden">
+                <!-- API配置表单将在这里动态生成 -->
+            </div>
+            
+            <small>选择AI后端服务，SillyTavern API使用当前连接的模型，其他选项需要配置相应的API密钥</small>
+        </div>
+        
+        <div class="test-section">
+            <h3>🧪 功能测试</h3>
+            <button onclick="testPersonalityChange()">测试人设切换</button>
+            <button onclick="testAPIChange()">测试API切换</button>
+            <button onclick="testConfigSave()">测试配置保存</button>
+            <button onclick="showCurrentSettings()">显示当前设置</button>
+            
+            <div id="test-results"></div>
+        </div>
+    </div>
+
+    <script>
+        // 模拟扩展的核心功能
+        const extensionName = "virtual-pet-system";
+        
+        // API类型定义
+        const API_TYPES = {
+            'sillytavern': '🎭 SillyTavern当前API',
+            'openai': '🤖 OpenAI API',
+            'claude': '🧠 Claude API',
+            'local': '🏠 本地模型API',
+            'custom': '⚙️ 自定义API'
+        };
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeTestPage();
+        });
+        
+        function initializeTestPage() {
+            // 加载保存的设置
+            const personalityType = localStorage.getItem(`${extensionName}-personality-type`) || 'default';
+            const apiType = localStorage.getItem(`${extensionName}-api-type`) || 'sillytavern';
+            
+            document.getElementById('personality-select').value = personalityType;
+            document.getElementById('api-select').value = apiType;
+            
+            // 绑定事件
+            document.getElementById('personality-select').addEventListener('change', handlePersonalityChange);
+            document.getElementById('api-select').addEventListener('change', handleAPIChange);
+            
+            // 初始化显示状态
+            toggleCustomPersonalityInput(personalityType === 'custom');
+            toggleAPIConfigInput(apiType);
+            
+            showStatus('页面初始化完成', 'success');
+        }
+        
+        function handlePersonalityChange() {
+            const selectedType = document.getElementById('personality-select').value;
+            toggleCustomPersonalityInput(selectedType === 'custom');
+            
+            localStorage.setItem(`${extensionName}-personality-type`, selectedType);
+            showStatus(`人设已切换到: ${selectedType}`, 'success');
+        }
+        
+        function handleAPIChange() {
+            const selectedType = document.getElementById('api-select').value;
+            toggleAPIConfigInput(selectedType);
+            
+            localStorage.setItem(`${extensionName}-api-type`, selectedType);
+            showStatus(`API已切换到: ${API_TYPES[selectedType]}`, 'success');
+        }
+        
+        function toggleCustomPersonalityInput(show) {
+            const container = document.getElementById('custom-personality-container');
+            if (show) {
+                container.classList.remove('hidden');
+            } else {
+                container.classList.add('hidden');
+            }
+        }
+        
+        function toggleAPIConfigInput(apiType) {
+            const container = document.getElementById('api-config-container');
+            
+            if (apiType === 'sillytavern') {
+                container.classList.add('hidden');
+            } else {
+                container.classList.remove('hidden');
+                generateAPIConfigForm(apiType);
+            }
+        }
+        
+        function generateAPIConfigForm(apiType) {
+            const container = document.getElementById('api-config-container');
+            let formHTML = '';
+            
+            switch(apiType) {
+                case 'openai':
+                    formHTML = `
+                        <label>API密钥：</label>
+                        <input type="password" id="api-key-input" placeholder="sk-...">
+                        <label>模型：</label>
+                        <select id="model-select">
+                            <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                            <option value="gpt-4">GPT-4</option>
+                            <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                        </select>
+                    `;
+                    break;
+                    
+                case 'claude':
+                    formHTML = `
+                        <label>API密钥：</label>
+                        <input type="password" id="api-key-input" placeholder="sk-ant-...">
+                        <label>模型：</label>
+                        <select id="model-select">
+                            <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+                            <option value="claude-3-sonnet-20240229">Claude 3 Sonnet</option>
+                            <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+                        </select>
+                    `;
+                    break;
+                    
+                case 'local':
+                    formHTML = `
+                        <label>API地址：</label>
+                        <input type="text" id="api-url-input" placeholder="http://localhost:5000/v1/chat/completions">
+                    `;
+                    break;
+                    
+                case 'custom':
+                    formHTML = `
+                        <label>API地址：</label>
+                        <input type="text" id="api-url-input" placeholder="https://api.example.com/v1/chat/completions">
+                        <label>API密钥：</label>
+                        <input type="password" id="api-key-input" placeholder="your-api-key">
+                    `;
+                    break;
+            }
+            
+            if (formHTML) {
+                formHTML += `<button onclick="saveAPIConfig('${apiType}')">保存配置</button>`;
+            }
+            
+            container.innerHTML = formHTML;
+        }
+        
+        function saveAPIConfig(apiType) {
+            const config = {};
+            
+            const apiKeyInput = document.getElementById('api-key-input');
+            const apiUrlInput = document.getElementById('api-url-input');
+            const modelSelect = document.getElementById('model-select');
+            
+            if (apiKeyInput && apiKeyInput.value.trim()) {
+                config.apiKey = apiKeyInput.value.trim();
+            }
+            if (apiUrlInput && apiUrlInput.value.trim()) {
+                config.apiUrl = apiUrlInput.value.trim();
+            }
+            if (modelSelect && modelSelect.value) {
+                config.model = modelSelect.value;
+            }
+            
+            localStorage.setItem(`${extensionName}-api-config`, JSON.stringify(config));
+            showStatus(`${API_TYPES[apiType]} 配置已保存`, 'success');
+        }
+        
+        // 测试函数
+        function testPersonalityChange() {
+            const currentType = document.getElementById('personality-select').value;
+            showStatus(`当前人设: ${currentType}`, 'info');
+        }
+        
+        function testAPIChange() {
+            const currentType = document.getElementById('api-select').value;
+            showStatus(`当前API: ${API_TYPES[currentType]}`, 'info');
+        }
+        
+        function testConfigSave() {
+            const personalityType = localStorage.getItem(`${extensionName}-personality-type`);
+            const apiType = localStorage.getItem(`${extensionName}-api-type`);
+            const apiConfig = localStorage.getItem(`${extensionName}-api-config`);
+            
+            showStatus(`配置保存测试完成`, 'success');
+            console.log('人设类型:', personalityType);
+            console.log('API类型:', apiType);
+            console.log('API配置:', apiConfig);
+        }
+        
+        function showCurrentSettings() {
+            const personalityType = localStorage.getItem(`${extensionName}-personality-type`) || 'default';
+            const apiType = localStorage.getItem(`${extensionName}-api-type`) || 'sillytavern';
+            const apiConfig = localStorage.getItem(`${extensionName}-api-config`) || '{}';
+            
+            const settingsHTML = `
+                <h4>当前设置:</h4>
+                <p><strong>人设:</strong> ${personalityType}</p>
+                <p><strong>API:</strong> ${API_TYPES[apiType]}</p>
+                <p><strong>API配置:</strong> ${apiConfig}</p>
+            `;
+            
+            showStatus(settingsHTML, 'info');
+        }
+        
+        function showStatus(message, type = 'info') {
+            const resultsDiv = document.getElementById('test-results');
+            const statusDiv = document.createElement('div');
+            statusDiv.className = `status ${type}`;
+            statusDiv.innerHTML = message;
+            
+            resultsDiv.appendChild(statusDiv);
+            
+            // 自动滚动到底部
+            statusDiv.scrollIntoView({ behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>

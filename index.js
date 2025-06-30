@@ -19,6 +19,8 @@ jQuery(async () => {
     const STORAGE_KEY_ENABLED = "virtual-pet-enabled";
     const STORAGE_KEY_PET_DATA = "virtual-pet-data";
     const STORAGE_KEY_CUSTOM_AVATAR = "virtual-pet-custom-avatar";
+    const STORAGE_KEY_API_TYPE = "virtual-pet-api-type";
+    const STORAGE_KEY_API_CONFIG = "virtual-pet-api-config";
     
     // DOM IDs and Selectors
     const BUTTON_ID = "virtual-pet-button";
@@ -105,6 +107,18 @@ jQuery(async () => {
         'smart': "一只聪明的鸟，喜欢说俏皮话，有时会调皮捣蛋。说话机智幽默，喜欢用双关语和小聪明，偶尔会炫耀知识。"
     };
 
+    // -----------------------------------------------------------------
+    // 3. API类型定义
+    // -----------------------------------------------------------------
+
+    const API_TYPES = {
+        'sillytavern': '🎭 SillyTavern当前API',
+        'openai': '🤖 OpenAI API',
+        'claude': '🧠 Claude API',
+        'local': '🏠 本地模型API',
+        'custom': '⚙️ 自定义API'
+    };
+
     /**
      * 获取当前有效的人设
      * @returns {string} 当前人设描述
@@ -139,9 +153,69 @@ jQuery(async () => {
         console.log(`[${extensionName}] 人设内容: ${petData.personality}`);
     }
 
+    /**
+     * 获取当前选择的API类型
+     * @returns {string} 当前API类型
+     */
+    function getCurrentAPIType() {
+        return localStorage.getItem(STORAGE_KEY_API_TYPE) || 'sillytavern';
+    }
+
+    /**
+     * 保存API设置
+     * @param {string} type API类型
+     * @param {object} config API配置
+     */
+    function saveAPISettings(type, config = {}) {
+        localStorage.setItem(STORAGE_KEY_API_TYPE, type);
+        localStorage.setItem(STORAGE_KEY_API_CONFIG, JSON.stringify(config));
+
+        console.log(`[${extensionName}] API已更新为: ${API_TYPES[type] || type}`);
+        console.log(`[${extensionName}] API配置:`, config);
+    }
+
+    /**
+     * 获取API配置
+     * @returns {object} API配置对象
+     */
+    function getAPIConfig() {
+        try {
+            const config = localStorage.getItem(STORAGE_KEY_API_CONFIG);
+            return config ? JSON.parse(config) : {};
+        } catch (error) {
+            console.warn(`[${extensionName}] 解析API配置失败:`, error);
+            return {};
+        }
+    }
+
     // -----------------------------------------------------------------
     // SillyTavern API 集成
     // -----------------------------------------------------------------
+
+    /**
+     * 调用AI生成API（支持多种后端）
+     * @param {string} prompt - 要发送给AI的提示词
+     * @param {number} timeout - 超时时间（毫秒），默认10秒
+     * @returns {Promise<string>} - AI生成的回复
+     */
+    async function callAI(prompt, timeout = 10000) {
+        const apiType = getCurrentAPIType();
+
+        switch(apiType) {
+            case 'sillytavern':
+                return await callSillyTavernAPI(prompt, timeout);
+            case 'openai':
+                return await callOpenAIAPI(prompt, timeout);
+            case 'claude':
+                return await callClaudeAPI(prompt, timeout);
+            case 'local':
+            case 'custom':
+                return await callCustomAPI(prompt, timeout);
+            default:
+                console.warn(`[${extensionName}] 未知的API类型: ${apiType}，回退到SillyTavern API`);
+                return await callSillyTavernAPI(prompt, timeout);
+        }
+    }
 
     /**
      * 调用SillyTavern的AI生成API
@@ -213,6 +287,112 @@ jQuery(async () => {
     }
 
     /**
+     * 调用OpenAI API
+     * @param {string} prompt - 提示词
+     * @param {number} timeout - 超时时间
+     * @returns {Promise<string>} - AI回复
+     */
+    async function callOpenAIAPI(prompt, timeout = 10000) {
+        const config = getAPIConfig();
+        if (!config.apiKey) {
+            throw new Error('OpenAI API密钥未配置');
+        }
+
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${config.apiKey}`
+            },
+            body: JSON.stringify({
+                model: config.model || 'gpt-3.5-turbo',
+                messages: [{ role: 'user', content: prompt }],
+                max_tokens: 100,
+                temperature: 0.8
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`OpenAI API调用失败: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.choices[0]?.message?.content || '无回复';
+    }
+
+    /**
+     * 调用Claude API
+     * @param {string} prompt - 提示词
+     * @param {number} timeout - 超时时间
+     * @returns {Promise<string>} - AI回复
+     */
+    async function callClaudeAPI(prompt, timeout = 10000) {
+        const config = getAPIConfig();
+        if (!config.apiKey) {
+            throw new Error('Claude API密钥未配置');
+        }
+
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': config.apiKey,
+                'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+                model: config.model || 'claude-3-haiku-20240307',
+                max_tokens: 100,
+                messages: [{ role: 'user', content: prompt }]
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Claude API调用失败: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.content[0]?.text || '无回复';
+    }
+
+    /**
+     * 调用自定义API（本地或自定义）
+     * @param {string} prompt - 提示词
+     * @param {number} timeout - 超时时间
+     * @returns {Promise<string>} - AI回复
+     */
+    async function callCustomAPI(prompt, timeout = 10000) {
+        const config = getAPIConfig();
+        if (!config.apiUrl) {
+            throw new Error('API地址未配置');
+        }
+
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+
+        if (config.apiKey) {
+            headers['Authorization'] = `Bearer ${config.apiKey}`;
+        }
+
+        const response = await fetch(config.apiUrl, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({
+                messages: [{ role: 'user', content: prompt }],
+                max_tokens: 100,
+                temperature: 0.8
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`自定义API调用失败: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.choices?.[0]?.message?.content || data.content?.[0]?.text || '无回复';
+    }
+
+    /**
      * 检查SillyTavern API是否可用
      * @returns {boolean} - API是否可用
      */
@@ -222,6 +402,27 @@ jQuery(async () => {
             (typeof window.SillyTavern !== 'undefined' && window.SillyTavern.generateReply) ||
             typeof window.Generate === 'function'
         );
+    }
+
+    /**
+     * 检查当前选择的API是否可用
+     * @returns {boolean} - API是否可用
+     */
+    function isCurrentAPIAvailable() {
+        const apiType = getCurrentAPIType();
+
+        switch(apiType) {
+            case 'sillytavern':
+                return isSillyTavernAPIAvailable();
+            case 'openai':
+            case 'claude':
+            case 'local':
+            case 'custom':
+                const config = getAPIConfig();
+                return !!(config.apiKey || config.apiUrl);
+            default:
+                return false;
+        }
     }
 
     /**
@@ -292,7 +493,10 @@ jQuery(async () => {
      */
     async function handleAIReply(action, fallbackMessage) {
         try {
-            if (isSillyTavernAPIAvailable()) {
+            const apiType = getCurrentAPIType();
+            const apiAvailable = isCurrentAPIAvailable();
+
+            if (apiAvailable) {
                 // 显示加载状态
                 const loadingToast = toastr.info(`${petData.name} 正在思考...`, "", {
                     timeOut: 0,
@@ -303,7 +507,7 @@ jQuery(async () => {
                 try {
                     // 构建Prompt并调用AI
                     const prompt = buildInteractionPrompt(action);
-                    const aiReply = await callSillyTavernAPI(prompt, 8000); // 8秒超时
+                    const aiReply = await callAI(prompt, 8000); // 8秒超时
 
                     // 清除加载提示
                     toastr.clear(loadingToast);
@@ -314,28 +518,32 @@ jQuery(async () => {
                         extendedTimeOut: 2000
                     });
 
-                    console.log(`[${extensionName}] AI回复成功: ${aiReply}`);
+                    console.log(`[${extensionName}] AI回复成功 (${API_TYPES[apiType]}): ${aiReply}`);
 
                 } catch (apiError) {
                     // 清除加载提示
                     toastr.clear(loadingToast);
 
-                    console.warn(`[${extensionName}] AI回复失败，使用回退消息:`, apiError);
+                    console.warn(`[${extensionName}] AI回复失败 (${API_TYPES[apiType]})，使用回退消息:`, apiError);
                     toastr.success(fallbackMessage, "", {
                         timeOut: 4000,
                         extendedTimeOut: 1000
                     });
 
-                    // 如果是超时错误，给用户一个提示
+                    // 如果是超时或配置错误，给用户提示
                     if (apiError.message.includes('超时')) {
                         setTimeout(() => {
                             toastr.warning("AI回复超时，已使用默认回复", "", { timeOut: 3000 });
+                        }, 500);
+                    } else if (apiError.message.includes('未配置') || apiError.message.includes('密钥')) {
+                        setTimeout(() => {
+                            toastr.warning("API配置有误，请检查设置", "", { timeOut: 3000 });
                         }, 500);
                     }
                 }
             } else {
                 // API不可用，直接使用回退消息
-                console.log(`[${extensionName}] SillyTavern API不可用，使用静态回复`);
+                console.log(`[${extensionName}] ${API_TYPES[apiType]} 不可用，使用静态回复`);
                 toastr.success(fallbackMessage, "", {
                     timeOut: 4000,
                     extendedTimeOut: 1000
@@ -355,15 +563,18 @@ jQuery(async () => {
         // 加载当前设置
         const currentPersonalityType = localStorage.getItem(`${extensionName}-personality-type`) || 'default';
         const customPersonality = localStorage.getItem(`${extensionName}-custom-personality`) || '';
+        const currentAPIType = getCurrentAPIType();
 
         // 设置下拉框的值
         $("#virtual-pet-personality-select").val(currentPersonalityType);
         $("#virtual-pet-custom-personality").val(customPersonality);
+        $("#virtual-pet-api-select").val(currentAPIType);
 
         // 根据选择显示/隐藏自定义输入框
         toggleCustomPersonalityInput(currentPersonalityType === 'custom');
+        toggleAPIConfigInput(currentAPIType);
 
-        // 添加事件监听器
+        // 人设选择事件监听器
         $("#virtual-pet-personality-select").on('change', function() {
             const selectedType = $(this).val();
             const isCustom = selectedType === 'custom';
@@ -381,6 +592,16 @@ jQuery(async () => {
             // 自定义人设文本变化时保存
             const customText = $(this).val().trim();
             savePersonalitySettings('custom', customText);
+        });
+
+        // API选择事件监听器
+        $("#virtual-pet-api-select").on('change', function() {
+            const selectedType = $(this).val();
+            toggleAPIConfigInput(selectedType);
+
+            // 保存API类型选择
+            saveAPISettings(selectedType, getAPIConfig());
+            toastr.success(`已切换到${$(this).find('option:selected').text()}`);
         });
 
         // 启用/禁用虚拟宠物系统的事件监听器
@@ -408,6 +629,7 @@ jQuery(async () => {
         console.log(`[${extensionName}] 设置面板初始化完成`);
         console.log(`[${extensionName}] 当前人设类型: ${currentPersonalityType}`);
         console.log(`[${extensionName}] 当前人设内容: ${getCurrentPersonality()}`);
+        console.log(`[${extensionName}] 当前API类型: ${currentAPIType}`);
     }
 
     /**
@@ -420,6 +642,131 @@ jQuery(async () => {
         } else {
             $("#virtual-pet-custom-personality-container").hide();
         }
+    }
+
+    /**
+     * 切换API配置输入框的显示状态
+     * @param {string} apiType API类型
+     */
+    function toggleAPIConfigInput(apiType) {
+        const container = $("#virtual-pet-api-config-container");
+
+        if (apiType === 'sillytavern') {
+            // SillyTavern API不需要额外配置
+            container.hide();
+        } else {
+            // 其他API需要配置
+            container.show();
+            generateAPIConfigForm(apiType);
+        }
+    }
+
+    /**
+     * 生成API配置表单
+     * @param {string} apiType API类型
+     */
+    function generateAPIConfigForm(apiType) {
+        const container = $("#virtual-pet-api-config-container");
+        const config = getAPIConfig();
+
+        let formHTML = '';
+
+        switch(apiType) {
+            case 'openai':
+                formHTML = `
+                    <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">API密钥：</label>
+                    <input type="password" id="api-key-input" placeholder="sk-..."
+                           value="${config.apiKey || ''}"
+                           style="width: 100%; padding: 6px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+
+                    <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">模型：</label>
+                    <select id="model-select" style="width: 100%; padding: 6px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+                        <option value="gpt-3.5-turbo" ${config.model === 'gpt-3.5-turbo' ? 'selected' : ''}>GPT-3.5 Turbo</option>
+                        <option value="gpt-4" ${config.model === 'gpt-4' ? 'selected' : ''}>GPT-4</option>
+                        <option value="gpt-4-turbo" ${config.model === 'gpt-4-turbo' ? 'selected' : ''}>GPT-4 Turbo</option>
+                    </select>
+                `;
+                break;
+
+            case 'claude':
+                formHTML = `
+                    <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">API密钥：</label>
+                    <input type="password" id="api-key-input" placeholder="sk-ant-..."
+                           value="${config.apiKey || ''}"
+                           style="width: 100%; padding: 6px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+
+                    <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">模型：</label>
+                    <select id="model-select" style="width: 100%; padding: 6px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+                        <option value="claude-3-haiku-20240307" ${config.model === 'claude-3-haiku-20240307' ? 'selected' : ''}>Claude 3 Haiku</option>
+                        <option value="claude-3-sonnet-20240229" ${config.model === 'claude-3-sonnet-20240229' ? 'selected' : ''}>Claude 3 Sonnet</option>
+                        <option value="claude-3-opus-20240229" ${config.model === 'claude-3-opus-20240229' ? 'selected' : ''}>Claude 3 Opus</option>
+                    </select>
+                `;
+                break;
+
+            case 'local':
+                formHTML = `
+                    <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">API地址：</label>
+                    <input type="text" id="api-url-input" placeholder="http://localhost:5000/v1/chat/completions"
+                           value="${config.apiUrl || 'http://localhost:5000/v1/chat/completions'}"
+                           style="width: 100%; padding: 6px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+                `;
+                break;
+
+            case 'custom':
+                formHTML = `
+                    <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">API地址：</label>
+                    <input type="text" id="api-url-input" placeholder="https://api.example.com/v1/chat/completions"
+                           value="${config.apiUrl || ''}"
+                           style="width: 100%; padding: 6px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+
+                    <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">API密钥：</label>
+                    <input type="password" id="api-key-input" placeholder="your-api-key"
+                           value="${config.apiKey || ''}"
+                           style="width: 100%; padding: 6px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+                `;
+                break;
+        }
+
+        if (formHTML) {
+            formHTML += `
+                <button id="save-api-config-btn" style="
+                    padding: 6px 12px;
+                    background: #43b581;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    margin-top: 8px;
+                ">保存配置</button>
+            `;
+        }
+
+        container.html(formHTML);
+
+        // 绑定保存配置事件
+        $("#save-api-config-btn").on('click', function() {
+            saveCurrentAPIConfig(apiType);
+        });
+    }
+
+    /**
+     * 保存当前API配置
+     * @param {string} apiType API类型
+     */
+    function saveCurrentAPIConfig(apiType) {
+        const config = {};
+
+        const apiKey = $("#api-key-input").val().trim();
+        const apiUrl = $("#api-url-input").val().trim();
+        const model = $("#model-select").val();
+
+        if (apiKey) config.apiKey = apiKey;
+        if (apiUrl) config.apiUrl = apiUrl;
+        if (model) config.model = model;
+
+        saveAPISettings(apiType, config);
+        toastr.success("API配置已保存！");
     }
 
     // -----------------------------------------------------------------
@@ -1839,6 +2186,29 @@ jQuery(async () => {
 
                         <small class="notes" style="margin-top: 10px; display: block;">
                             选择或自定义宠物的性格，AI会根据人设生成个性化回复
+                        </small>
+
+                        <hr style="margin: 15px 0; border: none; border-top: 1px solid #444;">
+
+                        <div class="flex-container">
+                            <label for="virtual-pet-api-select" style="display: block; margin-bottom: 8px; font-weight: bold;">
+                                🔌 AI API选择
+                            </label>
+                            <select id="virtual-pet-api-select" style="width: 100%; padding: 8px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+                                <option value="sillytavern">🎭 SillyTavern当前API</option>
+                                <option value="openai">🤖 OpenAI API</option>
+                                <option value="claude">🧠 Claude API</option>
+                                <option value="local">🏠 本地模型API</option>
+                                <option value="custom">⚙️ 自定义API</option>
+                            </select>
+                        </div>
+
+                        <div id="virtual-pet-api-config-container" style="display: none; margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 4px; border: 1px solid #555;">
+                            <!-- API配置表单将在这里动态生成 -->
+                        </div>
+
+                        <small class="notes" style="margin-top: 10px; display: block;">
+                            选择AI后端服务，SillyTavern API使用当前连接的模型，其他选项需要配置相应的API密钥
                         </small>
                     </div>
                 </div>

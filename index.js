@@ -461,7 +461,22 @@ jQuery(async () => {
             // 先运行调试
             debugSillyTavernState();
 
-            const characters = await getSillyTavernCharacters();
+            let characters = await getSillyTavernCharacters();
+
+            // 如果第一次获取失败，等待一段时间后重试
+            if (characters.length === 0) {
+                console.log(`[${extensionName}] 第一次获取失败，等待2秒后重试...`);
+                toastr.info('角色卡可能还在加载中，正在重试...');
+
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                characters = await getSillyTavernCharacters();
+
+                // 如果还是失败，再试一次使用getCharacters函数
+                if (characters.length === 0) {
+                    console.log(`[${extensionName}] 尝试使用getCharacters函数...`);
+                    characters = await tryGetCharactersFromContext();
+                }
+            }
 
             // 清空现有选项（保留默认选项）
             selectElement.find('option:not(:first)').remove();
@@ -481,8 +496,8 @@ jQuery(async () => {
                 toastr.success(`成功加载 ${characters.length} 个角色卡`);
                 console.log(`[${extensionName}] 角色卡列表:`, characters.map(c => c.name));
             } else {
-                selectElement.append('<option value="" disabled>未找到角色卡 - 请查看控制台调试信息</option>');
-                toastr.warning('未找到任何角色卡，请查看浏览器控制台的调试信息');
+                selectElement.append('<option value="" disabled>未找到角色卡 - 可能需要等待SillyTavern完全加载</option>');
+                toastr.warning('未找到任何角色卡。请确保：1. SillyTavern已完全加载 2. 已导入角色卡 3. 稍后重试');
             }
 
         } catch (error) {
@@ -490,6 +505,61 @@ jQuery(async () => {
             toastr.error('刷新角色列表失败: ' + error.message);
         } finally {
             refreshButton.text('🔄 刷新角色列表').prop('disabled', false);
+        }
+    }
+
+    /**
+     * 尝试通过上下文的getCharacters函数获取角色
+     */
+    async function tryGetCharactersFromContext() {
+        try {
+            if (window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
+                const context = window.SillyTavern.getContext();
+
+                // 尝试调用getCharacters函数
+                if (typeof context.getCharacters === 'function') {
+                    console.log(`[${extensionName}] 尝试调用context.getCharacters()...`);
+                    const characters = await context.getCharacters();
+
+                    if (Array.isArray(characters) && characters.length > 0) {
+                        const result = characters
+                            .filter(char => char && (char.name || char.data?.name))
+                            .map(char => ({
+                                name: char.data?.name || char.name || '未知角色',
+                                id: char.avatar || char.name || char.data?.name,
+                                description: (char.data?.description || char.description || '').substring(0, 100),
+                                creator: char.data?.creator || char.creator || '',
+                                tags: char.data?.tags || char.tags || []
+                            }));
+                        console.log(`[${extensionName}] 通过getCharacters()获取到 ${result.length} 个角色`);
+                        return result;
+                    }
+                }
+
+                // 尝试直接访问其他可能的字段
+                const possibleFields = ['characterList', 'allCharacters', 'loadedCharacters'];
+                for (const field of possibleFields) {
+                    if (context[field] && Array.isArray(context[field]) && context[field].length > 0) {
+                        console.log(`[${extensionName}] 在上下文.${field}中找到角色数据`);
+                        const result = context[field]
+                            .filter(char => char && (char.name || char.data?.name))
+                            .map(char => ({
+                                name: char.data?.name || char.name || '未知角色',
+                                id: char.avatar || char.name || char.data?.name,
+                                description: (char.data?.description || char.description || '').substring(0, 100),
+                                creator: char.data?.creator || char.creator || '',
+                                tags: char.data?.tags || char.tags || []
+                            }));
+                        console.log(`[${extensionName}] 从${field}获取到 ${result.length} 个角色`);
+                        return result;
+                    }
+                }
+            }
+
+            return [];
+        } catch (error) {
+            console.error(`[${extensionName}] tryGetCharactersFromContext失败:`, error);
+            return [];
         }
     }
 
@@ -655,6 +725,84 @@ jQuery(async () => {
         console.log(`[${extensionName}] 相关localStorage键:`, stKeys);
 
         console.log(`[${extensionName}] === 调试结束 ===`);
+    }
+
+    /**
+     * 深度检测SillyTavern状态
+     */
+    async function deepDebugSillyTavern() {
+        console.log(`[${extensionName}] === 深度检测开始 ===`);
+
+        // 1. 检测SillyTavern函数
+        if (window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
+            const context = window.SillyTavern.getContext();
+
+            // 检查getCharacters函数
+            if (typeof context.getCharacters === 'function') {
+                try {
+                    console.log(`[${extensionName}] 尝试调用getCharacters()...`);
+                    const chars = await context.getCharacters();
+                    console.log(`[${extensionName}] getCharacters()返回:`, chars);
+                } catch (e) {
+                    console.log(`[${extensionName}] getCharacters()调用失败:`, e.message);
+                }
+            }
+
+            // 检查其他可能的角色相关函数
+            const charFunctions = Object.keys(context).filter(key =>
+                key.toLowerCase().includes('char') && typeof context[key] === 'function'
+            );
+            console.log(`[${extensionName}] 角色相关函数:`, charFunctions);
+        }
+
+        // 2. 尝试通过API获取角色
+        try {
+            console.log(`[${extensionName}] 尝试API调用 /api/characters/all...`);
+            const response = await fetch('/api/characters/all', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+
+            console.log(`[${extensionName}] API响应状态:`, response.status);
+            if (response.ok) {
+                const data = await response.json();
+                console.log(`[${extensionName}] API返回的完整数据:`, data);
+            } else {
+                const errorText = await response.text();
+                console.log(`[${extensionName}] API错误响应:`, errorText);
+            }
+        } catch (e) {
+            console.log(`[${extensionName}] API调用异常:`, e.message);
+        }
+
+        // 3. 检查DOM中的角色信息
+        const charElements = document.querySelectorAll('[data-char], .character, .char-card, #character_list .character_select');
+        console.log(`[${extensionName}] 找到的角色DOM元素:`, charElements.length);
+        if (charElements.length > 0) {
+            console.log(`[${extensionName}] 角色DOM元素示例:`, charElements[0]);
+        }
+
+        // 4. 检查localStorage中的角色数据
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.includes('char') || key.includes('Character'))) {
+                console.log(`[${extensionName}] localStorage中的角色相关键:`, key);
+                try {
+                    const value = localStorage.getItem(key);
+                    if (value && value.length < 1000) { // 只显示较短的值
+                        console.log(`[${extensionName}] ${key}:`, value);
+                    } else {
+                        console.log(`[${extensionName}] ${key}: [大型数据, 长度: ${value?.length}]`);
+                    }
+                } catch (e) {
+                    console.log(`[${extensionName}] 读取${key}失败:`, e.message);
+                }
+            }
+        }
+
+        console.log(`[${extensionName}] === 深度检测结束 ===`);
+        toastr.info('深度检测完成，请查看控制台输出');
     }
 
     /**
@@ -943,10 +1091,10 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
         // 加载SillyTavern设置
         loadSillyTavernSettings();
 
-        // 初始化角色卡列表
+        // 初始化角色卡列表 - 延迟加载，等待SillyTavern完全初始化
         setTimeout(() => {
             refreshCharacterList();
-        }, 1000);
+        }, 3000); // 增加延迟时间
 
         // 绑定SillyTavern相关事件
         $('#sillytavern-api-select').on('change', function() {
@@ -961,6 +1109,20 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
                 detectAndShowConfig();
             }
         });
+
+        // 添加一个手动检测按钮用于调试
+        if (!$('#debug-sillytavern-btn').length) {
+            $('#refresh-characters-btn').after(`
+                <button id="debug-sillytavern-btn" style="margin-top: 5px; margin-left: 5px; padding: 6px 12px; background: #6b46c1; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8em;">
+                    🔍 深度检测
+                </button>
+            `);
+
+            $('#debug-sillytavern-btn').on('click', function(e) {
+                e.preventDefault();
+                deepDebugSillyTavern();
+            });
+        }
 
         $('#sillytavern-character-select').on('change', function() {
             saveSillyTavernSettings();

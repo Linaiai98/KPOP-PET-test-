@@ -150,63 +150,59 @@ jQuery(async () => {
         try {
             console.log(`[${extensionName}] 开始检测SillyTavern配置...`);
 
-            // 方法1: 检查全局变量 - 最直接的方法
-            if (typeof window.main_api !== 'undefined') {
-                const config = {
-                    api_type: window.main_api,
-                    model: window.online_status || window.model_name || 'unknown',
-                    url: window.api_server || '',
-                    available: true,
-                    source: 'global_variables'
-                };
-                console.log(`[${extensionName}] 通过全局变量检测到配置:`, config);
-                return config;
-            }
-
-            // 方法2: 通过SillyTavern的getContext()函数
+            // 方法1: 通过SillyTavern的getContext()函数 - 最可靠的方法
             if (window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
                 try {
                     const context = window.SillyTavern.getContext();
-                    console.log(`[${extensionName}] SillyTavern完整上下文:`, context);
 
-                    // 尝试从上下文的不同位置获取配置
-                    const api_type = context.main_api || context.api_type || context.selectedAPI;
-                    const model = context.online_status || context.model_name || context.model || context.selectedModel;
+                    // 从上下文获取API配置 - 使用正确的字段名
+                    const api_type = context.mainApi; // 注意是 mainApi 不是 main_api
+                    const model = context.onlineStatus || context.model_name || context.model;
                     const url = context.api_server || context.server_url || context.apiUrl;
 
                     if (api_type) {
                         const config = {
                             api_type: api_type,
-                            model: model,
-                            url: url,
+                            model: model || 'unknown',
+                            url: url || '',
                             available: true,
-                            source: 'sillytavern_context',
-                            context: context
+                            source: 'sillytavern_context'
                         };
                         console.log(`[${extensionName}] 通过SillyTavern上下文检测到配置:`, config);
                         return config;
                     } else {
-                        console.log(`[${extensionName}] 上下文中未找到API配置，可用字段:`, Object.keys(context));
+                        console.log(`[${extensionName}] 上下文中未找到mainApi字段`);
                     }
                 } catch (e) {
                     console.log(`[${extensionName}] SillyTavern上下文读取失败:`, e.message);
                 }
             }
 
-            // 方法3: 检查settings对象
-            if (typeof window.settings !== 'undefined' && window.settings) {
-                const config = {
-                    api_type: window.settings.main_api,
-                    model: window.settings.online_status || window.settings.model,
-                    url: window.settings.api_server,
-                    available: true,
-                    source: 'settings_object'
-                };
-                console.log(`[${extensionName}] 通过settings对象检测到配置:`, config);
-                return config;
+            // 方法2: 检查HTML select元素的值
+            if (typeof window.main_api !== 'undefined' && window.main_api) {
+                let api_value = null;
+
+                // 如果是DOM元素，获取其值
+                if (window.main_api.tagName === 'SELECT') {
+                    api_value = window.main_api.value;
+                } else if (typeof window.main_api === 'string') {
+                    api_value = window.main_api;
+                }
+
+                if (api_value) {
+                    const config = {
+                        api_type: api_value,
+                        model: window.online_status || window.model_name || 'unknown',
+                        url: window.api_server || '',
+                        available: true,
+                        source: 'main_api_select'
+                    };
+                    console.log(`[${extensionName}] 通过main_api select元素检测到配置:`, config);
+                    return config;
+                }
             }
 
-            // 方法4: 检查其他可能的全局变量
+            // 方法3: 检查其他可能的全局变量
             const apiVars = ['api_type', 'current_api', 'selected_api'];
             for (const varName of apiVars) {
                 if (typeof window[varName] !== 'undefined') {
@@ -220,6 +216,19 @@ jQuery(async () => {
                     console.log(`[${extensionName}] 通过全局变量${varName}检测到配置:`, config);
                     return config;
                 }
+            }
+
+            // 方法4: 检查settings对象
+            if (typeof window.settings !== 'undefined' && window.settings) {
+                const config = {
+                    api_type: window.settings.main_api,
+                    model: window.settings.online_status || window.settings.model,
+                    url: window.settings.api_server,
+                    available: true,
+                    source: 'settings_object'
+                };
+                console.log(`[${extensionName}] 通过settings对象检测到配置:`, config);
+                return config;
             }
 
             // 方法5: 从localStorage读取
@@ -258,11 +267,38 @@ jQuery(async () => {
         try {
             console.log(`[${extensionName}] 开始获取SillyTavern角色卡列表...`);
 
-            // 方法1: 从SillyTavern全局变量获取 - 最直接的方法
+            // 方法1: 通过SillyTavern上下文获取 - 最可靠的方法
+            if (window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
+                try {
+                    const context = window.SillyTavern.getContext();
+                    if (context.characters && Array.isArray(context.characters)) {
+                        console.log(`[${extensionName}] 从SillyTavern上下文获取角色...`);
+                        console.log(`[${extensionName}] 原始角色数据示例:`, context.characters.slice(0, 1));
+
+                        const result = context.characters
+                            .filter(char => char && (char.name || char.data?.name)) // 过滤无效角色
+                            .map(char => ({
+                                name: char.data?.name || char.name || '未知角色',
+                                id: char.avatar || char.name || char.data?.name,
+                                description: (char.data?.description || char.description || char.data?.personality || char.personality || '').substring(0, 100),
+                                creator: char.data?.creator || char.creator || '',
+                                tags: char.data?.tags || char.tags || []
+                            }));
+                        console.log(`[${extensionName}] 从上下文获取到 ${result.length} 个角色:`, result);
+                        return result;
+                    } else {
+                        console.log(`[${extensionName}] 上下文中characters字段无效:`, context.characters);
+                    }
+                } catch (e) {
+                    console.log(`[${extensionName}] 上下文角色获取失败:`, e.message);
+                }
+            }
+
+            // 方法2: 从SillyTavern全局变量获取
             if (window.characters && Array.isArray(window.characters)) {
                 console.log(`[${extensionName}] 从全局变量characters获取角色...`);
                 const result = window.characters
-                    .filter(char => char && (char.name || char.data?.name)) // 过滤无效角色
+                    .filter(char => char && (char.name || char.data?.name))
                     .map(char => ({
                         name: char.data?.name || char.name || '未知角色',
                         id: char.avatar || char.name || char.data?.name,
@@ -270,22 +306,22 @@ jQuery(async () => {
                         creator: char.data?.creator || char.creator || '',
                         tags: char.data?.tags || char.tags || []
                     }));
-                console.log(`[${extensionName}] 从全局变量获取到 ${result.length} 个角色:`, result.slice(0, 3));
+                console.log(`[${extensionName}] 从全局变量获取到 ${result.length} 个角色`);
                 return result;
             }
 
-            // 方法2: 通过SillyTavern API获取 - 标准API端点
+            // 方法3: 通过SillyTavern API获取
             try {
                 console.log(`[${extensionName}] 尝试通过API获取角色列表...`);
                 const response = await fetch('/api/characters/all', {
-                    method: 'POST', // SillyTavern使用POST方法
+                    method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({}) // 空body
+                    body: JSON.stringify({})
                 });
 
                 if (response.ok) {
                     const characters = await response.json();
-                    console.log(`[${extensionName}] API返回数据:`, characters.slice(0, 3));
+                    console.log(`[${extensionName}] API返回数据示例:`, characters.slice(0, 1));
 
                     if (Array.isArray(characters) && characters.length > 0) {
                         const result = characters
@@ -300,32 +336,11 @@ jQuery(async () => {
                         console.log(`[${extensionName}] 通过API获取到 ${result.length} 个角色`);
                         return result;
                     }
+                } else {
+                    console.log(`[${extensionName}] API请求失败:`, response.status, response.statusText);
                 }
             } catch (e) {
                 console.log(`[${extensionName}] API角色列表获取失败:`, e.message);
-            }
-
-            // 方法3: 通过SillyTavern上下文获取
-            if (window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
-                try {
-                    const context = window.SillyTavern.getContext();
-                    if (context.characters && Array.isArray(context.characters)) {
-                        console.log(`[${extensionName}] 从SillyTavern上下文获取角色...`);
-                        const result = context.characters
-                            .filter(char => char && (char.name || char.data?.name))
-                            .map(char => ({
-                                name: char.data?.name || char.name || '未知角色',
-                                id: char.avatar || char.name,
-                                description: (char.data?.description || char.description || '').substring(0, 100),
-                                creator: char.data?.creator || char.creator || '',
-                                tags: char.data?.tags || char.tags || []
-                            }));
-                        console.log(`[${extensionName}] 从上下文获取到 ${result.length} 个角色`);
-                        return result;
-                    }
-                } catch (e) {
-                    console.log(`[${extensionName}] 上下文角色获取失败:`, e.message);
-                }
             }
 
             // 方法4: 检查其他可能的全局变量
@@ -348,7 +363,6 @@ jQuery(async () => {
             }
 
             console.log(`[${extensionName}] 未能获取到任何角色卡`);
-            console.log(`[${extensionName}] 可用的全局变量:`, Object.keys(window).filter(key => key.toLowerCase().includes('char')));
             return [];
         } catch (error) {
             console.error(`[${extensionName}] 获取角色卡列表失败:`, error);

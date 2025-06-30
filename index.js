@@ -355,16 +355,13 @@ jQuery(async () => {
         // 加载当前设置
         const currentPersonalityType = localStorage.getItem(`${extensionName}-personality-type`) || 'default';
         const customPersonality = localStorage.getItem(`${extensionName}-custom-personality`) || '';
-        const currentAPIType = localStorage.getItem(STORAGE_KEY_API_TYPE) || 'sillytavern';
 
         // 设置下拉框的值
         $("#virtual-pet-personality-select").val(currentPersonalityType);
         $("#virtual-pet-custom-personality").val(customPersonality);
-        $("#virtual-pet-api-select").val(currentAPIType);
 
         // 根据选择显示/隐藏自定义输入框
         toggleCustomPersonalityInput(currentPersonalityType === 'custom');
-        toggleAPIConfigInput(currentAPIType);
 
         // 添加事件监听器
         $("#virtual-pet-personality-select").on('change', function() {
@@ -384,16 +381,6 @@ jQuery(async () => {
             // 自定义人设文本变化时保存
             const customText = $(this).val().trim();
             savePersonalitySettings('custom', customText);
-        });
-
-        // API选择事件监听器
-        $("#virtual-pet-api-select").on('change', function() {
-            const selectedType = $(this).val();
-            toggleAPIConfigInput(selectedType);
-
-            // 保存API类型选择
-            saveAPISettings(selectedType, getAPIConfig());
-            toastr.success(`已切换到${$(this).find('option:selected').text()}`);
         });
 
         // 启用/禁用虚拟宠物系统的事件监听器
@@ -421,7 +408,6 @@ jQuery(async () => {
         console.log(`[${extensionName}] 设置面板初始化完成`);
         console.log(`[${extensionName}] 当前人设类型: ${currentPersonalityType}`);
         console.log(`[${extensionName}] 当前人设内容: ${getCurrentPersonality()}`);
-        console.log(`[${extensionName}] 当前API类型: ${currentAPIType}`);
     }
 
     /**
@@ -433,223 +419,6 @@ jQuery(async () => {
             $("#virtual-pet-custom-personality-container").show();
         } else {
             $("#virtual-pet-custom-personality-container").hide();
-        }
-    }
-
-    /**
-     * 切换API配置输入框的显示状态
-     * @param {string} apiType API类型
-     */
-    function toggleAPIConfigInput(apiType) {
-        const container = $("#virtual-pet-api-config-container");
-
-        if (apiType === 'sillytavern') {
-            // SillyTavern API不需要额外配置
-            container.hide();
-        } else {
-            // 其他API需要配置
-            container.show();
-            generateAPIConfigForm(apiType);
-        }
-    }
-
-    /**
-     * 生成API配置表单
-     * @param {string} apiType API类型
-     */
-    function generateAPIConfigForm(apiType) {
-        const container = $("#virtual-pet-api-config-container");
-        const config = getAPIConfig();
-
-        let formHTML = '';
-
-        switch(apiType) {
-            case 'openai':
-                formHTML = `
-                    <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">API密钥：</label>
-                    <input type="password" id="api-key-input" placeholder="sk-..."
-                           value="${config.apiKey || ''}"
-                           style="width: 100%; padding: 6px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
-
-                    <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">模型：</label>
-                    <select id="model-select" style="width: 100%; padding: 6px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
-                        <option value="gpt-3.5-turbo" ${config.model === 'gpt-3.5-turbo' ? 'selected' : ''}>GPT-3.5 Turbo</option>
-                        <option value="gpt-4" ${config.model === 'gpt-4' ? 'selected' : ''}>GPT-4</option>
-                        <option value="gpt-4-turbo" ${config.model === 'gpt-4-turbo' ? 'selected' : ''}>GPT-4 Turbo</option>
-                    </select>
-                `;
-                break;
-
-            case 'claude':
-                formHTML = `
-                    <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">API密钥：</label>
-                    <input type="password" id="api-key-input" placeholder="sk-ant-..."
-                           value="${config.apiKey || ''}"
-                           style="width: 100%; padding: 6px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
-
-                    <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">模型：</label>
-                    <select id="model-select" style="width: 100%; padding: 6px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
-                        <option value="claude-3-haiku-20240307" ${config.model === 'claude-3-haiku-20240307' ? 'selected' : ''}>Claude 3 Haiku</option>
-                        <option value="claude-3-sonnet-20240229" ${config.model === 'claude-3-sonnet-20240229' ? 'selected' : ''}>Claude 3 Sonnet</option>
-                        <option value="claude-3-opus-20240229" ${config.model === 'claude-3-opus-20240229' ? 'selected' : ''}>Claude 3 Opus</option>
-                    </select>
-                `;
-                break;
-
-            case 'local':
-                formHTML = `
-                    <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">API地址：</label>
-                    <input type="text" id="api-url-input" placeholder="http://localhost:5000/v1/chat/completions"
-                           value="${config.apiUrl || 'http://localhost:5000/v1/chat/completions'}"
-                           style="width: 100%; padding: 6px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
-                `;
-                break;
-
-            case 'custom':
-                formHTML = `
-                    <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">API地址：</label>
-                    <input type="text" id="api-url-input" placeholder="https://api.example.com/v1/chat/completions"
-                           value="${config.apiUrl || ''}"
-                           style="width: 100%; padding: 6px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
-
-                    <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">API密钥：</label>
-                    <input type="password" id="api-key-input" placeholder="your-api-key"
-                           value="${config.apiKey || ''}"
-                           style="width: 100%; padding: 6px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
-                `;
-                break;
-        }
-
-        if (formHTML) {
-            formHTML += `
-                <div style="display: flex; gap: 8px; margin-top: 8px;">
-                    <button id="save-api-config-btn" style="
-                        padding: 6px 12px;
-                        background: #43b581;
-                        color: white;
-                        border: none;
-                        border-radius: 4px;
-                        cursor: pointer;
-                        flex: 1;
-                    ">保存配置</button>
-                    <button id="test-api-connection-btn" style="
-                        padding: 6px 12px;
-                        background: #7289da;
-                        color: white;
-                        border: none;
-                        border-radius: 4px;
-                        cursor: pointer;
-                        flex: 1;
-                    ">测试连接</button>
-                </div>
-            `;
-        }
-
-        container.html(formHTML);
-
-        // 绑定保存配置事件
-        $("#save-api-config-btn").on('click', function() {
-            saveCurrentAPIConfig(apiType);
-        });
-
-        // 绑定测试连接事件
-        $("#test-api-connection-btn").on('click', function() {
-            testAPIConnection(apiType);
-        });
-    }
-
-    /**
-     * 保存当前API配置
-     * @param {string} apiType API类型
-     */
-    function saveCurrentAPIConfig(apiType) {
-        const config = {};
-
-        const apiKey = $("#api-key-input").val().trim();
-        const apiUrl = $("#api-url-input").val().trim();
-        const model = $("#model-select").val();
-
-        if (apiKey) config.apiKey = apiKey;
-        if (apiUrl) config.apiUrl = apiUrl;
-        if (model) config.model = model;
-
-        saveAPISettings(apiType, config);
-        toastr.success("API配置已保存！");
-    }
-
-    /**
-     * 测试API连接
-     * @param {string} apiType API类型
-     */
-    async function testAPIConnection(apiType) {
-        const testButton = $("#test-api-connection-btn");
-        const originalText = testButton.text();
-
-        // 显示测试中状态
-        testButton.text("测试中...").prop('disabled', true);
-
-        try {
-            // 先保存当前配置
-            saveCurrentAPIConfig(apiType);
-
-            // 构建测试提示词
-            const testPrompt = "请简单回复'连接成功'来确认API工作正常。";
-
-            // 根据API类型调用相应的测试函数
-            let result;
-            switch(apiType) {
-                case 'openai':
-                    result = await callOpenAIAPI(testPrompt, 10000);
-                    break;
-                case 'claude':
-                    result = await callClaudeAPI(testPrompt, 10000);
-                    break;
-                case 'local':
-                case 'custom':
-                    result = await callCustomAPI(testPrompt, 10000);
-                    break;
-                default:
-                    throw new Error('不支持的API类型');
-            }
-
-            // 测试成功
-            toastr.success(`🎉 ${API_TYPES[apiType]} 连接测试成功！\n回复: ${result}`, "", {
-                timeOut: 8000,
-                extendedTimeOut: 3000
-            });
-
-            console.log(`[${extensionName}] API连接测试成功 (${apiType}):`, result);
-
-        } catch (error) {
-            // 测试失败
-            console.error(`[${extensionName}] API连接测试失败 (${apiType}):`, error);
-
-            let errorMessage = "连接测试失败";
-            if (error.message.includes('密钥')) {
-                errorMessage = "API密钥无效或未配置";
-            } else if (error.message.includes('地址')) {
-                errorMessage = "API地址无效或无法访问";
-            } else if (error.message.includes('401')) {
-                errorMessage = "API密钥无效，请检查密钥是否正确";
-            } else if (error.message.includes('403')) {
-                errorMessage = "API访问被拒绝，请检查权限";
-            } else if (error.message.includes('429')) {
-                errorMessage = "API请求频率过高，请稍后再试";
-            } else if (error.message.includes('500')) {
-                errorMessage = "API服务器内部错误";
-            } else if (error.message.includes('网络')) {
-                errorMessage = "网络连接失败，请检查网络设置";
-            } else {
-                errorMessage = `连接失败: ${error.message}`;
-            }
-
-            toastr.error(`❌ ${API_TYPES[apiType]} ${errorMessage}`, "", {
-                timeOut: 10000,
-                extendedTimeOut: 5000
-            });
-        } finally {
-            // 恢复按钮状态
-            testButton.text(originalText).prop('disabled', false);
         }
     }
 

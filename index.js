@@ -144,6 +144,233 @@ jQuery(async () => {
     // -----------------------------------------------------------------
 
     /**
+     * 检测SillyTavern的API配置
+     */
+    async function detectSillyTavernConfig() {
+        try {
+            // 方法1: 尝试读取SillyTavern的全局配置
+            if (window.SillyTavern && window.SillyTavern.getContext) {
+                const context = window.SillyTavern.getContext();
+                return {
+                    api_type: context.main_api,
+                    model: context.model,
+                    available: true
+                };
+            }
+
+            // 方法2: 通过API调用获取配置
+            try {
+                const response = await fetch('/api/v1/config');
+                if (response.ok) {
+                    const config = await response.json();
+                    return { ...config, available: true };
+                }
+            } catch (e) {
+                console.log('API配置获取失败:', e.message);
+            }
+
+            // 方法3: 检查全局变量
+            if (window.main_api) {
+                return {
+                    api_type: window.main_api,
+                    available: true
+                };
+            }
+
+            return { available: false };
+        } catch (error) {
+            console.error('检测SillyTavern配置失败:', error);
+            return { available: false, error: error.message };
+        }
+    }
+
+    /**
+     * 获取SillyTavern的角色卡列表
+     */
+    async function getSillyTavernCharacters() {
+        try {
+            // 方法1: 通过SillyTavern API获取
+            try {
+                const response = await fetch('/api/v1/characters');
+                if (response.ok) {
+                    const characters = await response.json();
+                    return characters.map(char => ({
+                        name: char.name || char.character_name || '未知角色',
+                        id: char.avatar || char.name || char.character_name,
+                        description: char.description || char.char_persona || ''
+                    }));
+                }
+            } catch (e) {
+                console.log('API角色列表获取失败:', e.message);
+            }
+
+            // 方法2: 从全局变量获取
+            if (window.characters && Array.isArray(window.characters)) {
+                return window.characters.map(char => ({
+                    name: char.name || char.character_name || '未知角色',
+                    id: char.avatar || char.name,
+                    description: char.description || char.char_persona || ''
+                }));
+            }
+
+            // 方法3: 从localStorage获取
+            const savedChars = localStorage.getItem('characters');
+            if (savedChars) {
+                const characters = JSON.parse(savedChars);
+                if (Array.isArray(characters)) {
+                    return characters.map(char => ({
+                        name: char.name || '未知角色',
+                        id: char.avatar || char.name,
+                        description: char.description || ''
+                    }));
+                }
+            }
+
+            return [];
+        } catch (error) {
+            console.error('获取角色卡列表失败:', error);
+            return [];
+        }
+    }
+
+    /**
+     * 测试SillyTavern连接
+     */
+    async function testSillyTavernConnection() {
+        const statusElement = $('#connection-status');
+        const testButton = $('#test-connection-btn');
+
+        // 更新状态为测试中
+        statusElement.text('🔄 测试中...').css('color', '#ffa500');
+        testButton.prop('disabled', true);
+
+        try {
+            // 1. 检测API可用性
+            const apiAvailable = isSillyTavernAPIAvailable();
+            if (!apiAvailable) {
+                throw new Error('SillyTavern API不可用，请确保SillyTavern正在运行');
+            }
+
+            // 2. 检测配置
+            const config = await detectSillyTavernConfig();
+            if (!config.available) {
+                throw new Error('无法检测到SillyTavern配置');
+            }
+
+            // 3. 尝试发送测试请求
+            const testPrompt = "请简单回复'测试成功'，不超过10个字。";
+            const response = await callSillyTavernAPI(testPrompt, 8000);
+
+            if (response && response.trim()) {
+                statusElement.text('✅ 连接成功').css('color', '#48bb78');
+                toastr.success('SillyTavern连接测试成功！AI回复: ' + response.substring(0, 50));
+
+                // 保存测试结果
+                saveSillyTavernSettings();
+                return true;
+            } else {
+                throw new Error('API返回空响应');
+            }
+
+        } catch (error) {
+            statusElement.text('❌ 连接失败').css('color', '#f56565');
+            toastr.error('连接测试失败: ' + error.message);
+            return false;
+        } finally {
+            testButton.prop('disabled', false);
+        }
+    }
+
+    /**
+     * 刷新角色卡列表
+     */
+    async function refreshCharacterList() {
+        const selectElement = $('#sillytavern-character-select');
+        const refreshButton = $('#refresh-characters-btn');
+
+        // 显示加载状态
+        refreshButton.text('🔄 加载中...').prop('disabled', true);
+
+        try {
+            const characters = await getSillyTavernCharacters();
+
+            // 清空现有选项（保留默认选项）
+            selectElement.find('option:not(:first)').remove();
+
+            if (characters.length > 0) {
+                characters.forEach(char => {
+                    const option = $('<option></option>')
+                        .attr('value', char.id)
+                        .text(`${char.name}${char.description ? ' - ' + char.description.substring(0, 30) + '...' : ''}`);
+                    selectElement.append(option);
+                });
+
+                toastr.success(`成功加载 ${characters.length} 个角色卡`);
+            } else {
+                selectElement.append('<option value="" disabled>未找到角色卡</option>');
+                toastr.warning('未找到任何角色卡，请确保SillyTavern中已导入角色');
+            }
+
+        } catch (error) {
+            console.error('刷新角色列表失败:', error);
+            toastr.error('刷新角色列表失败: ' + error.message);
+        } finally {
+            refreshButton.text('🔄 刷新角色列表').prop('disabled', false);
+        }
+    }
+
+    /**
+     * 保存SillyTavern集成设置
+     */
+    function saveSillyTavernSettings() {
+        const settings = {
+            apiType: $('#sillytavern-api-select').val(),
+            selectedCharacter: $('#sillytavern-character-select').val(),
+            lastTestTime: Date.now(),
+            lastTestResult: $('#connection-status').text().includes('✅')
+        };
+
+        localStorage.setItem(`${extensionName}-sillytavern-settings`, JSON.stringify(settings));
+        console.log(`[${extensionName}] SillyTavern设置已保存:`, settings);
+    }
+
+    /**
+     * 加载SillyTavern集成设置
+     */
+    function loadSillyTavernSettings() {
+        try {
+            const saved = localStorage.getItem(`${extensionName}-sillytavern-settings`);
+            if (saved) {
+                const settings = JSON.parse(saved);
+                $('#sillytavern-api-select').val(settings.apiType || '');
+                $('#sillytavern-character-select').val(settings.selectedCharacter || '');
+
+                // 显示上次测试结果
+                if (settings.lastTestResult && settings.lastTestTime) {
+                    const timeAgo = Math.floor((Date.now() - settings.lastTestTime) / (1000 * 60));
+                    $('#connection-status').text(`✅ 上次测试成功 (${timeAgo}分钟前)`).css('color', '#48bb78');
+                }
+
+                return settings;
+            }
+        } catch (error) {
+            console.error(`[${extensionName}] 加载SillyTavern设置失败:`, error);
+        }
+        return {};
+    }
+
+    /**
+     * 获取当前选择的角色卡信息
+     */
+    function getSelectedCharacterInfo() {
+        const settings = loadSillyTavernSettings();
+        return {
+            characterId: settings.selectedCharacter,
+            apiType: settings.apiType
+        };
+    }
+
+    /**
      * 调用SillyTavern的AI生成API
      * @param {string} prompt - 要发送给AI的提示词
      * @param {number} timeout - 超时时间（毫秒），默认10秒
@@ -260,14 +487,24 @@ jQuery(async () => {
             return statuses.length > 0 ? statuses.join('，') : '状态正常';
         };
 
+        // 获取SillyTavern设置
+        const stSettings = loadSillyTavernSettings();
+        let characterContext = '';
+
+        // 如果选择了角色卡，添加角色卡上下文
+        if (stSettings.selectedCharacter) {
+            characterContext = `\n[特别指示：请结合角色卡"${stSettings.selectedCharacter}"的设定和语言风格来回应，但仍要保持虚拟宠物的身份]`;
+        }
+
         // 构建完整的Prompt
-        const prompt = `[系统指令：请你扮演以下角色并对用户的行为做出简短回应。回应应该符合角色性格，简洁生动，不超过30字。]
+        const prompt = `[系统指令：请你扮演以下角色并对用户的行为做出简短回应。回应应该符合角色性格，简洁生动，不超过30字。]${characterContext}
 
 宠物信息：
 - 名称：${petData.name}
 - 类型：${getPetTypeName(petData.type)}
 - 等级：${petData.level}级
 - 人设：${getCurrentPersonality()}
+${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}` : ''}
 
 当前状态：
 - 健康：${Math.round(petData.health)}/100
@@ -404,6 +641,39 @@ jQuery(async () => {
         // 加载启用状态
         const enabled = localStorage.getItem(`${extensionName}-enabled`) !== 'false';
         $("#virtual-pet-enabled-toggle").prop('checked', enabled);
+
+        // 加载SillyTavern设置
+        loadSillyTavernSettings();
+
+        // 初始化角色卡列表
+        setTimeout(() => {
+            refreshCharacterList();
+        }, 1000);
+
+        // 绑定SillyTavern相关事件
+        $('#sillytavern-api-select').on('change', function() {
+            saveSillyTavernSettings();
+            // 清除之前的测试结果
+            $('#connection-status').text('未测试').css('color', '#888');
+        });
+
+        $('#sillytavern-character-select').on('change', function() {
+            saveSillyTavernSettings();
+            const selectedChar = $(this).find('option:selected').text();
+            if ($(this).val()) {
+                toastr.success(`已选择角色卡: ${selectedChar.split(' - ')[0]}`);
+            }
+        });
+
+        $('#test-connection-btn').on('click', function(e) {
+            e.preventDefault();
+            testSillyTavernConnection();
+        });
+
+        $('#refresh-characters-btn').on('click', function(e) {
+            e.preventDefault();
+            refreshCharacterList();
+        });
 
         console.log(`[${extensionName}] 设置面板初始化完成`);
         console.log(`[${extensionName}] 当前人设类型: ${currentPersonalityType}`);
@@ -1839,6 +2109,53 @@ jQuery(async () => {
 
                         <small class="notes" style="margin-top: 10px; display: block;">
                             选择或自定义宠物的性格，AI会根据人设生成个性化回复
+                        </small>
+
+                        <!-- SillyTavern API 集成设置 -->
+                        <hr style="margin: 15px 0; border: none; border-top: 1px solid #444;">
+
+                        <div class="flex-container">
+                            <label for="sillytavern-api-select" style="display: block; margin-bottom: 8px; font-weight: bold;">
+                                🤖 SillyTavern API 选择
+                            </label>
+                            <select id="sillytavern-api-select" style="width: 100%; padding: 8px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+                                <option value="">请选择API类型...</option>
+                                <option value="openai">OpenAI (ChatGPT)</option>
+                                <option value="claude">Claude (Anthropic)</option>
+                                <option value="google">Google AI Studio</option>
+                                <option value="mistral">Mistral AI</option>
+                                <option value="kobold">KoboldCpp (本地)</option>
+                                <option value="ollama">Ollama (本地)</option>
+                                <option value="tabby">TabbyAPI (本地)</option>
+                                <option value="horde">AI Horde (免费)</option>
+                                <option value="custom">自定义API</option>
+                            </select>
+                        </div>
+
+                        <div class="flex-container">
+                            <label for="sillytavern-character-select" style="display: block; margin-bottom: 8px; font-weight: bold;">
+                                👤 角色卡选择
+                            </label>
+                            <select id="sillytavern-character-select" style="width: 100%; padding: 8px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+                                <option value="">请选择角色卡...</option>
+                                <!-- 动态加载的角色卡列表 -->
+                            </select>
+                            <button id="refresh-characters-btn" style="margin-top: 5px; padding: 6px 12px; background: #4a5568; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                🔄 刷新角色列表
+                            </button>
+                        </div>
+
+                        <div class="flex-container" style="margin-top: 10px;">
+                            <button id="test-connection-btn" style="padding: 8px 16px; background: #48bb78; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">
+                                🔗 测试连接
+                            </button>
+                            <span id="connection-status" style="padding: 8px; font-size: 0.9em; color: #888;">
+                                未测试
+                            </span>
+                        </div>
+
+                        <small class="notes" style="margin-top: 10px; display: block;">
+                            选择SillyTavern中配置的API和角色卡，用于生成个性化的宠物回复
                         </small>
                     </div>
                 </div>

@@ -784,6 +784,24 @@ jQuery(async () => {
                     console.log(`[${extensionName}] 尝试调用getCharacters()...`);
                     const chars = await context.getCharacters();
                     console.log(`[${extensionName}] getCharacters()返回:`, chars);
+
+                    // 如果返回undefined，尝试其他方式
+                    if (!chars) {
+                        console.log(`[${extensionName}] getCharacters()返回undefined，尝试直接访问characters...`);
+                        if (context.characters) {
+                            console.log(`[${extensionName}] context.characters:`, context.characters);
+                        }
+
+                        // 尝试调用其他角色相关函数
+                        if (typeof context.getCharacterCardFields === 'function') {
+                            try {
+                                const fields = context.getCharacterCardFields();
+                                console.log(`[${extensionName}] getCharacterCardFields()返回:`, fields);
+                            } catch (e) {
+                                console.log(`[${extensionName}] getCharacterCardFields()失败:`, e.message);
+                            }
+                        }
+                    }
                 } catch (e) {
                     console.log(`[${extensionName}] getCharacters()调用失败:`, e.message);
                 }
@@ -797,20 +815,22 @@ jQuery(async () => {
         }
 
         // 2. 尝试通过API获取角色 - 使用正确的认证
-        try {
-            console.log(`[${extensionName}] 尝试API调用 /api/characters/all...`);
+        if (window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
+            try {
+                console.log(`[${extensionName}] 尝试API调用 /api/characters/all...`);
+                const context = window.SillyTavern.getContext();
 
-            // 获取SillyTavern的请求头
-            let headers = { 'Content-Type': 'application/json' };
-            if (context.getRequestHeaders && typeof context.getRequestHeaders === 'function') {
-                try {
-                    const stHeaders = context.getRequestHeaders();
-                    headers = { ...headers, ...stHeaders };
-                    console.log(`[${extensionName}] 使用SillyTavern请求头:`, headers);
-                } catch (e) {
-                    console.log(`[${extensionName}] 获取请求头失败:`, e.message);
+                // 获取SillyTavern的请求头
+                let headers = { 'Content-Type': 'application/json' };
+                if (context.getRequestHeaders && typeof context.getRequestHeaders === 'function') {
+                    try {
+                        const stHeaders = context.getRequestHeaders();
+                        headers = { ...headers, ...stHeaders };
+                        console.log(`[${extensionName}] 使用SillyTavern请求头:`, headers);
+                    } catch (e) {
+                        console.log(`[${extensionName}] 获取请求头失败:`, e.message);
+                    }
                 }
-            }
 
             const response = await fetch('/api/characters/all', {
                 method: 'POST',
@@ -849,6 +869,7 @@ jQuery(async () => {
         } catch (e) {
             console.log(`[${extensionName}] API调用异常:`, e.message);
         }
+        } // 关闭 if (window.SillyTavern && typeof window.SillyTavern.getContext === 'function')
 
         // 3. 检查DOM中的角色信息
         const charElements = document.querySelectorAll('[data-char], .character, .char-card, #character_list .character_select');
@@ -875,8 +896,28 @@ jQuery(async () => {
             }
         }
 
+        // 5. 最后的总结和建议
+        console.log(`[${extensionName}] === 检测总结 ===`);
+        if (window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
+            const context = window.SillyTavern.getContext();
+            console.log(`[${extensionName}] SillyTavern状态: 正常运行`);
+            console.log(`[${extensionName}] API配置: ${context.mainApi || '未配置'}`);
+            console.log(`[${extensionName}] 角色数量: ${context.characters ? context.characters.length : 0}`);
+
+            if (!context.characters || context.characters.length === 0) {
+                console.log(`[${extensionName}] 🔍 建议: 请在SillyTavern中导入一些角色卡`);
+                console.log(`[${extensionName}] 💡 提示: 可以从 https://characterhub.org/ 下载角色卡`);
+                toastr.warning('未检测到角色卡，请在SillyTavern中导入角色后重试');
+            } else {
+                console.log(`[${extensionName}] ✅ 检测到 ${context.characters.length} 个角色卡`);
+                toastr.success(`检测完成！找到 ${context.characters.length} 个角色卡`);
+            }
+        } else {
+            console.log(`[${extensionName}] ❌ SillyTavern未正确加载`);
+            toastr.error('SillyTavern未正确加载，请确保在SillyTavern环境中运行');
+        }
+
         console.log(`[${extensionName}] === 深度检测结束 ===`);
-        toastr.info('深度检测完成，请查看控制台输出');
     }
 
     /**

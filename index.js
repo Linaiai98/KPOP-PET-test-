@@ -2412,8 +2412,8 @@ ${settings.selectedCharacter ? `- 角色卡：${settings.selectedCharacter}` : '
         let dragStartX, dragStartY;
         let popupStartX, popupStartY;
 
-        const $header = $popup.find('.pet-popup-header');
-        if ($header.length === 0) return;
+        // 使用整个弹窗作为拖拽区域，但排除按钮区域
+        const $dragArea = $popup;
 
         const onDragStart = (e) => {
             isDragging = true;
@@ -2471,8 +2471,8 @@ ${settings.selectedCharacter ? `- 角色卡：${settings.selectedCharacter}` : '
             }
         };
 
-        // 绑定事件到标题栏
-        $header.on("mousedown touchstart", onDragStart);
+        // 绑定事件到弹窗顶部区域（避免按钮区域）
+        $popup.find('.pet-avatar-section').on("mousedown touchstart", onDragStart);
         $(document).on("mousemove touchmove", onDragMove);
         $(document).on("mouseup touchend", onDragEnd);
     }
@@ -2819,9 +2819,6 @@ ${settings.selectedCharacter ? `- 角色卡：${settings.selectedCharacter}` : '
             const simplePopupHtml = `
                 <div id="virtual-pet-popup-overlay" class="virtual-pet-popup-overlay">
                     <div id="virtual-pet-popup" class="pet-popup-container">
-                        <div class="pet-popup-header">
-                            <div class="pet-popup-title">🐾 虚拟宠物</div>
-                        </div>
                         <div class="pet-popup-body">
                             <div id="pet-main-view" class="pet-view">
                                 <div class="pet-section">
@@ -4661,16 +4658,7 @@ ${settings.selectedCharacter ? `- 角色卡：${settings.selectedCharacter}` : '
     function generateMobileUI() {
         console.log(`[UI] Generating mobile UI`);
         return `
-            <div class="pet-popup-header" style="
-                display: flex !important;
-                justify-content: center !important;
-                align-items: center !important;
-                margin-bottom: 15px !important;
-                padding-bottom: 12px !important;
-                border-bottom: 1px solid #40444b !important;
-            ">
-                <h2 style="margin: 0 !important; color: #7289da !important; font-size: 1.2em !important;">🐾 虚拟宠物</h2>
-            </div>
+
 
             <div class="pet-main-content" style="
                 display: flex !important;
@@ -4838,16 +4826,7 @@ ${settings.selectedCharacter ? `- 角色卡：${settings.selectedCharacter}` : '
     function generateDesktopUI() {
         console.log(`[UI] Generating desktop UI`);
         return `
-            <div class="pet-popup-header" style="
-                display: flex !important;
-                justify-content: center !important;
-                align-items: center !important;
-                margin-bottom: 20px !important;
-                padding-bottom: 15px !important;
-                border-bottom: 1px solid #40444b !important;
-            ">
-                <h2 style="margin: 0 !important; color: #7289da !important; font-size: 1.4em !important;">🐾 虚拟宠物</h2>
-            </div>
+
 
             <div class="pet-main-content" style="
                 display: flex !important;
@@ -5191,18 +5170,16 @@ ${settings.selectedCharacter ? `- 角色卡：${settings.selectedCharacter}` : '
             // 检查UI内容
             setTimeout(() => {
                 const popup = $("#virtual-pet-popup");
-                const header = popup.find(".pet-popup-header h2");
                 const avatar = popup.find(".pet-avatar");
                 const buttons = popup.find(".action-btn");
 
                 console.log("=== UI检查结果 ===");
                 console.log("弹窗存在:", popup.length > 0);
-                console.log("标题内容:", header.text());
                 console.log("头像内容:", avatar.text());
                 console.log("按钮数量:", buttons.length);
                 console.log("按钮文字:", buttons.map((i, btn) => $(btn).text().trim()).get());
 
-                if (popup.length > 0 && header.text().includes("虚拟宠物") && buttons.length === 4) {
+                if (popup.length > 0 && buttons.length === 4) {
                     console.log("✅ 统一UI测试成功！所有平台显示相同内容");
                 } else {
                     console.log("❌ 统一UI测试失败！内容不一致");
@@ -5649,6 +5626,44 @@ ${settings.selectedCharacter ? `- 角色卡：${settings.selectedCharacter}` : '
 
         console.log("✅ 人设切换完成");
         console.log("当前人设:", getCurrentPersonality());
+    };
+
+    /**
+     * 测试UI标题栏是否已删除
+     */
+    window.testUIHeader = function() {
+        console.log('🔍 检查UI标题栏是否已删除...');
+
+        // 打开弹窗
+        if ($("#virtual-pet-popup").length === 0) {
+            showPopup();
+        }
+
+        setTimeout(() => {
+            const popup = $("#virtual-pet-popup");
+            const headers = popup.find(".pet-popup-header");
+            const titles = popup.find(".pet-popup-title");
+            const h2Elements = popup.find("h2");
+
+            console.log('=== 标题栏检查结果 ===');
+            console.log('弹窗存在:', popup.length > 0);
+            console.log('标题栏元素数量:', headers.length);
+            console.log('标题元素数量:', titles.length);
+            console.log('H2元素数量:', h2Elements.length);
+
+            if (headers.length === 0 && titles.length === 0 && h2Elements.length === 0) {
+                console.log('✅ 标题栏已成功删除！');
+                toastr.success('标题栏已成功删除！');
+            } else {
+                console.log('❌ 仍有标题栏元素存在');
+                console.log('剩余标题栏:', headers);
+                console.log('剩余标题:', titles);
+                console.log('剩余H2:', h2Elements);
+                toastr.warning('仍有标题栏元素存在，请检查控制台');
+            }
+
+            console.log('=== 检查完成 ===');
+        }, 500);
     };
 
     console.log("🐾 虚拟宠物系统加载完成！");

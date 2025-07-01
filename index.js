@@ -894,7 +894,12 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
      */
     async function handleAIReply(action, fallbackMessage) {
         try {
-            if (isSillyTavernAPIAvailable()) {
+            // 检查是否有可用的AI配置
+            const settings = loadPersonalityAndInteractionSettings();
+            const hasCustomAPI = settings.apiType && settings.apiUrl && settings.apiKey;
+            const hasSillyTavernAPI = isSillyTavernAPIAvailable();
+
+            if (hasCustomAPI || hasSillyTavernAPI) {
                 // 显示加载状态
                 const loadingToast = toastr.info(`${petData.name} 正在思考...`, "", {
                     timeOut: 0,
@@ -905,7 +910,17 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
                 try {
                     // 构建Prompt并调用AI
                     const prompt = buildInteractionPrompt(action);
-                    const aiReply = await callSillyTavernAPI(prompt, 8000); // 8秒超时
+                    let aiReply;
+
+                    if (hasCustomAPI) {
+                        // 使用自定义API配置
+                        console.log(`[${extensionName}] 使用自定义API: ${settings.apiType}`);
+                        aiReply = await callCustomAPI(prompt, settings);
+                    } else {
+                        // 使用SillyTavern API
+                        console.log(`[${extensionName}] 使用SillyTavern API`);
+                        aiReply = await callSillyTavernAPI(prompt, 8000);
+                    }
 
                     // 清除加载提示
                     toastr.clear(loadingToast);
@@ -936,17 +951,143 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
                     }
                 }
             } else {
-                // API不可用，直接使用回退消息
-                console.log(`[${extensionName}] SillyTavern API不可用，使用静态回复`);
-                toastr.success(fallbackMessage, "", {
-                    timeOut: 4000,
-                    extendedTimeOut: 1000
-                });
+                // 没有可用的API配置，直接使用回退消息
+                console.log(`[${extensionName}] 没有可用的AI配置，使用静态回复`);
+                toastr.info("💡 提示：配置AI API后可获得个性化回复", "", { timeOut: 2000 });
+                setTimeout(() => {
+                    toastr.success(fallbackMessage, "", {
+                        timeOut: 4000,
+                        extendedTimeOut: 1000
+                    });
+                }, 500);
             }
         } catch (error) {
             console.error(`[${extensionName}] 处理AI回复时发生错误:`, error);
             // 最终回退
             toastr.success(fallbackMessage);
+        }
+    }
+
+    /**
+     * 调用自定义API
+     * @param {string} prompt - 提示词
+     * @param {object} settings - API设置
+     * @returns {Promise<string>} - AI回复
+     */
+    async function callCustomAPI(prompt, settings) {
+        const { apiType, apiUrl, apiKey, apiModel } = settings;
+
+        console.log(`[${extensionName}] 调用自定义API: ${apiType}`);
+
+        try {
+            let requestBody, headers, finalUrl = apiUrl;
+
+            // 根据API类型构建请求
+            switch (apiType) {
+                case 'openai':
+                    headers = {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    };
+                    finalUrl = `${apiUrl}/chat/completions`;
+                    requestBody = {
+                        model: apiModel || 'gpt-4',
+                        messages: [
+                            { role: 'user', content: prompt }
+                        ],
+                        max_tokens: 150,
+                        temperature: 0.8
+                    };
+                    break;
+
+                case 'claude':
+                    headers = {
+                        'Content-Type': 'application/json',
+                        'x-api-key': apiKey,
+                        'anthropic-version': '2023-06-01'
+                    };
+                    finalUrl = `${apiUrl}/v1/messages`;
+                    requestBody = {
+                        model: apiModel || 'claude-3-sonnet-20240229',
+                        max_tokens: 150,
+                        messages: [
+                            { role: 'user', content: prompt }
+                        ]
+                    };
+                    break;
+
+                case 'google':
+                    headers = {
+                        'Content-Type': 'application/json'
+                    };
+                    finalUrl = `${apiUrl}/models/${apiModel || 'gemini-pro'}:generateContent?key=${apiKey}`;
+                    requestBody = {
+                        contents: [
+                            {
+                                parts: [
+                                    { text: prompt }
+                                ]
+                            }
+                        ]
+                    };
+                    break;
+
+                default:
+                    // 通用API格式
+                    headers = {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    };
+                    requestBody = {
+                        model: apiModel,
+                        prompt: prompt,
+                        max_tokens: 150,
+                        temperature: 0.8
+                    };
+            }
+
+            console.log(`[${extensionName}] 发送请求到: ${finalUrl}`);
+
+            // 发送请求
+            const response = await fetch(finalUrl, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`API请求失败: ${response.status} ${response.statusText} - ${errorText}`);
+            }
+
+            const data = await response.json();
+            console.log(`[${extensionName}] API响应:`, data);
+
+            // 根据API类型解析响应
+            let reply;
+            switch (apiType) {
+                case 'openai':
+                    reply = data.choices?.[0]?.message?.content;
+                    break;
+                case 'claude':
+                    reply = data.content?.[0]?.text;
+                    break;
+                case 'google':
+                    reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                    break;
+                default:
+                    reply = data.choices?.[0]?.text || data.response || data.content;
+            }
+
+            if (!reply) {
+                throw new Error('API返回了空回复');
+            }
+
+            return reply.trim();
+
+        } catch (error) {
+            console.error(`[${extensionName}] 自定义API调用失败:`, error);
+            throw error;
         }
     }
 
@@ -5244,6 +5385,41 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
             console.log("✅ AI回复测试完成");
         } catch (error) {
             console.error("❌ AI回复测试失败:", error);
+        }
+    };
+
+    /**
+     * 测试API配置和连接
+     */
+    window.testAPIConnection = async function() {
+        console.log('🔧 测试API配置和连接...');
+
+        const settings = loadPersonalityAndInteractionSettings();
+        console.log('当前设置:', settings);
+
+        if (!settings.apiType) {
+            console.log('❌ 没有配置API类型');
+            toastr.error('请先在设置中配置API类型');
+            return;
+        }
+
+        if (!settings.apiUrl || !settings.apiKey) {
+            console.log('❌ API配置不完整');
+            toastr.error('请填写完整的API配置（URL和密钥）');
+            return;
+        }
+
+        try {
+            const testPrompt = "请简单回复'测试成功'，不超过10个字。";
+            console.log('发送测试请求...');
+
+            const response = await callCustomAPI(testPrompt, settings);
+            console.log('✅ API测试成功:', response);
+            toastr.success(`API测试成功！回复: ${response}`);
+
+        } catch (error) {
+            console.error('❌ API测试失败:', error);
+            toastr.error(`API测试失败: ${error.message}`);
         }
     };
 

@@ -476,7 +476,7 @@ jQuery(async () => {
             const defaults = {
                 'openai': { url: 'https://api.openai.com/v1', model: 'gpt-4' },
                 'claude': { url: 'https://api.anthropic.com', model: 'claude-3-sonnet-20240229' },
-                'google': { url: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-pro' },
+                'google': { url: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-1.5-flash' },
                 'mistral': { url: 'https://api.mistral.ai/v1', model: 'mistral-medium' },
                 'kobold': { url: 'http://localhost:5001', model: 'kobold' },
                 'ollama': { url: 'http://localhost:11434', model: 'llama2' },
@@ -1057,7 +1057,23 @@ ${settings.selectedCharacter ? `- 角色卡：${settings.selectedCharacter}` : '
 
             if (!response.ok) {
                 const errorText = await response.text();
-                throw new Error(`API请求失败: ${response.status} ${response.statusText} - ${errorText}`);
+                let errorMessage = `API请求失败: ${response.status} ${response.statusText}`;
+
+                // 针对不同API类型提供更好的错误提示
+                if (apiType === 'google') {
+                    if (response.status === 400 && errorText.includes('API_KEY_INVALID')) {
+                        errorMessage += '\n\n🔑 Google AI密钥无效，请检查：\n1. 访问 https://aistudio.google.com/\n2. 获取新的API密钥\n3. 确保密钥以"AIza"开头\n4. 检查密钥是否已启用';
+                    } else if (response.status === 404 && errorText.includes('is not found')) {
+                        errorMessage += '\n\n🤖 Google AI模型不存在，请检查：\n1. 使用正确的模型名称\n2. 推荐模型：gemini-1.5-flash, gemini-1.5-pro, gemini-pro\n3. 运行 fixGoogleAIModel() 自动修复';
+                    }
+                } else if (apiType === 'openai' && response.status === 401) {
+                    errorMessage += '\n\n🔑 OpenAI密钥无效，请检查API密钥是否正确';
+                } else if (apiType === 'claude' && response.status === 401) {
+                    errorMessage += '\n\n🔑 Claude密钥无效，请检查API密钥是否正确';
+                }
+
+                errorMessage += `\n\n详细错误: ${errorText}`;
+                throw new Error(errorMessage);
             }
 
             const data = await response.json();
@@ -5442,6 +5458,177 @@ ${settings.selectedCharacter ? `- 角色卡：${settings.selectedCharacter}` : '
     };
 
     /**
+     * 检查API配置
+     */
+    window.checkAPIConfig = function() {
+        console.log('🔍 检查API配置...');
+
+        const settings = loadPersonalityAndInteractionSettings();
+
+        console.log('=== API配置检查 ===');
+        console.log('API类型:', settings.apiType || '未设置');
+        console.log('API URL:', settings.apiUrl || '未设置');
+        console.log('API密钥:', settings.apiKey ? `${settings.apiKey.substring(0, 10)}...` : '未设置');
+        console.log('模型名称:', settings.apiModel || '未设置');
+
+        // 检查配置完整性
+        const issues = [];
+        if (!settings.apiType) issues.push('缺少API类型');
+        if (!settings.apiUrl) issues.push('缺少API URL');
+        if (!settings.apiKey) issues.push('缺少API密钥');
+        if (!settings.apiModel) issues.push('缺少模型名称');
+
+        if (issues.length > 0) {
+            console.log('❌ 配置问题:', issues.join(', '));
+            toastr.error(`配置不完整: ${issues.join(', ')}`);
+        } else {
+            console.log('✅ 配置完整');
+
+            // 检查Google AI特定配置
+            if (settings.apiType === 'google') {
+                console.log('=== Google AI 配置检查 ===');
+                console.log('预期URL格式: https://generativelanguage.googleapis.com/v1beta');
+                console.log('当前URL:', settings.apiUrl);
+                console.log('预期模型: gemini-pro 或 gemini-1.5-flash');
+                console.log('当前模型:', settings.apiModel);
+
+                if (!settings.apiKey.startsWith('AIza')) {
+                    console.log('⚠️ Google AI密钥通常以"AIza"开头');
+                    toastr.warning('Google AI密钥格式可能不正确');
+                }
+
+                if (!settings.apiUrl.includes('generativelanguage.googleapis.com')) {
+                    console.log('⚠️ Google AI URL可能不正确');
+                    toastr.warning('Google AI URL格式可能不正确');
+                }
+            }
+
+            toastr.success('API配置检查完成，请查看控制台');
+        }
+
+        console.log('=== 检查完成 ===');
+    };
+
+    /**
+     * 修复Google AI模型配置
+     */
+    window.fixGoogleAIModel = function() {
+        console.log('🔧 修复Google AI模型配置...');
+
+        const settings = loadPersonalityAndInteractionSettings();
+
+        if (settings.apiType !== 'google') {
+            console.log('❌ 当前不是Google AI配置');
+            toastr.error('当前不是Google AI配置');
+            return;
+        }
+
+        // 检查当前模型
+        const currentModel = settings.apiModel || $('#ai-model-input').val();
+        console.log('当前模型:', currentModel);
+
+        // 可用的Google AI模型列表
+        const availableModels = [
+            'gemini-1.5-flash',
+            'gemini-1.5-pro',
+            'gemini-pro',
+            'gemini-pro-vision'
+        ];
+
+        console.log('可用模型:', availableModels);
+
+        // 如果当前模型不在可用列表中，使用默认模型
+        if (!availableModels.includes(currentModel)) {
+            const newModel = 'gemini-1.5-flash';
+            console.log(`⚠️ 模型 "${currentModel}" 不可用，切换到 "${newModel}"`);
+
+            $('#ai-model-input').val(newModel);
+            savePersonalityAndInteractionSettings();
+
+            toastr.success(`已修复模型配置：${currentModel} → ${newModel}`);
+            console.log('✅ 模型配置已修复');
+        } else {
+            console.log('✅ 当前模型配置正确');
+            toastr.success('当前模型配置正确');
+        }
+
+        // 显示建议
+        console.log('💡 推荐模型:');
+        console.log('  - gemini-1.5-flash (快速，免费)');
+        console.log('  - gemini-1.5-pro (高质量)');
+        console.log('  - gemini-pro (经典版本)');
+    };
+
+    /**
+     * 快速配置Google AI
+     */
+    window.quickSetupGoogleAI = function(apiKey) {
+        if (!apiKey) {
+            console.log('❌ 请提供API密钥');
+            console.log('使用方法: quickSetupGoogleAI("你的API密钥")');
+            console.log('获取密钥: https://aistudio.google.com/');
+            toastr.error('请提供Google AI API密钥');
+            return;
+        }
+
+        if (!apiKey.startsWith('AIza')) {
+            console.log('⚠️ Google AI密钥通常以"AIza"开头，请检查密钥是否正确');
+            toastr.warning('API密钥格式可能不正确');
+        }
+
+        // 设置Google AI配置
+        $('#ai-api-select').val('google');
+        $('#ai-url-input').val('https://generativelanguage.googleapis.com/v1beta');
+        $('#ai-key-input').val(apiKey);
+        $('#ai-model-input').val('gemini-1.5-flash');
+
+        // 保存设置
+        savePersonalityAndInteractionSettings();
+
+        console.log('✅ Google AI配置完成');
+        console.log('API类型: Google AI');
+        console.log('URL: https://generativelanguage.googleapis.com/v1beta');
+        console.log('模型: gemini-pro');
+        console.log(`密钥: ${apiKey.substring(0, 10)}...`);
+
+        toastr.success('Google AI配置完成！可以开始测试了');
+
+        // 自动测试连接
+        setTimeout(() => {
+            testAPIConnection();
+        }, 1000);
+    };
+
+    /**
+     * 快速配置OpenAI
+     */
+    window.quickSetupOpenAI = function(apiKey) {
+        if (!apiKey) {
+            console.log('❌ 请提供API密钥');
+            console.log('使用方法: quickSetupOpenAI("你的API密钥")');
+            toastr.error('请提供OpenAI API密钥');
+            return;
+        }
+
+        // 设置OpenAI配置
+        $('#ai-api-select').val('openai');
+        $('#ai-url-input').val('https://api.openai.com/v1');
+        $('#ai-key-input').val(apiKey);
+        $('#ai-model-input').val('gpt-4');
+
+        // 保存设置
+        savePersonalityAndInteractionSettings();
+
+        console.log('✅ OpenAI配置完成');
+        toastr.success('OpenAI配置完成！可以开始测试了');
+
+        // 自动测试连接
+        setTimeout(() => {
+            testAPIConnection();
+        }, 1000);
+    };
+
+    /**
      * 测试人设切换功能
      */
     window.testPersonalitySwitch = function(personalityType = 'default') {
@@ -5466,10 +5653,44 @@ ${settings.selectedCharacter ? `- 角色卡：${settings.selectedCharacter}` : '
 
     console.log("🐾 虚拟宠物系统加载完成！");
     console.log("🐾 如果没有看到按钮，请在控制台运行: testVirtualPet()");
-    console.log("🎉 AI人设功能已加载！可用测试命令:");
-    console.log("  - testVirtualPetAI() - 检查AI功能状态");
-    console.log("  - testAIReply('feed'|'play'|'sleep') - 手动测试AI回复");
-    console.log("  - testPersonalitySwitch('default'|'cheerful'|'elegant'|'shy'|'smart'|'custom') - 测试人设切换");
+    /**
+     * 显示AI配置帮助
+     */
+    window.showAIHelp = function() {
+        console.log('🤖 === AI配置帮助 ===');
+        console.log('');
+        console.log('📋 可用命令:');
+        console.log('  checkAPIConfig()           - 检查当前API配置');
+        console.log('  quickSetupGoogleAI("密钥") - 快速配置Google AI');
+        console.log('  quickSetupOpenAI("密钥")   - 快速配置OpenAI');
+        console.log('  fixGoogleAIModel()         - 修复Google AI模型配置');
+        console.log('  testAPIConnection()        - 测试API连接');
+        console.log('  testPromptBuild()          - 测试提示词构建');
+        console.log('  testAIReply("feed")        - 测试AI回复');
+        console.log('');
+        console.log('🔑 获取API密钥:');
+        console.log('  Google AI: https://aistudio.google.com/');
+        console.log('  OpenAI:    https://platform.openai.com/api-keys');
+        console.log('  Claude:    https://console.anthropic.com/');
+        console.log('');
+        console.log('💡 快速开始:');
+        console.log('  1. 获取API密钥');
+        console.log('  2. 运行 quickSetupGoogleAI("你的密钥")');
+        console.log('  3. 等待自动测试完成');
+        console.log('  4. 开始与宠物互动！');
+        console.log('');
+        console.log('🐛 遇到问题?');
+        console.log('  - 运行 checkAPIConfig() 检查配置');
+        console.log('  - 确保API密钥正确且有效');
+        console.log('  - 检查网络连接');
+        console.log('=========================');
+
+        toastr.info('AI配置帮助已显示在控制台，请查看详细说明');
+    };
+
+    console.log("🎉 AI人设功能已加载！");
+    console.log("🤖 需要配置AI? 运行: showAIHelp()");
+    console.log("🎮 开始使用虚拟宠物吧！");
 });
 
 console.log("🐾 虚拟宠物系统脚本已加载完成");

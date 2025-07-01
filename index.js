@@ -852,13 +852,13 @@ jQuery(async () => {
             return statuses.length > 0 ? statuses.join('，') : '状态正常';
         };
 
-        // 获取SillyTavern设置
-        const stSettings = loadSillyTavernSettings();
+        // 获取人设和互动设置
+        const settings = loadPersonalityAndInteractionSettings();
         let characterContext = '';
 
         // 如果选择了角色卡，添加角色卡上下文
-        if (stSettings.selectedCharacter) {
-            characterContext = `\n[特别指示：请结合角色卡"${stSettings.selectedCharacter}"的设定和语言风格来回应，但仍要保持虚拟宠物的身份]`;
+        if (settings.selectedCharacter) {
+            characterContext = `\n[特别指示：请结合角色卡"${settings.selectedCharacter}"的设定和语言风格来回应，但仍要保持虚拟宠物的身份]`;
         }
 
         // 构建完整的Prompt
@@ -869,7 +869,7 @@ jQuery(async () => {
 - 类型：${getPetTypeName(petData.type)}
 - 等级：${petData.level}级
 - 人设：${getCurrentPersonality()}
-${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}` : ''}
+${settings.selectedCharacter ? `- 角色卡：${settings.selectedCharacter}` : ''}
 
 当前状态：
 - 健康：${Math.round(petData.health)}/100
@@ -5420,6 +5420,24 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
         } catch (error) {
             console.error('❌ API测试失败:', error);
             toastr.error(`API测试失败: ${error.message}`);
+        }
+    };
+
+    /**
+     * 测试Prompt构建功能
+     */
+    window.testPromptBuild = function() {
+        console.log('🔧 测试Prompt构建...');
+
+        try {
+            const testPrompt = buildInteractionPrompt('feed');
+            console.log('✅ Prompt构建成功:');
+            console.log(testPrompt);
+            toastr.success('Prompt构建测试成功，请查看控制台');
+
+        } catch (error) {
+            console.error('❌ Prompt构建失败:', error);
+            toastr.error(`Prompt构建失败: ${error.message}`);
         }
     };
 

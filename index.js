@@ -115,18 +115,7 @@ jQuery(async () => {
         if (selectedType === 'custom') {
             const customPersonality = localStorage.getItem(`${extensionName}-custom-personality`) || '';
             return customPersonality || PRESET_PERSONALITIES.default;
-        } else if (selectedType === 'character') {
-            // 从角色卡获取人设
-            const settings = loadPersonalityAndInteractionSettings();
-            if (settings.selectedCharacter) {
-                // 尝试从已保存的角色卡数据中获取人设
-                const characterPersonality = localStorage.getItem(`${extensionName}-character-personality-${settings.selectedCharacter}`);
-                if (characterPersonality) {
-                    return characterPersonality;
-                }
-            }
-            // 如果没有角色卡人设，回退到默认
-            return PRESET_PERSONALITIES.default;
+
         } else {
             return PRESET_PERSONALITIES[selectedType] || PRESET_PERSONALITIES.default;
         }
@@ -136,19 +125,12 @@ jQuery(async () => {
      * 保存人设设置
      * @param {string} type 人设类型
      * @param {string} customText 自定义人设文本（仅当type为'custom'时使用）
-     * @param {string} characterId 角色卡ID（仅当type为'character'时使用）
      */
-    async function savePersonalitySettings(type, customText = '', characterId = '') {
+    async function savePersonalitySettings(type, customText = '') {
         localStorage.setItem(`${extensionName}-personality-type`, type);
 
         if (type === 'custom') {
             localStorage.setItem(`${extensionName}-custom-personality`, customText);
-        } else if (type === 'character' && characterId) {
-            // 加载并保存角色卡人设
-            const characterPersonality = await loadPersonalityFromCharacter(characterId);
-            if (characterPersonality) {
-                localStorage.setItem(`${extensionName}-character-personality-${characterId}`, characterPersonality);
-            }
         }
 
         // 保存完整的人设和互动设置
@@ -166,161 +148,9 @@ jQuery(async () => {
     // SillyTavern API 集成 (简化版 - 仅手动配置)
     // -----------------------------------------------------------------
 
-    /**
-     * 获取SillyTavern的角色卡列表 (用于人设选择)
-     */
-    async function getSillyTavernCharacters() {
-        try {
-            console.log(`[${extensionName}] 开始获取SillyTavern角色卡列表...`);
 
-            // 方法1: 通过SillyTavern的getContext函数获取角色
-            if (window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
-                try {
-                    const context = window.SillyTavern.getContext();
 
-                    // 尝试使用getCharacters函数
-                    if (typeof context.getCharacters === 'function') {
-                        console.log(`[${extensionName}] 使用getCharacters()函数获取角色...`);
-                        try {
-                            const characters = await context.getCharacters();
-                            if (Array.isArray(characters) && characters.length > 0) {
-                                const result = characters
-                                    .filter(char => char && (char.name || char.data?.name))
-                                    .map(char => ({
-                                        name: char.data?.name || char.name || '未知角色',
-                                        id: char.avatar || char.name || char.data?.name,
-                                        description: (char.data?.description || char.description || char.data?.personality || char.personality || '').substring(0, 200),
-                                        personality: char.data?.personality || char.personality || '',
-                                        creator: char.data?.creator || char.creator || '',
-                                        tags: char.data?.tags || char.tags || []
-                                    }));
-                                console.log(`[${extensionName}] 通过getCharacters()获取到 ${result.length} 个角色`);
-                                return result;
-                            }
-                        } catch (e) {
-                            console.log(`[${extensionName}] getCharacters()调用失败:`, e.message);
-                        }
-                    }
 
-                    // 回退到上下文中的characters数组
-                    if (context.characters && Array.isArray(context.characters)) {
-                        console.log(`[${extensionName}] 从SillyTavern上下文获取角色...`);
-                        const result = context.characters
-                            .filter(char => char && (char.name || char.data?.name))
-                            .map(char => ({
-                                name: char.data?.name || char.name || '未知角色',
-                                id: char.avatar || char.name || char.data?.name,
-                                description: (char.data?.description || char.description || char.data?.personality || char.personality || '').substring(0, 200),
-                                personality: char.data?.personality || char.personality || '',
-                                creator: char.data?.creator || char.creator || '',
-                                tags: char.data?.tags || char.tags || []
-                            }));
-                        console.log(`[${extensionName}] 从上下文获取到 ${result.length} 个角色`);
-                        return result;
-                    }
-                } catch (e) {
-                    console.log(`[${extensionName}] 上下文角色获取失败:`, e.message);
-                }
-            }
-
-            // 方法2: 从SillyTavern全局变量获取
-            if (window.characters && Array.isArray(window.characters)) {
-                console.log(`[${extensionName}] 从全局变量characters获取角色...`);
-                const result = window.characters
-                    .filter(char => char && (char.name || char.data?.name))
-                    .map(char => ({
-                        name: char.data?.name || char.name || '未知角色',
-                        id: char.avatar || char.name || char.data?.name,
-                        description: (char.data?.description || char.description || char.data?.personality || char.personality || '').substring(0, 200),
-                        personality: char.data?.personality || char.personality || '',
-                        creator: char.data?.creator || char.creator || '',
-                        tags: char.data?.tags || char.tags || []
-                    }));
-                console.log(`[${extensionName}] 从全局变量获取到 ${result.length} 个角色`);
-                return result;
-            }
-
-            console.log(`[${extensionName}] 未能获取到任何角色卡`);
-            return [];
-        } catch (error) {
-            console.error(`[${extensionName}] 获取角色卡列表失败:`, error);
-            return [];
-        }
-    }
-
-    /**
-     * 从角色卡加载人设
-     */
-    async function loadPersonalityFromCharacter(characterId) {
-        try {
-            const characters = await getSillyTavernCharacters();
-            const character = characters.find(char => char.id === characterId);
-
-            if (character && character.personality) {
-                console.log(`[${extensionName}] 从角色卡 "${character.name}" 加载人设`);
-                return character.personality;
-            } else {
-                console.log(`[${extensionName}] 角色卡 "${characterId}" 没有人设信息`);
-                return '';
-            }
-        } catch (error) {
-            console.error(`[${extensionName}] 加载角色卡人设失败:`, error);
-            return '';
-        }
-    }
-
-    /**
-     * 刷新人设选择中的角色卡列表
-     */
-    async function refreshPersonalityCharacterList() {
-        const selectElement = $('#virtual-pet-personality-character-select');
-        const refreshButton = $('#refresh-personality-characters-btn');
-
-        if (selectElement.length === 0) {
-            console.log(`[${extensionName}] 人设角色卡选择元素不存在，跳过刷新`);
-            return;
-        }
-
-        // 显示加载状态
-        if (refreshButton.length > 0) {
-            refreshButton.text('🔄 加载中...').prop('disabled', true);
-        }
-
-        try {
-            const characters = await getSillyTavernCharacters();
-
-            // 清空现有选项（保留默认选项）
-            selectElement.find('option:not(:first)').remove();
-
-            if (characters.length > 0) {
-                characters.forEach(char => {
-                    const displayText = char.name;
-                    const subtitle = char.description || char.creator || '';
-                    const fullText = subtitle ? `${displayText} - ${subtitle.substring(0, 30)}...` : displayText;
-
-                    const option = $('<option></option>')
-                        .attr('value', char.id)
-                        .text(fullText)
-                        .data('personality', char.personality || '');
-                    selectElement.append(option);
-                });
-
-                toastr.success(`成功加载 ${characters.length} 个角色卡到人设选择`);
-                console.log(`[${extensionName}] 人设角色卡列表:`, characters.map(c => c.name));
-            } else {
-                selectElement.append('<option value="" disabled>未找到角色卡 - 请确保SillyTavern已加载角色</option>');
-                toastr.warning('未找到任何角色卡，请确保SillyTavern已完全加载并导入了角色卡');
-            }
-
-        } catch (error) {
-            console.error(`[${extensionName}] 刷新人设角色列表失败:`, error);
-            toastr.error('刷新角色列表失败: ' + error.message);
-        } finally {
-            if (refreshButton.length > 0) {
-                refreshButton.text('🔄 刷新').prop('disabled', false);
-            }
-        }
-    }
 
     /**
      * 尝试通过上下文的getCharacters函数获取角色
@@ -383,7 +213,6 @@ jQuery(async () => {
     function savePersonalityAndInteractionSettings() {
         const personalityType = $('#virtual-pet-personality-select').val();
         const customPersonality = $('#virtual-pet-custom-personality').val();
-        const selectedCharacter = $('#virtual-pet-personality-character-select').val();
         const apiType = $('#ai-api-select').val();
         const apiUrl = $('#ai-url-input').val();
         const apiKey = $('#ai-key-input').val();
@@ -392,7 +221,6 @@ jQuery(async () => {
         const settings = {
             personalityType,
             customPersonality,
-            selectedCharacter,
             apiType,
             apiUrl,
             apiKey,
@@ -416,7 +244,6 @@ jQuery(async () => {
                 // 加载人设设置
                 $('#virtual-pet-personality-select').val(settings.personalityType || 'default');
                 $('#virtual-pet-custom-personality').val(settings.customPersonality || '');
-                $('#virtual-pet-personality-character-select').val(settings.selectedCharacter || '');
 
                 // 加载API设置
                 $('#ai-api-select').val(settings.apiType || '');
@@ -446,17 +273,11 @@ jQuery(async () => {
      */
     function togglePersonalityInputs(personalityType) {
         const customContainer = $('#virtual-pet-custom-personality-container');
-        const characterContainer = $('#virtual-pet-personality-character-container');
 
         if (personalityType === 'custom') {
             customContainer.show();
-            characterContainer.hide();
-        } else if (personalityType === 'character') {
-            customContainer.hide();
-            characterContainer.show();
         } else {
             customContainer.hide();
-            characterContainer.hide();
         }
     }
 
@@ -852,24 +673,14 @@ jQuery(async () => {
             return statuses.length > 0 ? statuses.join('，') : '状态正常';
         };
 
-        // 获取人设和互动设置
-        const settings = loadPersonalityAndInteractionSettings();
-        let characterContext = '';
-
-        // 如果选择了角色卡，添加角色卡上下文
-        if (settings.selectedCharacter) {
-            characterContext = `\n[特别指示：请结合角色卡"${settings.selectedCharacter}"的设定和语言风格来回应，但仍要保持虚拟宠物的身份]`;
-        }
-
         // 构建完整的Prompt
-        const prompt = `[系统指令：请你扮演以下角色并对用户的行为做出简短回应。回应应该符合角色性格，简洁生动，不超过30字。]${characterContext}
+        const prompt = `[系统指令：请你扮演以下角色并对用户的行为做出简短回应。回应应该符合角色性格，简洁生动，不超过30字。]
 
 宠物信息：
 - 名称：${petData.name}
 - 类型：${getPetTypeName(petData.type)}
 - 等级：${petData.level}级
 - 人设：${getCurrentPersonality()}
-${settings.selectedCharacter ? `- 角色卡：${settings.selectedCharacter}` : ''}
 
 当前状态：
 - 健康：${Math.round(petData.health)}/100
@@ -1147,11 +958,6 @@ ${settings.selectedCharacter ? `- 角色卡：${settings.selectedCharacter}` : '
         // 加载人设和互动设置
         loadPersonalityAndInteractionSettings();
 
-        // 初始化角色卡列表 - 延迟加载，等待SillyTavern完全初始化
-        setTimeout(() => {
-            refreshPersonalityCharacterList();
-        }, 3000);
-
         // 绑定人设选择事件
         $('#virtual-pet-personality-select').on('change', async function() {
             const selectedType = $(this).val();
@@ -1160,10 +966,6 @@ ${settings.selectedCharacter ? `- 角色卡：${settings.selectedCharacter}` : '
             if (selectedType === 'custom') {
                 // 自定义人设，等待用户输入
                 console.log(`[${extensionName}] 切换到自定义人设模式`);
-            } else if (selectedType === 'character') {
-                // 角色卡人设，等待用户选择角色卡
-                console.log(`[${extensionName}] 切换到角色卡人设模式`);
-                toastr.info('请选择一个角色卡来使用其人设');
             } else {
                 // 预设人设，立即保存
                 await savePersonalitySettings(selectedType);
@@ -1171,26 +973,10 @@ ${settings.selectedCharacter ? `- 角色卡：${settings.selectedCharacter}` : '
             }
         });
 
-        // 绑定角色卡选择事件
-        $('#virtual-pet-personality-character-select').on('change', async function() {
-            const characterId = $(this).val();
-            if (characterId) {
-                const selectedChar = $(this).find('option:selected').text();
-                await savePersonalitySettings('character', '', characterId);
-                toastr.success(`已选择角色卡人设: ${selectedChar.split(' - ')[0]}`);
-            }
-        });
-
         // 绑定自定义人设输入事件
         $('#virtual-pet-custom-personality').on('input', async function() {
             const customText = $(this).val().trim();
             await savePersonalitySettings('custom', customText);
-        });
-
-        // 绑定角色卡刷新按钮
-        $('#refresh-personality-characters-btn').on('click', function(e) {
-            e.preventDefault();
-            refreshPersonalityCharacterList();
         });
 
         // 绑定AI API配置事件
@@ -1637,6 +1423,13 @@ ${settings.selectedCharacter ? `- 角色卡：${settings.selectedCharacter}` : '
 
         console.log(`[${extensionName}] Unified popup created and displayed for all platforms`);
 
+        // 确保头像正确显示
+        setTimeout(() => {
+            updateAvatarDisplay();
+            updateFloatingButtonAvatar();
+            console.log(`[${extensionName}] 头像显示已同步`);
+        }, 100);
+
         // 更新弹窗状态
         isPopupOpen = true;
     }
@@ -1858,6 +1651,20 @@ ${settings.selectedCharacter ? `- 角色卡：${settings.selectedCharacter}` : '
         if (avatarCircle.length > 0) {
             avatarCircle.html(getAvatarContent());
         }
+
+        // 更新统一UI中的头像
+        const unifiedAvatars = $('.pet-avatar, .pet-avatar-section .pet-avatar-circle');
+        if (unifiedAvatars.length > 0) {
+            unifiedAvatars.html(getAvatarContent());
+        }
+
+        // 更新所有可能的头像容器
+        const allAvatarContainers = $('.pet-emoji, .pet-avatar-emoji');
+        if (allAvatarContainers.length > 0) {
+            allAvatarContainers.html(getAvatarContent());
+        }
+
+        console.log(`[${extensionName}] 头像显示已更新，影响元素数量: ${avatarCircle.length + unifiedAvatars.length + allAvatarContainers.length}`);
     }
 
     /**
@@ -2700,26 +2507,11 @@ ${settings.selectedCharacter ? `- 角色卡：${settings.selectedCharacter}` : '
                                 <option value="elegant">🐉 优雅 - 古典文雅的龙</option>
                                 <option value="shy">🐰 害羞 - 轻声细语的兔子</option>
                                 <option value="smart">🐦 聪明 - 机智幽默的鸟</option>
-                                <option value="character">📋 使用角色卡人设</option>
                                 <option value="custom">✏️ 自定义人设</option>
                             </select>
                         </div>
 
-                        <!-- 角色卡选择容器 -->
-                        <div id="virtual-pet-personality-character-container" style="display: none; margin-top: 10px;">
-                            <label for="virtual-pet-personality-character-select" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
-                                选择角色卡：
-                            </label>
-                            <div style="display: flex; gap: 8px; align-items: center;">
-                                <select id="virtual-pet-personality-character-select" style="flex: 1; padding: 6px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
-                                    <option value="">请选择角色卡...</option>
-                                </select>
-                                <button id="refresh-personality-characters-btn" style="padding: 6px 12px; background: #7289da; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8em;">
-                                    🔄 刷新
-                                </button>
-                            </div>
-                            <small style="color: #888; font-size: 0.8em;">从SillyTavern的角色卡中读取人设信息</small>
-                        </div>
+
 
                         <!-- 自定义人设容器 -->
                         <div id="virtual-pet-custom-personality-container" style="display: none; margin-top: 10px;">
@@ -2735,7 +2527,7 @@ ${settings.selectedCharacter ? `- 角色卡：${settings.selectedCharacter}` : '
                         </div>
 
                         <small class="notes" style="margin-top: 10px; display: block;">
-                            选择预设人设、角色卡人设或自定义人设，AI会根据人设生成个性化回复
+                            选择预设人设或自定义人设，AI会根据人设生成个性化回复
                         </small>
 
                         <!-- AI 配置设置 -->
@@ -5487,6 +5279,97 @@ ${settings.selectedCharacter ? `- 角色卡：${settings.selectedCharacter}` : '
     };
 
     /**
+     * 测试角色卡功能是否已移除
+     */
+    window.testCharacterCardRemoval = function() {
+        console.log('🔍 检查角色卡功能是否已移除...');
+
+        const characterElements = [
+            '#virtual-pet-personality-character-select',
+            '#virtual-pet-personality-character-container',
+            '#refresh-personality-characters-btn'
+        ];
+
+        const characterOptions = $('#virtual-pet-personality-select option[value="character"]');
+
+        console.log('=== 角色卡功能检查结果 ===');
+
+        let foundElements = 0;
+        characterElements.forEach(selector => {
+            const element = $(selector);
+            if (element.length > 0) {
+                console.log(`❌ 发现残留元素: ${selector}`);
+                foundElements++;
+            } else {
+                console.log(`✅ 元素已移除: ${selector}`);
+            }
+        });
+
+        if (characterOptions.length > 0) {
+            console.log(`❌ 发现角色卡选项: ${characterOptions.length} 个`);
+            foundElements++;
+        } else {
+            console.log(`✅ 角色卡选项已移除`);
+        }
+
+        if (foundElements === 0) {
+            console.log('✅ 角色卡功能已完全移除！');
+            toastr.success('角色卡功能已完全移除！');
+        } else {
+            console.log(`❌ 发现 ${foundElements} 个残留元素`);
+            toastr.warning(`发现 ${foundElements} 个角色卡相关的残留元素`);
+        }
+
+        console.log('=== 检查完成 ===');
+    };
+
+    /**
+     * 测试头像同步功能
+     */
+    window.testAvatarSync = function() {
+        console.log('🔍 测试头像同步功能...');
+
+        // 检查当前头像状态
+        console.log('=== 头像同步检查结果 ===');
+        console.log(`当前自定义头像: ${customAvatarData ? '已设置' : '未设置'}`);
+
+        if (customAvatarData) {
+            console.log(`头像数据长度: ${customAvatarData.length} 字符`);
+            console.log(`头像数据类型: ${customAvatarData.startsWith('data:image/') ? '有效图片' : '无效数据'}`);
+        }
+
+        // 检查各个位置的头像显示
+        const avatarElements = {
+            '悬浮按钮': $(`#${BUTTON_ID}`),
+            '弹窗头像圆圈': $('.pet-avatar-circle'),
+            '统一UI头像': $('.pet-avatar'),
+            '头像表情': $('.pet-emoji'),
+            '头像区域': $('.pet-avatar-section .pet-avatar-circle')
+        };
+
+        Object.entries(avatarElements).forEach(([name, elements]) => {
+            if (elements.length > 0) {
+                const hasCustomImage = elements.find('img').length > 0;
+                console.log(`${hasCustomImage ? '✅' : '❌'} ${name}: ${elements.length} 个元素, ${hasCustomImage ? '显示自定义头像' : '显示默认头像'}`);
+            } else {
+                console.log(`⚠️ ${name}: 未找到元素`);
+            }
+        });
+
+        // 强制同步头像
+        console.log('🔄 强制同步头像...');
+        updateAvatarDisplay();
+        updateFloatingButtonAvatar();
+
+        setTimeout(() => {
+            console.log('✅ 头像同步完成，请检查各个位置的头像是否一致');
+            toastr.success('头像同步完成！');
+        }, 500);
+
+        console.log('=== 检查完成 ===');
+    };
+
+    /**
      * 修复Google AI模型配置
      */
     window.fixGoogleAIModel = function() {
@@ -5682,6 +5565,8 @@ ${settings.selectedCharacter ? `- 角色卡：${settings.selectedCharacter}` : '
         console.log('  testAPIConnection()        - 测试API连接');
         console.log('  testPromptBuild()          - 测试提示词构建');
         console.log('  testAIReply("feed")        - 测试AI回复');
+        console.log('  testCharacterCardRemoval() - 检查角色卡功能是否已移除');
+        console.log('  testAvatarSync()           - 测试头像同步功能');
         console.log('');
         console.log('🔑 获取API密钥:');
         console.log('  Google AI: https://aistudio.google.com/');

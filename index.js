@@ -433,7 +433,12 @@ jQuery(async () => {
         } catch (error) {
             console.error(`[${extensionName}] 加载人设和互动设置失败:`, error);
         }
-        return {};
+
+        // 如果没有保存的设置，确保初始化UI状态
+        const defaultSettings = {};
+        togglePersonalityInputs('default');
+        toggleApiConfigInputs('');
+        return defaultSettings;
     }
 
     /**
@@ -459,9 +464,13 @@ jQuery(async () => {
      * 切换API配置输入框的显示状态
      */
     function toggleApiConfigInputs(apiType) {
-        const container = $('#api-config-container');
+        const container = $('#ai-config-container');
+        console.log(`[${extensionName}] toggleApiConfigInputs called with apiType: ${apiType}`);
+        console.log(`[${extensionName}] Container found: ${container.length > 0}`);
+
         if (apiType && apiType !== 'auto' && apiType !== '') {
             container.show();
+            console.log(`[${extensionName}] Showing API config container for type: ${apiType}`);
 
             // 根据API类型设置默认值
             const defaults = {
@@ -475,12 +484,14 @@ jQuery(async () => {
                 'horde': { url: 'https://horde.koboldai.net', model: 'horde' }
             };
 
-            if (defaults[apiType] && !$('#api-url-input').val()) {
-                $('#api-url-input').attr('placeholder', defaults[apiType].url);
-                $('#api-model-input').attr('placeholder', defaults[apiType].model);
+            if (defaults[apiType] && !$('#ai-url-input').val()) {
+                $('#ai-url-input').attr('placeholder', defaults[apiType].url);
+                $('#ai-model-input').attr('placeholder', defaults[apiType].model);
+                console.log(`[${extensionName}] Set placeholders for ${apiType}`);
             }
         } else {
             container.hide();
+            console.log(`[${extensionName}] Hiding API config container`);
         }
     }
 
@@ -1043,10 +1054,43 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
             testAIConnection();
         });
 
+        // 确保在初始化完成后正确显示API配置输入框
+        setTimeout(() => {
+            const currentApiType = $('#ai-api-select').val();
+            console.log(`[${extensionName}] 当前API类型: ${currentApiType}`);
+            if (currentApiType) {
+                toggleApiConfigInputs(currentApiType);
+                console.log(`[${extensionName}] 强制显示API配置输入框`);
+            }
+        }, 100);
+
         console.log(`[${extensionName}] 设置面板初始化完成`);
         console.log(`[${extensionName}] 当前人设类型: ${currentPersonalityType}`);
         console.log(`[${extensionName}] 当前人设内容: ${getCurrentPersonality()}`);
     }
+
+    /**
+     * 调试API配置显示问题
+     */
+    window.debugApiConfig = function() {
+        console.log('=== API配置调试信息 ===');
+        console.log('API选择框:', $('#ai-api-select').length > 0 ? '存在' : '不存在');
+        console.log('API选择框值:', $('#ai-api-select').val());
+        console.log('API配置容器:', $('#ai-config-container').length > 0 ? '存在' : '不存在');
+        console.log('API配置容器显示状态:', $('#ai-config-container').is(':visible') ? '显示' : '隐藏');
+        console.log('API URL输入框:', $('#ai-url-input').length > 0 ? '存在' : '不存在');
+        console.log('API Key输入框:', $('#ai-key-input').length > 0 ? '存在' : '不存在');
+        console.log('API Model输入框:', $('#ai-model-input').length > 0 ? '存在' : '不存在');
+
+        // 强制显示配置容器
+        const apiType = $('#ai-api-select').val();
+        if (apiType) {
+            console.log('强制调用 toggleApiConfigInputs...');
+            toggleApiConfigInputs(apiType);
+        }
+
+        console.log('=== 调试完成 ===');
+    };
 
     /**
      * 测试AI连接

@@ -70,12 +70,12 @@ jQuery(async () => {
         buttonAccent: '#87CEEB',
         buttonHover: '#FF7FB3',
 
-        // 状态栏色 - 经典像素风格
-        health: '#FF0000',       // 健康 - 红色
-        happiness: '#FFFF00',    // 快乐 - 黄色
-        hunger: '#FF8000',       // 饱食 - 橙色
-        energy: '#0080FF',       // 精力 - 蓝色
-        experience: '#8000FF'    // 经验 - 紫色
+        // 状态栏色 - 糖果色风格
+        health: '#FF6B9D',       // 健康 - 糖果粉
+        happiness: '#FFD93D',    // 快乐 - 柠檬黄
+        hunger: '#FF9F43',       // 饱食 - 蜜桃橙
+        energy: '#74B9FF',       // 精力 - 天空蓝
+        experience: '#A29BFE'    // 经验 - 薰衣草紫
     };
     
     // 宠物数据结构 - 拓麻歌子式设计
@@ -1843,7 +1843,7 @@ ${getCurrentPersonality()}
                         <div class="progress-fill sickness" style="
                             width: ${petData.sickness || 0}% !important;
                             height: 100% !important;
-                            background: #FF0000 !important;
+                            background: ${candyColors.health} !important;
                             transition: none !important;
                         "></div>
                     </div>
@@ -1878,7 +1878,7 @@ ${getCurrentPersonality()}
                         <div class="progress-fill discipline" style="
                             width: ${petData.discipline || 50}% !important;
                             height: 100% !important;
-                            background: #8000FF !important;
+                            background: ${candyColors.experience} !important;
                             transition: none !important;
                         "></div>
                     </div>
@@ -4887,6 +4887,46 @@ ${getCurrentPersonality()}
         };
     };
 
+    // 测试新的状态栏颜色
+    window.testStatusColors = function() {
+        console.log('🎨 测试新的状态栏颜色...');
+
+        console.log('\n🌈 状态栏配色:');
+        console.log(`❤️ 健康: ${candyColors.health} (糖果粉)`);
+        console.log(`😊 快乐: ${candyColors.happiness} (柠檬黄)`);
+        console.log(`🍖 饱食: ${candyColors.hunger} (蜜桃橙)`);
+        console.log(`⚡ 精力: ${candyColors.energy} (天空蓝)`);
+        console.log(`💊 疾病: ${candyColors.health} (糖果粉)`);
+        console.log(`📚 纪律: ${candyColors.experience} (薰衣草紫)`);
+
+        console.log('\n✨ 按钮配色:');
+        console.log(`🍖 喂食: ${candyColors.buttonPrimary} (糖果粉)`);
+        console.log(`🎮 玩耍: ${candyColors.buttonSecondary} (薄荷绿)`);
+        console.log(`😴 休息: ${candyColors.buttonAccent} (天空蓝)`);
+        console.log(`💊 治疗: ${candyColors.health} (糖果粉)`);
+        console.log(`🛒 商店: ${candyColors.happiness} (柠檬黄)`);
+
+        console.log('\n🎯 改进内容:');
+        console.log('✅ 状态栏颜色更加柔和美观');
+        console.log('✅ 移除了刺眼的纯色 (#FF0000, #FFFF00)');
+        console.log('✅ 添加了缺失的精力状态栏');
+        console.log('✅ 统一了移动端和桌面端的颜色');
+        console.log('✅ 按钮颜色与糖果色主题协调');
+
+        toastr.success('🎨 状态栏颜色已优化！重新打开宠物界面查看美丽的糖果色效果。');
+
+        return {
+            statusColors: {
+                health: candyColors.health,
+                happiness: candyColors.happiness,
+                hunger: candyColors.hunger,
+                energy: candyColors.energy,
+                experience: candyColors.experience
+            },
+            timestamp: new Date().toISOString()
+        };
+    };
+
     // 检查数值增减逻辑
     window.checkValueChanges = function() {
         console.log('=== 🔍 数值增减逻辑检查 ===');
@@ -6292,10 +6332,10 @@ ${getCurrentPersonality()}
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
                                 <span style="color: ${candyColors.textSecondary} !important; font-size: 0.8em !important;">🍖 饱食度</span>
-                                <span style="color: ${candyColors.warning} !important; font-size: 0.8em !important;">${Math.round(petData.hunger)}/100</span>
+                                <span style="color: ${candyColors.hunger} !important; font-size: 0.8em !important;">${Math.round(petData.hunger)}/100</span>
                             </div>
                             <div style="background: ${candyColors.border} !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: ${candyColors.warning} !important; height: 100% !important; width: ${petData.hunger}% !important; transition: width 0.3s ease !important;"></div>
+                                <div style="background: ${candyColors.hunger} !important; height: 100% !important; width: ${petData.hunger}% !important; transition: width 0.3s ease !important;"></div>
                             </div>
                         </div>
                         <div class="status-item">
@@ -6305,6 +6345,15 @@ ${getCurrentPersonality()}
                             </div>
                             <div style="background: ${candyColors.border} !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
                                 <div style="background: ${candyColors.happiness} !important; height: 100% !important; width: ${petData.happiness}% !important; transition: width 0.3s ease !important;"></div>
+                            </div>
+                        </div>
+                        <div class="status-item">
+                            <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
+                                <span style="color: ${candyColors.textSecondary} !important; font-size: 0.8em !important;">⚡ 精力</span>
+                                <span style="color: ${candyColors.energy} !important; font-size: 0.8em !important;">${Math.round(petData.energy)}/100</span>
+                            </div>
+                            <div style="background: ${candyColors.border} !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: ${candyColors.energy} !important; height: 100% !important; width: ${petData.energy}% !important; transition: width 0.3s ease !important;"></div>
                             </div>
                         </div>
                     </div>
@@ -6400,7 +6449,7 @@ ${getCurrentPersonality()}
                     ${petData.dataVersion >= 4.0 && (petData.sickness || 0) > 10 ? `
                     <button class="action-btn heal-btn" style="
                         padding: 8px !important;
-                        background: #FF0000 !important;
+                        background: ${candyColors.health} !important;
                         color: ${candyColors.textWhite} !important;
                         border: 2px solid ${candyColors.border} !important;
                         border-radius: 0 !important;
@@ -6423,7 +6472,7 @@ ${getCurrentPersonality()}
                     ` : `
                     <button class="action-btn shop-btn" style="
                         padding: 8px !important;
-                        background: #FFFF00 !important;
+                        background: ${candyColors.happiness} !important;
                         color: ${candyColors.textPrimary} !important;
                         border: 2px solid ${candyColors.border} !important;
                         border-radius: 0 !important;
@@ -6543,10 +6592,10 @@ ${getCurrentPersonality()}
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
                                 <span style="color: ${candyColors.textSecondary} !important; font-size: 0.9em !important;">🍖 饱食度</span>
-                                <span style="color: ${candyColors.warning} !important; font-size: 0.9em !important;">${Math.round(petData.hunger)}/100</span>
+                                <span style="color: ${candyColors.hunger} !important; font-size: 0.9em !important;">${Math.round(petData.hunger)}/100</span>
                             </div>
                             <div style="background: ${candyColors.border} !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
-                                <div style="background: ${candyColors.warning} !important; height: 100% !important; width: ${petData.hunger}% !important; transition: width 0.3s ease !important;"></div>
+                                <div style="background: ${candyColors.hunger} !important; height: 100% !important; width: ${petData.hunger}% !important; transition: width 0.3s ease !important;"></div>
                             </div>
                         </div>
                         <div class="status-item">
@@ -6556,6 +6605,15 @@ ${getCurrentPersonality()}
                             </div>
                             <div style="background: ${candyColors.border} !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
                                 <div style="background: ${candyColors.happiness} !important; height: 100% !important; width: ${petData.happiness}% !important; transition: width 0.3s ease !important;"></div>
+                            </div>
+                        </div>
+                        <div class="status-item">
+                            <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
+                                <span style="color: ${candyColors.textSecondary} !important; font-size: 0.9em !important;">⚡ 精力</span>
+                                <span style="color: ${candyColors.energy} !important; font-size: 0.9em !important;">${Math.round(petData.energy)}/100</span>
+                            </div>
+                            <div style="background: ${candyColors.border} !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: ${candyColors.energy} !important; height: 100% !important; width: ${petData.energy}% !important; transition: width 0.3s ease !important;"></div>
                             </div>
                         </div>
                     </div>

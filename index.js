@@ -114,8 +114,14 @@ jQuery(async () => {
 
         if (selectedType === 'custom') {
             const customPersonality = localStorage.getItem(`${extensionName}-custom-personality`) || '';
-            return customPersonality || PRESET_PERSONALITIES.default;
 
+            // 如果自定义人设为空，提示用户设置
+            if (!customPersonality.trim()) {
+                console.warn(`[${extensionName}] 自定义人设为空，请设置自定义人设内容`);
+                return "请在设置中输入您的自定义人设内容。";
+            }
+
+            return customPersonality;
         } else {
             return PRESET_PERSONALITIES[selectedType] || PRESET_PERSONALITIES.default;
         }
@@ -5600,6 +5606,82 @@ jQuery(async () => {
     };
 
     /**
+     * 强制清理并重新设置人设
+     */
+    window.forceResetPersonality = function() {
+        console.log('🔧 强制重置人设系统...');
+
+        // 清理所有人设相关的localStorage
+        localStorage.removeItem(`${extensionName}-personality-type`);
+        localStorage.removeItem(`${extensionName}-custom-personality`);
+
+        // 重置UI到默认状态
+        $('#virtual-pet-personality-select').val('default');
+        $('#virtual-pet-custom-personality').val('');
+        togglePersonalityInputs('default');
+
+        // 保存默认设置
+        savePersonalitySettings('default');
+
+        console.log('✅ 人设系统已重置为默认状态');
+        console.log(`当前人设: ${getCurrentPersonality()}`);
+
+        toastr.success('人设系统已重置！现在可以重新选择人设');
+    };
+
+    /**
+     * 检查并修复人设混合问题
+     */
+    window.checkPersonalityMix = function() {
+        console.log('🔍 检查人设混合问题...');
+
+        const personalityType = localStorage.getItem(`${extensionName}-personality-type`) || 'default';
+        const customPersonality = localStorage.getItem(`${extensionName}-custom-personality`) || '';
+        const currentPersonality = getCurrentPersonality();
+
+        console.log('=== 人设状态检查 ===');
+        console.log(`人设类型: ${personalityType}`);
+        console.log(`自定义内容: ${customPersonality || '(空)'}`);
+        console.log(`当前生效人设: ${currentPersonality}`);
+
+        // 检查是否有混合问题
+        let hasMixIssue = false;
+
+        if (personalityType === 'custom') {
+            if (!customPersonality.trim()) {
+                console.log('❌ 问题: 选择了自定义人设但内容为空');
+                hasMixIssue = true;
+            } else if (currentPersonality.includes('高冷') || currentPersonality.includes('温柔的猫')) {
+                console.log('❌ 问题: 自定义人设中包含默认人设内容');
+                hasMixIssue = true;
+            }
+        }
+
+        if (hasMixIssue) {
+            console.log('\n🔧 建议修复方案:');
+            console.log('1. 运行 forceResetPersonality() 重置人设系统');
+            console.log('2. 或运行 fixCustomPersonality("您的人设内容") 重新设置自定义人设');
+            toastr.warning('检测到人设混合问题，请查看控制台修复建议');
+        } else {
+            console.log('✅ 人设系统正常，没有混合问题');
+            toastr.success('人设系统正常！');
+        }
+
+        // 测试生成的提示词
+        console.log('\n=== 提示词测试 ===');
+        const testPrompt = buildInteractionPrompt('play');
+        console.log('生成的提示词:');
+        console.log(testPrompt);
+
+        return {
+            personalityType,
+            customPersonality,
+            currentPersonality,
+            hasMixIssue
+        };
+    };
+
+    /**
      * 修复Google AI模型配置
      */
     window.fixGoogleAIModel = function() {
@@ -5801,6 +5883,8 @@ jQuery(async () => {
         console.log('  resetToLowValues()         - 重置为低数值（解决满值问题）');
         console.log('  debugPersonality()         - 调试人设设置问题');
         console.log('  fixCustomPersonality("内容") - 修复自定义人设设置');
+        console.log('  checkPersonalityMix()      - 检查人设混合问题');
+        console.log('  forceResetPersonality()    - 强制重置人设系统');
         console.log('');
         console.log('🔑 获取API密钥:');
         console.log('  Google AI: https://aistudio.google.com/');

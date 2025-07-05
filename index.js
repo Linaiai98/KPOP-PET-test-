@@ -964,8 +964,18 @@ jQuery(async () => {
             togglePersonalityInputs(selectedType);
 
             if (selectedType === 'custom') {
-                // 自定义人设，等待用户输入
+                // 自定义人设，立即保存类型，然后等待用户输入内容
+                localStorage.setItem(`${extensionName}-personality-type`, 'custom');
                 console.log(`[${extensionName}] 切换到自定义人设模式`);
+
+                // 如果已有自定义内容，立即应用
+                const existingCustom = localStorage.getItem(`${extensionName}-custom-personality`);
+                if (existingCustom) {
+                    await savePersonalitySettings('custom', existingCustom);
+                    toastr.success('已切换到自定义人设');
+                } else {
+                    toastr.info('请在下方输入自定义人设内容');
+                }
             } else {
                 // 预设人设，立即保存
                 await savePersonalitySettings(selectedType);
@@ -976,7 +986,14 @@ jQuery(async () => {
         // 绑定自定义人设输入事件
         $('#virtual-pet-custom-personality').on('input', async function() {
             const customText = $(this).val().trim();
+
+            // 确保人设类型设置为custom
+            localStorage.setItem(`${extensionName}-personality-type`, 'custom');
+
+            // 保存自定义人设内容
             await savePersonalitySettings('custom', customText);
+
+            console.log(`[${extensionName}] 自定义人设已更新: ${customText.substring(0, 50)}...`);
         });
 
         // 绑定AI API配置事件
@@ -5513,6 +5530,76 @@ jQuery(async () => {
     };
 
     /**
+     * 调试人设设置问题
+     */
+    window.debugPersonality = function() {
+        console.log('🔍 调试人设设置...');
+
+        console.log('=== 人设设置状态 ===');
+        const personalityType = localStorage.getItem(`${extensionName}-personality-type`);
+        const customPersonality = localStorage.getItem(`${extensionName}-custom-personality`);
+
+        console.log(`人设类型: ${personalityType || '未设置'}`);
+        console.log(`自定义人设内容: ${customPersonality || '未设置'}`);
+        console.log(`getCurrentPersonality()返回: ${getCurrentPersonality()}`);
+
+        // 检查UI状态
+        const personalitySelect = $('#virtual-pet-personality-select');
+        const customTextarea = $('#virtual-pet-custom-personality');
+
+        console.log('\n=== UI状态检查 ===');
+        console.log(`人设选择器值: ${personalitySelect.val()}`);
+        console.log(`自定义人设文本框值: ${customTextarea.val()}`);
+        console.log(`自定义人设容器显示: ${$('#virtual-pet-custom-personality-container').is(':visible')}`);
+
+        // 检查预设人设
+        console.log('\n=== 预设人设 ===');
+        Object.entries(PRESET_PERSONALITIES).forEach(([key, value]) => {
+            console.log(`${key}: ${value.substring(0, 50)}...`);
+        });
+
+        // 测试构建提示词
+        console.log('\n=== 测试提示词构建 ===');
+        const testPrompt = buildInteractionPrompt('feed');
+        console.log('生成的提示词:');
+        console.log(testPrompt);
+
+        console.log('\n=== 调试完成 ===');
+        toastr.info('人设调试完成，请查看控制台');
+    };
+
+    /**
+     * 快速修复自定义人设
+     */
+    window.fixCustomPersonality = function(customText) {
+        if (!customText) {
+            console.log('❌ 请提供自定义人设内容');
+            console.log('用法: fixCustomPersonality("你的自定义人设内容")');
+            return;
+        }
+
+        console.log('🔧 修复自定义人设设置...');
+
+        // 强制设置为自定义人设
+        localStorage.setItem(`${extensionName}-personality-type`, 'custom');
+        localStorage.setItem(`${extensionName}-custom-personality`, customText);
+
+        // 更新UI
+        $('#virtual-pet-personality-select').val('custom');
+        $('#virtual-pet-custom-personality').val(customText);
+        togglePersonalityInputs('custom');
+
+        // 保存设置
+        savePersonalitySettings('custom', customText);
+
+        console.log('✅ 自定义人设已修复');
+        console.log(`人设内容: ${customText}`);
+        console.log(`getCurrentPersonality(): ${getCurrentPersonality()}`);
+
+        toastr.success('自定义人设已修复！');
+    };
+
+    /**
      * 修复Google AI模型配置
      */
     window.fixGoogleAIModel = function() {
@@ -5712,6 +5799,8 @@ jQuery(async () => {
         console.log('  testAvatarSync()           - 测试头像同步功能');
         console.log('  testValueSystem()          - 测试新的数值系统');
         console.log('  resetToLowValues()         - 重置为低数值（解决满值问题）');
+        console.log('  debugPersonality()         - 调试人设设置问题');
+        console.log('  fixCustomPersonality("内容") - 修复自定义人设设置');
         console.log('');
         console.log('🔑 获取API密钥:');
         console.log('  Google AI: https://aistudio.google.com/');

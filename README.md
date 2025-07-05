@@ -100,7 +100,27 @@
 3. 尝试禁用其他扩展排查冲突
 4. 在GitHub Issues中提交问题报告
 
+## 🗑️ 卸载插件
+
+为了防止重新安装时出现"Directory already exists"错误，插件现在包含自动清理功能：
+
+### 自动清理（推荐）
+1. 在扩展设置中禁用插件
+2. 系统会自动清理UI元素
+3. 如需完全清理数据，在控制台运行：`cleanupVirtualPetSystem(true)`
+
+### 手动清理
+- 使用提供的清理脚本：`cleanup_plugin.bat`（Windows）或 `cleanup_plugin.sh`（Linux/Mac）
+- 详细说明请查看 [UNINSTALL_GUIDE.md](UNINSTALL_GUIDE.md)
+
 ## 📝 更新日志
+
+### v1.0.1 (2025-01-05)
+- 🛠️ **新增自动卸载清理功能**
+- 🔧 修复重装时的"Directory already exists"错误
+- 📚 完善卸载指南和清理脚本
+- ✨ 改进插件禁用时的清理逻辑
+- 🧹 添加localStorage数据清理选项
 
 ### v1.0.0 (2024-12-27)
 - 🎉 首次发布

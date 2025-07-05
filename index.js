@@ -2625,6 +2625,116 @@ ${getCurrentPersonality()}
         $(`#${BUTTON_ID}`).remove();
     }
 
+    /**
+     * 插件卸载清理函数
+     * 当插件被禁用或卸载时自动清理相关数据和DOM元素
+     */
+    function cleanupOnUnload() {
+        console.log(`[${extensionName}] 开始执行卸载清理...`);
+
+        try {
+            // 1. 清理DOM元素
+            $(`#${BUTTON_ID}`).remove();
+            $(`#${OVERLAY_ID}`).remove();
+            $('.virtual-pet-popup-overlay').remove();
+            $('#shop-modal').remove();
+            $('.pet-notification').remove();
+            $('#ios-test-button').remove();
+            $('#test-popup-button').remove();
+
+            // 2. 清理事件监听器
+            $(document).off('.petdragtemp');
+            $(document).off('visibilitychange');
+
+            // 3. 清理全局变量
+            if (window.testVirtualPet) delete window.testVirtualPet;
+            if (window.forceShowPetButton) delete window.forceShowPetButton;
+            if (window.forceDataMigration) delete window.forceDataMigration;
+            if (window.forceClearAndReload) delete window.forceClearAndReload;
+            if (window.fixAllIssues) delete window.fixAllIssues;
+            if (window.createIOSTestButton) delete window.createIOSTestButton;
+            if (window.showIOSPopup) delete window.showIOSPopup;
+            if (window.clearAllPopups) delete window.clearAllPopups;
+            if (window.forceCloseAllPopups) delete window.forceCloseAllPopups;
+            if (window.closeShopModal) delete window.closeShopModal;
+            if (window.testShopSystem) delete window.testShopSystem;
+
+            // 4. 可选：清理localStorage数据（用户可选择保留）
+            const shouldClearData = confirm(
+                '是否同时清理宠物数据？\n\n' +
+                '选择"确定"：完全清理所有数据（包括宠物状态、设置等）\n' +
+                '选择"取消"：保留数据，下次安装时可以恢复'
+            );
+
+            if (shouldClearData) {
+                // 清理所有相关的localStorage数据
+                const keysToRemove = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && (
+                        key.includes('virtual-pet') ||
+                        key.includes('KPCP-PET') ||
+                        key.includes('pet-system') ||
+                        key.startsWith(extensionName)
+                    )) {
+                        keysToRemove.push(key);
+                    }
+                }
+
+                keysToRemove.forEach(key => {
+                    localStorage.removeItem(key);
+                    console.log(`[${extensionName}] 已清理localStorage: ${key}`);
+                });
+
+                console.log(`[${extensionName}] 已清理 ${keysToRemove.length} 个localStorage项目`);
+            }
+
+            console.log(`[${extensionName}] 卸载清理完成`);
+
+            // 显示清理完成提示
+            if (typeof toastr !== 'undefined') {
+                toastr.success('虚拟宠物系统已完全清理！', '', { timeOut: 3000 });
+            }
+
+        } catch (error) {
+            console.error(`[${extensionName}] 卸载清理过程中发生错误:`, error);
+            if (typeof toastr !== 'undefined') {
+                toastr.warning('清理过程中发生部分错误，请检查控制台', '', { timeOut: 5000 });
+            }
+        }
+    }
+
+    /**
+     * 检测插件是否被禁用并执行清理
+     */
+    function setupUnloadDetection() {
+        // 监听插件开关状态变化
+        const checkInterval = setInterval(() => {
+            const isEnabled = localStorage.getItem(STORAGE_KEY_ENABLED) !== "false";
+            const toggleElement = $(TOGGLE_ID);
+
+            // 如果插件被禁用且DOM元素仍存在，执行清理
+            if (!isEnabled && $(`#${BUTTON_ID}`).length > 0) {
+                console.log(`[${extensionName}] 检测到插件被禁用，执行清理...`);
+                destroyFloatingButton();
+                $(`#${OVERLAY_ID}`).remove();
+                $('.virtual-pet-popup-overlay').remove();
+                clearInterval(checkInterval); // 停止检测
+            }
+        }, 1000);
+
+        // 页面卸载时的清理
+        window.addEventListener('beforeunload', () => {
+            // 简单清理，不显示确认对话框
+            $(`#${BUTTON_ID}`).remove();
+            $(`#${OVERLAY_ID}`).remove();
+            $('.virtual-pet-popup-overlay').remove();
+        });
+
+        // 为开发者提供手动清理函数
+        window.cleanupVirtualPetSystem = cleanupOnUnload;
+    }
+
     // -----------------------------------------------------------------
     // 6. 初始化流程
     // -----------------------------------------------------------------
@@ -2952,6 +3062,9 @@ ${getCurrentPersonality()}
                 }
             }, 3000); // 延迟3秒创建，确保页面完全加载
         }
+
+        // 10. 设置卸载检测
+        setupUnloadDetection();
 
         console.log(`[${extensionName}] Extension loaded successfully.`);
     }

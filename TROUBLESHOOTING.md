@@ -1,5 +1,79 @@
 # 虚拟宠物系统 - 故障排除指南
 
+## 🚨 插件重装失败问题
+
+### 问题：删除插件重装时出现黄色框报错
+
+**错误信息**：
+```
+Extension installation failed
+Directory already exists at public/scripts/extensions/third-party/KPCP-PET
+```
+
+**原因分析**：
+- SillyTavern的插件删除功能有时不会完全清理目录
+- 残留的文件夹阻止了重新安装
+- 这是SillyTavern扩展管理器的已知问题
+
+**解决方案**：
+
+#### 方法一：手动删除残留目录（推荐）
+
+1. **关闭SillyTavern**
+2. **找到SillyTavern安装目录**
+   - 通常在：`SillyTavern/public/scripts/extensions/third-party/`
+3. **手动删除插件文件夹**
+   - 删除 `KPCP-PET` 或 `virtual-pet-system` 文件夹
+   - 确保文件夹完全删除
+4. **重启SillyTavern**
+5. **重新安装插件**
+
+#### 方法二：使用文件管理器清理
+
+**Windows用户**：
+1. 按 `Win + R` 打开运行对话框
+2. 输入 `%USERPROFILE%` 或导航到SillyTavern目录
+3. 找到 `SillyTavern\public\scripts\extensions\third-party\`
+4. 删除对应的插件文件夹
+5. 重启SillyTavern后重新安装
+
+**Linux/Mac用户**：
+```bash
+# 导航到SillyTavern目录
+cd /path/to/SillyTavern
+# 删除插件目录
+rm -rf public/scripts/extensions/third-party/KPCP-PET
+# 或者
+rm -rf public/scripts/extensions/third-party/virtual-pet-system
+```
+
+#### 方法三：清理所有第三方插件（谨慎使用）
+
+如果有多个插件安装问题：
+1. 备份重要的插件设置
+2. 删除整个 `third-party` 文件夹
+3. 重启SillyTavern
+4. 重新安装所需的插件
+
+**注意**：这会删除所有第三方插件，请谨慎使用！
+
+### 预防措施
+
+1. **正确卸载插件**：
+   - 先在扩展设置中禁用插件
+   - 等待几秒钟
+   - 再进行删除操作
+
+2. **定期清理**：
+   - 定期检查 `third-party` 目录
+   - 删除不需要的插件文件夹
+
+3. **使用Git安装**（高级用户）：
+   ```bash
+   cd SillyTavern/public/scripts/extensions/third-party/
+   git clone https://github.com/your-repo/virtual-pet-system.git
+   ```
+
 ## 🔍 悬浮窗不显示的排查步骤
 
 ### 第一步：检查文件结构
@@ -178,6 +252,8 @@ console.log('CSS loaded:', cssLoaded);
 
 ## 🚀 快速修复命令
 
+### 自动诊断脚本
+
 在浏览器控制台中运行以下命令进行快速诊断：
 
 ```javascript
@@ -190,19 +266,166 @@ console.log('CSS loaded:', cssLoaded);
     console.log('Virtual pet toggle:', $('#virtual-pet-enabled-toggle').length);
     console.log('Virtual pet button:', $('#virtual-pet-button').length);
     console.log('LocalStorage available:', typeof localStorage !== 'undefined');
-    
+
     // 检查CSS
-    const cssLoaded = Array.from(document.styleSheets).some(sheet => 
+    const cssLoaded = Array.from(document.styleSheets).some(sheet =>
         sheet.href && sheet.href.includes('virtual-pet-system')
     );
     console.log('CSS loaded:', cssLoaded);
-    
+
     // 检查存储的设置
     const enabled = localStorage.getItem('virtual-pet-enabled');
     console.log('Extension enabled in storage:', enabled);
-    
+
     console.log('=== 诊断完成 ===');
 })();
+```
+
+### 插件重装问题检测脚本
+
+```javascript
+// 检测插件安装问题
+(function() {
+    console.log('=== 插件安装问题检测 ===');
+
+    // 检查可能的残留目录
+    const possiblePaths = [
+        'scripts/extensions/third-party/KPCP-PET',
+        'scripts/extensions/third-party/virtual-pet-system',
+        'scripts/extensions/third-party/pet-system'
+    ];
+
+    console.log('检查可能的残留目录...');
+
+    // 尝试访问这些路径来检测是否存在
+    possiblePaths.forEach(path => {
+        fetch(path + '/manifest.json')
+            .then(response => {
+                if (response.ok) {
+                    console.warn(`⚠️ 发现残留目录: ${path}`);
+                    console.log(`建议手动删除: SillyTavern/public/${path}`);
+                } else {
+                    console.log(`✅ 路径清洁: ${path}`);
+                }
+            })
+            .catch(() => {
+                console.log(`✅ 路径清洁: ${path}`);
+            });
+    });
+
+    // 检查localStorage中的残留数据
+    const storageKeys = Object.keys(localStorage).filter(key =>
+        key.includes('virtual-pet') || key.includes('KPCP-PET')
+    );
+
+    if (storageKeys.length > 0) {
+        console.log('📦 发现localStorage中的插件数据:');
+        storageKeys.forEach(key => console.log(`  - ${key}`));
+        console.log('如需完全重置，可运行清理脚本');
+    } else {
+        console.log('✅ localStorage中无残留数据');
+    }
+
+    console.log('=== 检测完成 ===');
+})();
+```
+
+### 强制清理脚本（谨慎使用）
+
+```javascript
+// 强制清理所有插件数据（谨慎使用！）
+function forceCleanupPlugin() {
+    const confirmed = confirm(
+        '⚠️ 警告：这将删除所有虚拟宠物系统的数据！\n' +
+        '包括：宠物状态、设置、头像等\n' +
+        '确定要继续吗？'
+    );
+
+    if (!confirmed) {
+        console.log('❌ 用户取消了清理操作');
+        return;
+    }
+
+    console.log('🧹 开始强制清理...');
+
+    // 清理localStorage
+    const keysToRemove = Object.keys(localStorage).filter(key =>
+        key.includes('virtual-pet') ||
+        key.includes('KPCP-PET') ||
+        key.includes('pet-system')
+    );
+
+    keysToRemove.forEach(key => {
+        localStorage.removeItem(key);
+        console.log(`🗑️ 已删除: ${key}`);
+    });
+
+    // 清理DOM元素
+    $('#virtual-pet-button').remove();
+    $('.virtual-pet-popup-overlay').remove();
+    $('#virtual-pet-popup-overlay').remove();
+
+    console.log('✅ 清理完成！');
+    console.log('📝 建议步骤：');
+    console.log('1. 手动删除插件目录');
+    console.log('2. 重启SillyTavern');
+    console.log('3. 重新安装插件');
+
+    alert('清理完成！请按照控制台提示完成后续步骤。');
+}
+
+// 运行清理（取消注释下面这行来执行）
+// forceCleanupPlugin();
+```
+
+### 一键修复脚本
+
+```javascript
+// 一键尝试修复常见问题
+function quickFix() {
+    console.log('🔧 开始一键修复...');
+
+    try {
+        // 1. 重新加载CSS
+        const cssLink = document.querySelector('link[href*="virtual-pet-system"]');
+        if (cssLink) {
+            const newLink = cssLink.cloneNode();
+            newLink.href = cssLink.href + '?t=' + Date.now();
+            cssLink.parentNode.replaceChild(newLink, cssLink);
+            console.log('✅ CSS已重新加载');
+        }
+
+        // 2. 重新创建按钮
+        if ($('#virtual-pet-button').length === 0) {
+            if (typeof window.createPetButton === 'function') {
+                window.createPetButton();
+                console.log('✅ 按钮已重新创建');
+            }
+        }
+
+        // 3. 检查并修复设置
+        const enabled = localStorage.getItem('virtual-pet-enabled');
+        if (enabled === null) {
+            localStorage.setItem('virtual-pet-enabled', 'true');
+            console.log('✅ 已启用插件设置');
+        }
+
+        // 4. 刷新扩展设置UI
+        if ($('#virtual-pet-enabled-toggle').length > 0) {
+            $('#virtual-pet-enabled-toggle').prop('checked', enabled !== 'false');
+            console.log('✅ 设置UI已同步');
+        }
+
+        console.log('🎉 一键修复完成！');
+
+    } catch (error) {
+        console.error('❌ 修复过程中出现错误:', error);
+        console.log('建议手动排查或联系开发者');
+    }
+}
+
+// 运行一键修复
+quickFix();
 ```
 
 运行后将结果发送给开发者以获得更精确的帮助。

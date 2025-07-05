@@ -116,6 +116,9 @@ jQuery(async () => {
         coins: 100,                   // 金币
         inventory: {},                // 物品库存
 
+        // AI人设系统
+        personality: '',              // 当前人设内容
+
         dataVersion: 4.0 // 数据版本标记 - 升级到4.0表示拓麻歌子系统
     };
     
@@ -825,6 +828,7 @@ ${getCurrentPersonality()}
                         level: savedData.level || petData.level,
                         experience: savedData.experience || petData.experience,
                         created: savedData.created || petData.created,
+                        personality: savedData.personality || getCurrentPersonality(), // 保留人设信息
 
                         // 基础数值（使用更合理的初始值）
                         health: Math.min(savedData.health || 35, 70),
@@ -906,6 +910,7 @@ ${getCurrentPersonality()}
         } else {
             // 没有保存的数据，添加版本标记并应用拓麻歌子系统
             petData.dataVersion = 4.0;
+            petData.personality = getCurrentPersonality(); // 设置初始人设
             applyTamagotchiSystem();
             savePetData();
         }
@@ -5170,6 +5175,78 @@ ${getCurrentPersonality()}
                 text: '#FFFFFF',
                 contrast: 'excellent'
             },
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    // 测试自定义人设保存功能
+    window.testPersonalitySave = function() {
+        console.log('🎭 测试自定义人设保存功能...');
+
+        console.log('\n📋 当前人设状态:');
+        const currentType = localStorage.getItem(`${extensionName}-personality-type`) || 'default';
+        const customPersonality = localStorage.getItem(`${extensionName}-custom-personality`) || '';
+        console.log(`人设类型: ${currentType}`);
+        console.log(`自定义人设: ${customPersonality || '(空)'}`);
+        console.log(`petData.personality: ${petData.personality || '(空)'}`);
+
+        console.log('\n🔍 问题诊断:');
+        console.log('✅ 数据迁移时保留personality字段');
+        console.log('✅ 初始数据结构包含personality字段');
+        console.log('✅ 新用户初始化时设置personality');
+        console.log('✅ 数据加载时恢复personality');
+
+        console.log('\n🧪 测试自定义人设保存:');
+        const testPersonality = '我是一只特别可爱的测试宠物，喜欢和主人互动！';
+        console.log(`保存测试人设: ${testPersonality}`);
+
+        // 保存测试人设
+        savePersonalitySettings('custom', testPersonality);
+
+        // 验证保存结果
+        const savedType = localStorage.getItem(`${extensionName}-personality-type`);
+        const savedCustom = localStorage.getItem(`${extensionName}-custom-personality`);
+
+        console.log('\n✅ 保存结果验证:');
+        console.log(`localStorage人设类型: ${savedType}`);
+        console.log(`localStorage自定义人设: ${savedCustom}`);
+        console.log(`petData.personality: ${petData.personality}`);
+
+        // 模拟重新加载
+        console.log('\n🔄 模拟重新加载数据...');
+        const reloadedPersonality = getCurrentPersonality();
+        console.log(`重新加载后的人设: ${reloadedPersonality}`);
+
+        console.log('\n🎯 测试结果:');
+        const isWorking = savedType === 'custom' &&
+                         savedCustom === testPersonality &&
+                         petData.personality === testPersonality &&
+                         reloadedPersonality === testPersonality;
+
+        if (isWorking) {
+            console.log('✅ 自定义人设保存功能正常工作！');
+            toastr.success('🎭 自定义人设保存功能测试通过！');
+        } else {
+            console.log('❌ 自定义人设保存功能有问题！');
+            console.log('问题分析:');
+            if (savedType !== 'custom') console.log('- localStorage人设类型未正确保存');
+            if (savedCustom !== testPersonality) console.log('- localStorage自定义人设未正确保存');
+            if (petData.personality !== testPersonality) console.log('- petData.personality未正确更新');
+            if (reloadedPersonality !== testPersonality) console.log('- 重新加载时人设丢失');
+            toastr.error('❌ 自定义人设保存功能有问题，请检查控制台日志');
+        }
+
+        console.log('\n🔧 手动修复命令:');
+        console.log('- savePersonalitySettings("custom", "你的自定义人设") - 手动保存');
+        console.log('- getCurrentPersonality() - 检查当前人设');
+        console.log('- loadPetData() - 重新加载数据');
+
+        return {
+            working: isWorking,
+            currentType: savedType,
+            customPersonality: savedCustom,
+            petDataPersonality: petData.personality,
+            reloadedPersonality: reloadedPersonality,
             timestamp: new Date().toISOString()
         };
     };

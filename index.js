@@ -75,22 +75,22 @@ jQuery(async () => {
         experience: '#87CEEB'    // 经验 - 天空蓝
     };
     
-    // 宠物数据结构
+    // 宠物数据结构 - 使用更平衡的初始数值
     let petData = {
         name: "小宠物",
         type: "cat", // cat, dog, dragon, etc.
         level: 1,
         experience: 0,
-        health: 40,
-        happiness: 30,
-        hunger: 50,
-        energy: 60,
+        health: 35,      // 40→35 降低初始值
+        happiness: 25,   // 30→25 降低初始值
+        hunger: 40,      // 50→40 降低初始值
+        energy: 50,      // 60→50 降低初始值
         lastFeedTime: Date.now(),
         lastPlayTime: Date.now(),
         lastSleepTime: Date.now(),
         lastUpdateTime: Date.now(),
         created: Date.now(),
-        dataVersion: 2.0 // 数据版本标记
+        dataVersion: 3.0 // 数据版本标记 - 升级到3.0表示新的平衡系统
     };
     
     // -----------------------------------------------------------------
@@ -746,15 +746,15 @@ ${getCurrentPersonality()}
             try {
                 const savedData = JSON.parse(saved);
 
-                // 检查是否需要数据迁移（版本2.0 - 新的数值平衡）
-                const needsMigration = !savedData.dataVersion || savedData.dataVersion < 2.0;
+                // 检查是否需要数据迁移
+                const needsMigration = !savedData.dataVersion || savedData.dataVersion < 3.0;
 
                 if (needsMigration) {
-                    console.log(`[${extensionName}] 检测到旧数据，执行数据迁移...`);
+                    console.log(`[${extensionName}] 检测到旧数据版本 ${savedData.dataVersion || '未知'}，执行数据迁移到3.0...`);
 
-                    // 保留用户的自定义设置
+                    // 保留用户的自定义设置，但使用新的平衡数值
                     const migratedData = {
-                        ...petData, // 使用新的默认值
+                        ...petData, // 使用新的默认值（已经是平衡后的数值）
                         name: savedData.name || petData.name, // 保留自定义名字
                         type: savedData.type || petData.type, // 保留宠物类型
                         level: savedData.level || petData.level, // 保留等级
@@ -764,17 +764,25 @@ ${getCurrentPersonality()}
                         lastPlayTime: savedData.lastPlayTime || petData.lastPlayTime,
                         lastSleepTime: savedData.lastSleepTime || petData.lastSleepTime,
                         lastUpdateTime: savedData.lastUpdateTime || petData.lastUpdateTime,
-                        dataVersion: 2.0 // 标记为新版本数据
+                        dataVersion: 3.0 // 标记为新版本数据（平衡调整版本）
                     };
 
                     petData = migratedData;
+
+                    // 应用平衡性调整到函数
+                    applyBalancedFunctions();
+
                     savePetData(); // 保存迁移后的数据
 
-                    console.log(`[${extensionName}] 数据迁移完成！新的初始数值已应用`);
-                    console.log(`健康: ${petData.health}, 快乐: ${petData.happiness}, 饱食: ${petData.hunger}, 精力: ${petData.energy}`);
+                    console.log(`[${extensionName}] 数据迁移完成！平衡调整已应用`);
+                    console.log(`新数值 - 健康: ${petData.health}, 快乐: ${petData.happiness}, 饱食: ${petData.hunger}, 精力: ${petData.energy}`);
+                    toastr.info('数据已升级到新的平衡版本！数值增减更合理了。', '', { timeOut: 5000 });
                 } else {
                     // 数据版本正确，直接加载
                     petData = { ...petData, ...savedData };
+
+                    // 确保平衡性调整已应用
+                    applyBalancedFunctions();
                 }
 
                 // 确保使用当前选择的人设
@@ -783,8 +791,9 @@ ${getCurrentPersonality()}
                 console.error(`[${extensionName}] Error loading pet data:`, error);
             }
         } else {
-            // 没有保存的数据，添加版本标记
-            petData.dataVersion = 2.0;
+            // 没有保存的数据，添加版本标记并应用平衡调整
+            petData.dataVersion = 3.0;
+            applyBalancedFunctions();
             savePetData();
         }
     }
@@ -873,14 +882,14 @@ ${getCurrentPersonality()}
         const now = Date.now();
         const timeSinceLastFeed = now - petData.lastFeedTime;
 
-        if (timeSinceLastFeed < 20000) { // 20秒冷却
+        if (timeSinceLastFeed < 45000) { // 45秒冷却 (20→45秒)
             toastr.warning("宠物还不饿，等一会再喂吧！");
             return;
         }
 
-        // 更新宠物状态
-        petData.hunger = Math.min(100, petData.hunger + 15);
-        petData.happiness = Math.min(100, petData.happiness + 5);
+        // 更新宠物状态 - 使用新的平衡数值
+        petData.hunger = Math.min(100, petData.hunger + 8);      // 15→8
+        petData.happiness = Math.min(100, petData.happiness + 3); // 5→3
         petData.lastFeedTime = now;
 
         // 验证数值
@@ -903,14 +912,14 @@ ${getCurrentPersonality()}
         const now = Date.now();
         const timeSinceLastPlay = now - petData.lastPlayTime;
 
-        if (timeSinceLastPlay < 40000) { // 40秒冷却
+        if (timeSinceLastPlay < 60000) { // 60秒冷却 (40→60秒)
             toastr.warning("宠物需要休息一下！");
             return;
         }
 
-        // 更新宠物状态
-        petData.happiness = Math.min(100, petData.happiness + 12);
-        petData.energy = Math.max(0, petData.energy - 8);
+        // 更新宠物状态 - 使用新的平衡数值
+        petData.happiness = Math.min(100, petData.happiness + 8);  // 12→8
+        petData.energy = Math.max(0, petData.energy - 10);         // 8→10
         petData.lastPlayTime = now;
 
         // 验证数值
@@ -1721,7 +1730,7 @@ ${getCurrentPersonality()}
             lastSleepTime: Date.now(),
             created: Date.now(),
             lastUpdateTime: Date.now(),
-            dataVersion: 2.0 // 数据版本标记
+            dataVersion: 3.0 // 数据版本标记
         };
 
         savePetData();
@@ -2314,6 +2323,11 @@ ${getCurrentPersonality()}
 
         // 4. 加载宠物数据
         loadPetData();
+
+        // 4.1 确保平衡函数已应用（对于已有的3.0版本数据）
+        if (petData.dataVersion >= 3.0) {
+            applyBalancedFunctions();
+        }
 
         // 5. 加载自定义头像数据
         loadCustomAvatar();
@@ -3332,7 +3346,7 @@ ${getCurrentPersonality()}
             lastSleepTime: Date.now(),
             lastUpdateTime: Date.now(),
             created: Date.now(),
-            dataVersion: 2.0
+            dataVersion: 3.0
         };
 
         // 保存新数据
@@ -3491,23 +3505,25 @@ ${getCurrentPersonality()}
         }).next().text();
     };
 
-    // 诊断状态数值问题
-    window.diagnosePetStatus = function() {
-        console.log('=== 🔍 宠物状态诊断 ===');
+    // 全面检查数值系统
+    window.checkValueSystem = function() {
+        console.log('=== 🔍 数值系统全面检查 ===');
 
-        // 基本数值检查
-        console.log('\n📊 当前数值:');
+        // 1. 基本数值检查
+        console.log('\n📊 1. 基本数值状态:');
         console.log(`健康: ${petData.health} (${typeof petData.health})`);
         console.log(`快乐: ${petData.happiness} (${typeof petData.happiness})`);
         console.log(`饱食: ${petData.hunger} (${typeof petData.hunger})`);
         console.log(`精力: ${petData.energy} (${typeof petData.energy})`);
+        console.log(`等级: ${petData.level} (${typeof petData.level})`);
+        console.log(`经验: ${petData.experience} (${typeof petData.experience})`);
 
-        // 范围检查
-        console.log('\n🎯 范围检查:');
-        const checkRange = (name, value) => {
-            if (value < 0) return `❌ ${name} 小于0: ${value}`;
-            if (value > 100) return `❌ ${name} 大于100: ${value}`;
+        // 2. 数值范围验证
+        console.log('\n🎯 2. 数值范围验证:');
+        const checkRange = (name, value, min = 0, max = 100) => {
             if (isNaN(value)) return `❌ ${name} 不是数字: ${value}`;
+            if (value < min) return `❌ ${name} 小于${min}: ${value}`;
+            if (value > max) return `❌ ${name} 大于${max}: ${value}`;
             return `✅ ${name} 正常: ${value}`;
         };
 
@@ -3515,45 +3531,76 @@ ${getCurrentPersonality()}
         console.log(checkRange('快乐', petData.happiness));
         console.log(checkRange('饱食', petData.hunger));
         console.log(checkRange('精力', petData.energy));
+        console.log(checkRange('等级', petData.level, 1, 999));
+        console.log(checkRange('经验', petData.experience, 0, 99999));
 
-        // 时间检查
-        console.log('\n⏰ 时间检查:');
+        // 3. 时间系统检查
+        console.log('\n⏰ 3. 时间系统检查:');
         const now = Date.now();
-        const timeSinceUpdate = now - (petData.lastUpdateTime || now);
-        const hoursElapsed = timeSinceUpdate / (1000 * 60 * 60);
+        const checkTime = (name, timestamp) => {
+            if (!timestamp) return `❌ ${name} 时间戳缺失`;
+            if (timestamp > now) return `❌ ${name} 时间戳异常(未来时间): ${new Date(timestamp)}`;
+            const diff = (now - timestamp) / (1000 * 60 * 60);
+            return `✅ ${name}: ${new Date(timestamp).toLocaleString()} (${Math.round(diff * 100) / 100}小时前)`;
+        };
 
-        console.log(`当前时间: ${new Date(now).toLocaleString()}`);
-        console.log(`上次更新: ${new Date(petData.lastUpdateTime).toLocaleString()}`);
-        console.log(`时间差: ${Math.round(hoursElapsed * 100) / 100} 小时`);
-        console.log(`时间差是否异常: ${hoursElapsed > 24 ? '❌ 超过24小时' : '✅ 正常'}`);
+        console.log(checkTime('上次更新', petData.lastUpdateTime));
+        console.log(checkTime('上次喂食', petData.lastFeedTime));
+        console.log(checkTime('上次玩耍', petData.lastPlayTime));
+        console.log(checkTime('上次睡觉', petData.lastSleepTime));
+        console.log(checkTime('创建时间', petData.created));
 
-        // UI显示检查
-        console.log('\n🖥️ UI显示检查:');
+        // 4. 数值逻辑检查
+        console.log('\n🧮 4. 数值逻辑检查:');
+        const expNeeded = petData.level * 100;
+        console.log(`当前等级需要经验: ${expNeeded}`);
+        console.log(`当前经验进度: ${petData.experience}/${expNeeded} (${Math.round(petData.experience / expNeeded * 100)}%)`);
+
+        // 检查升级逻辑
+        if (petData.experience >= expNeeded) {
+            console.log('⚠️ 经验值已满足升级条件，但未升级');
+        } else {
+            console.log('✅ 经验值正常');
+        }
+
+        // 5. UI显示检查
+        console.log('\n🖥️ 5. UI显示检查:');
         const statusBars = $('.stat-bar');
         if (statusBars.length > 0) {
-            statusBars.each(function(index) {
+            statusBars.each(function() {
                 const label = $(this).find('label').text();
                 const value = $(this).find('span').text();
-                const width = $(this).find('.progress-fill').css('width');
-                console.log(`${label}: 显示值=${value}, 进度条宽度=${width}`);
+                const progressFill = $(this).find('.progress-fill');
+                const width = progressFill.css('width');
+                const expectedWidth = progressFill.attr('style')?.match(/width:\s*([^;%]+)%/)?.[1];
+                console.log(`${label}: 显示=${value}, 进度条=${width}, 期望=${expectedWidth}%`);
             });
         } else {
             console.log('❌ 未找到状态条元素');
         }
 
-        // 存储数据检查
-        console.log('\n💾 存储数据检查:');
+        // 6. 存储数据一致性检查
+        console.log('\n💾 6. 存储数据一致性:');
         const savedData = localStorage.getItem('virtual-pet-data');
         if (savedData) {
             try {
                 const parsed = JSON.parse(savedData);
-                console.log('存储的数据版本:', parsed.dataVersion);
-                console.log('存储的数值:', {
-                    health: parsed.health,
-                    happiness: parsed.happiness,
-                    hunger: parsed.hunger,
-                    energy: parsed.energy
+                const differences = [];
+
+                ['health', 'happiness', 'hunger', 'energy', 'level', 'experience'].forEach(key => {
+                    if (Math.abs(petData[key] - parsed[key]) > 0.01) {
+                        differences.push(`${key}: 内存=${petData[key]}, 存储=${parsed[key]}`);
+                    }
                 });
+
+                if (differences.length > 0) {
+                    console.log('❌ 内存与存储数据不一致:');
+                    differences.forEach(diff => console.log(`  ${diff}`));
+                } else {
+                    console.log('✅ 内存与存储数据一致');
+                }
+
+                console.log(`数据版本: ${parsed.dataVersion}`);
             } catch (e) {
                 console.log('❌ 存储数据解析失败:', e);
             }
@@ -3561,7 +3608,410 @@ ${getCurrentPersonality()}
             console.log('❌ 未找到存储数据');
         }
 
-        return petData;
+        // 7. 函数可用性检查
+        console.log('\n🔧 7. 核心函数检查:');
+        const functions = [
+            'validateAndFixValues', 'updatePetStatus', 'feedPet',
+            'playWithPet', 'petSleep', 'gainExperience', 'renderPetStatus'
+        ];
+
+        functions.forEach(funcName => {
+            if (typeof window[funcName] === 'function' || typeof eval(funcName) === 'function') {
+                console.log(`✅ ${funcName} 函数可用`);
+            } else {
+                console.log(`❌ ${funcName} 函数不可用`);
+            }
+        });
+
+        // 8. 总结
+        console.log('\n📋 8. 系统状态总结:');
+        const issues = [];
+
+        // 检查关键问题
+        if (isNaN(petData.health) || petData.health < 0 || petData.health > 100) issues.push('健康值异常');
+        if (isNaN(petData.happiness) || petData.happiness < 0 || petData.happiness > 100) issues.push('快乐值异常');
+        if (isNaN(petData.hunger) || petData.hunger < 0 || petData.hunger > 100) issues.push('饱食值异常');
+        if (isNaN(petData.energy) || petData.energy < 0 || petData.energy > 100) issues.push('精力值异常');
+        if (!petData.lastUpdateTime || petData.lastUpdateTime > now) issues.push('时间戳异常');
+        if (statusBars.length === 0) issues.push('UI显示异常');
+
+        if (issues.length === 0) {
+            console.log('🎉 数值系统运行正常！');
+        } else {
+            console.log('⚠️ 发现以下问题:');
+            issues.forEach(issue => console.log(`  - ${issue}`));
+        }
+
+        return {
+            petData: petData,
+            issues: issues,
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    // 快速修复数值系统问题
+    window.fixValueSystem = function() {
+        console.log('🔧 开始修复数值系统问题...');
+
+        // 1. 验证并修复数值
+        console.log('1. 验证并修复数值范围...');
+        validateAndFixValues();
+
+        // 2. 强制更新UI
+        console.log('2. 强制更新UI显示...');
+        if (typeof renderPetStatus === 'function') {
+            renderPetStatus();
+        }
+
+        // 3. 保存修复后的数据
+        console.log('3. 保存修复后的数据...');
+        savePetData();
+
+        // 4. 验证修复结果
+        console.log('4. 验证修复结果...');
+        const result = checkValueSystem();
+
+        if (result.issues.length === 0) {
+            console.log('✅ 数值系统修复完成！');
+            toastr.success('数值系统已修复！');
+        } else {
+            console.log('⚠️ 仍有问题需要手动处理:', result.issues);
+            toastr.warning('部分问题已修复，请查看控制台了解详情');
+        }
+
+        return result;
+    };
+
+    // 检查数值增减逻辑
+    window.checkValueChanges = function() {
+        console.log('=== 🔍 数值增减逻辑检查 ===');
+
+        // 记录初始状态
+        const initialState = {
+            health: petData.health,
+            happiness: petData.happiness,
+            hunger: petData.hunger,
+            energy: petData.energy,
+            level: petData.level,
+            experience: petData.experience
+        };
+
+        console.log('\n📊 初始状态:');
+        console.log(`健康: ${Math.round(initialState.health)}/100`);
+        console.log(`快乐: ${Math.round(initialState.happiness)}/100`);
+        console.log(`饱食: ${Math.round(initialState.hunger)}/100`);
+        console.log(`精力: ${Math.round(initialState.energy)}/100`);
+        console.log(`等级: ${initialState.level}, 经验: ${initialState.experience}`);
+
+        // 1. 检查喂食效果
+        console.log('\n🍖 1. 测试喂食效果:');
+        console.log('预期效果: 饱食+15, 快乐+5, 经验+3');
+
+        const beforeFeed = { ...petData };
+        petData.hunger = Math.min(100, petData.hunger + 15);
+        petData.happiness = Math.min(100, petData.happiness + 5);
+        petData.experience += 3;
+
+        console.log(`实际效果: 饱食+${Math.round(petData.hunger - beforeFeed.hunger)}, 快乐+${Math.round(petData.happiness - beforeFeed.happiness)}, 经验+${petData.experience - beforeFeed.experience}`);
+
+        // 检查上限
+        if (petData.hunger > 100) console.log('❌ 饱食度超过上限');
+        if (petData.happiness > 100) console.log('❌ 快乐度超过上限');
+
+        // 2. 检查玩耍效果
+        console.log('\n🎮 2. 测试玩耍效果:');
+        console.log('预期效果: 快乐+12, 精力-8, 经验+4');
+
+        const beforePlay = { ...petData };
+        petData.happiness = Math.min(100, petData.happiness + 12);
+        petData.energy = Math.max(0, petData.energy - 8);
+        petData.experience += 4;
+
+        console.log(`实际效果: 快乐+${Math.round(petData.happiness - beforePlay.happiness)}, 精力${Math.round(petData.energy - beforePlay.energy)}, 经验+${petData.experience - beforePlay.experience}`);
+
+        // 检查边界
+        if (petData.happiness > 100) console.log('❌ 快乐度超过上限');
+        if (petData.energy < 0) console.log('❌ 精力低于下限');
+
+        // 3. 检查睡觉效果
+        console.log('\n😴 3. 测试睡觉效果:');
+        console.log('预期效果: 精力+20, 健康+5, 经验+2');
+
+        const beforeSleep = { ...petData };
+        petData.energy = Math.min(100, petData.energy + 20);
+        petData.health = Math.min(100, petData.health + 5);
+        petData.experience += 2;
+
+        console.log(`实际效果: 精力+${Math.round(petData.energy - beforeSleep.energy)}, 健康+${Math.round(petData.health - beforeSleep.health)}, 经验+${petData.experience - beforeSleep.experience}`);
+
+        // 检查上限
+        if (petData.energy > 100) console.log('❌ 精力超过上限');
+        if (petData.health > 100) console.log('❌ 健康超过上限');
+
+        // 4. 检查时间衰减
+        console.log('\n⏰ 4. 测试时间衰减效果:');
+        console.log('模拟1小时时间流逝...');
+
+        const beforeDecay = { ...petData };
+        const hoursElapsed = 1;
+
+        // 模拟衰减逻辑
+        const hungerDecay = hoursElapsed * 0.8;
+        const energyDecay = hoursElapsed * 0.6;
+
+        petData.hunger = Math.max(0, petData.hunger - hungerDecay);
+        petData.energy = Math.max(0, petData.energy - energyDecay);
+
+        // 检查低值影响
+        let healthDecay = 0, happinessDecay = 0;
+        if (petData.hunger < 20) {
+            healthDecay = hoursElapsed * 1;
+            happinessDecay = hoursElapsed * 0.8;
+            petData.health = Math.max(0, petData.health - healthDecay);
+            petData.happiness = Math.max(0, petData.happiness - happinessDecay);
+        }
+
+        if (petData.energy < 20) {
+            const energyHappinessDecay = hoursElapsed * 0.5;
+            petData.happiness = Math.max(0, petData.happiness - energyHappinessDecay);
+            happinessDecay += energyHappinessDecay;
+        }
+
+        console.log(`饱食衰减: -${Math.round(hungerDecay)} (${Math.round(beforeDecay.hunger)} → ${Math.round(petData.hunger)})`);
+        console.log(`精力衰减: -${Math.round(energyDecay)} (${Math.round(beforeDecay.energy)} → ${Math.round(petData.energy)})`);
+        if (healthDecay > 0) console.log(`健康衰减: -${Math.round(healthDecay)} (饥饿影响)`);
+        if (happinessDecay > 0) console.log(`快乐衰减: -${Math.round(happinessDecay)} (饥饿/疲劳影响)`);
+
+        // 5. 检查升级逻辑
+        console.log('\n🆙 5. 测试升级逻辑:');
+        const currentLevel = petData.level;
+        const currentExp = petData.experience;
+        const expNeeded = currentLevel * 100;
+
+        console.log(`当前等级: ${currentLevel}, 经验: ${currentExp}/${expNeeded}`);
+
+        if (currentExp >= expNeeded) {
+            console.log('✅ 经验足够，应该升级');
+            const newLevel = currentLevel + 1;
+            const remainingExp = currentExp - expNeeded;
+            const healthBonus = 30;
+
+            console.log(`升级后: 等级${newLevel}, 剩余经验${remainingExp}, 健康+${healthBonus}`);
+
+            // 模拟升级
+            petData.level = newLevel;
+            petData.experience = remainingExp;
+            petData.health = Math.min(100, petData.health + healthBonus);
+        } else {
+            console.log(`✅ 经验不足，还需要 ${expNeeded - currentExp} 经验升级`);
+        }
+
+        // 6. 数值边界检查
+        console.log('\n🎯 6. 数值边界检查:');
+        const checkBounds = (name, value, min = 0, max = 100) => {
+            if (value < min) {
+                console.log(`❌ ${name} 低于下限: ${value} < ${min}`);
+                return false;
+            }
+            if (value > max) {
+                console.log(`❌ ${name} 超过上限: ${value} > ${max}`);
+                return false;
+            }
+            console.log(`✅ ${name} 在正常范围: ${Math.round(value)}`);
+            return true;
+        };
+
+        const allValid = [
+            checkBounds('健康', petData.health),
+            checkBounds('快乐', petData.happiness),
+            checkBounds('饱食', petData.hunger),
+            checkBounds('精力', petData.energy),
+            checkBounds('等级', petData.level, 1, 999),
+            checkBounds('经验', petData.experience, 0, 99999)
+        ].every(v => v);
+
+        // 7. 总结
+        console.log('\n📋 7. 数值变化总结:');
+        const finalState = {
+            health: petData.health,
+            happiness: petData.happiness,
+            hunger: petData.hunger,
+            energy: petData.energy,
+            level: petData.level,
+            experience: petData.experience
+        };
+
+        console.log('最终状态:');
+        Object.keys(finalState).forEach(key => {
+            const initial = initialState[key];
+            const final = finalState[key];
+            const change = final - initial;
+            const changeStr = change > 0 ? `+${Math.round(change)}` : `${Math.round(change)}`;
+            console.log(`  ${key}: ${Math.round(initial)} → ${Math.round(final)} (${changeStr})`);
+        });
+
+        // 恢复初始状态
+        Object.assign(petData, initialState);
+
+        if (allValid) {
+            console.log('\n🎉 数值增减逻辑检查通过！');
+        } else {
+            console.log('\n⚠️ 发现数值边界问题，请检查相关逻辑');
+        }
+
+        return {
+            initialState,
+            finalState,
+            valid: allValid,
+            timestamp: new Date().toISOString()
+        };
+    }
+
+    // 应用平衡后的函数（内部使用，自动调用）
+    function applyBalancedFunctions() {
+        // 重新定义喂食函数 - 平衡后的版本
+        window.feedPet = async function() {
+            const now = Date.now();
+            const timeSinceLastFeed = now - petData.lastFeedTime;
+
+            if (timeSinceLastFeed < 45000) { // 45秒冷却
+                toastr.warning("宠物还不饿，等一会再喂吧！");
+                return;
+            }
+
+            // 更新宠物状态 - 平衡后的效果
+            petData.hunger = Math.min(100, petData.hunger + 8);  // 降低效果 15→8
+            petData.happiness = Math.min(100, petData.happiness + 3);  // 降低效果 5→3
+            petData.lastFeedTime = now;
+
+            validateAndFixValues();
+            gainExperience(3);
+            await handleAIReply('feed', `${petData.name} 吃得很开心！`);
+            savePetData();
+            renderPetStatus();
+        };
+
+        // 重新定义玩耍函数 - 平衡后的版本
+        window.playWithPet = async function() {
+            const now = Date.now();
+            const timeSinceLastPlay = now - petData.lastPlayTime;
+
+            if (timeSinceLastPlay < 60000) { // 60秒冷却
+                toastr.warning("宠物需要休息一下！");
+                return;
+            }
+
+            // 更新宠物状态 - 平衡后的效果
+            petData.happiness = Math.min(100, petData.happiness + 8);  // 降低效果 12→8
+            petData.energy = Math.max(0, petData.energy - 10);  // 增加消耗 8→10
+            petData.lastPlayTime = now;
+
+            validateAndFixValues();
+            gainExperience(4);
+            await handleAIReply('play', `${petData.name} 玩得很开心！`);
+            savePetData();
+            renderPetStatus();
+        };
+
+        // 重新定义睡觉函数 - 平衡后的版本
+        window.petSleep = async function() {
+            const now = Date.now();
+            const timeSinceLastSleep = now - petData.lastSleepTime;
+
+            if (timeSinceLastSleep < 120000) { // 120秒冷却
+                toastr.warning("宠物还不困！");
+                return;
+            }
+
+            // 更新宠物状态 - 平衡后的效果
+            petData.energy = Math.min(100, petData.energy + 15);  // 降低效果 20→15
+            petData.health = Math.min(100, petData.health + 3);   // 降低效果 5→3
+            petData.lastSleepTime = now;
+
+            validateAndFixValues();
+            gainExperience(2);
+            await handleAIReply('sleep', `${petData.name} 睡得很香！`);
+            savePetData();
+            renderPetStatus();
+        };
+
+        // 重新定义状态更新函数 - 平衡后的版本
+        window.updatePetStatus = function() {
+            const now = Date.now();
+            const timeSinceLastUpdate = now - (petData.lastUpdateTime || now);
+            const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
+
+            const safeHoursElapsed = Math.min(hoursElapsed, 24);
+
+            // 更频繁的更新，更快的衰减
+            if (safeHoursElapsed > 0.083) { // 每5分钟更新一次
+                petData.hunger = Math.max(0, petData.hunger - safeHoursElapsed * 1.5);  // 加快衰减 0.8→1.5
+                petData.energy = Math.max(0, petData.energy - safeHoursElapsed * 1.2);  // 加快衰减 0.6→1.2
+
+                // 饥饿和疲劳影响健康和快乐
+                if (petData.hunger < 20) {
+                    petData.health = Math.max(0, petData.health - safeHoursElapsed * 1);
+                    petData.happiness = Math.max(0, petData.happiness - safeHoursElapsed * 0.8);
+                }
+
+                if (petData.energy < 20) {
+                    petData.happiness = Math.max(0, petData.happiness - safeHoursElapsed * 0.5);
+                }
+
+                petData.lastUpdateTime = now;
+                validateAndFixValues();
+                savePetData();
+                checkAndSendNotifications();
+            }
+        };
+    };
+
+    // 手动应用平衡性调整（用户可调用，主要用于测试）
+    window.applyBalanceAdjustments = function() {
+        console.log('🎯 手动应用数值平衡性调整...');
+
+        console.log('\n📝 调整方案:');
+        console.log('1. 降低互动效果:');
+        console.log('   - 喂食: 饱食+15→+8, 快乐+5→+3');
+        console.log('   - 玩耍: 快乐+12→+8, 精力-8→-10');
+        console.log('   - 睡觉: 精力+20→+15, 健康+5→+3');
+        console.log('2. 加快衰减速度:');
+        console.log('   - 饱食衰减: 0.8→1.5/小时');
+        console.log('   - 精力衰减: 0.6→1.2/小时');
+        console.log('   - 更新频率: 12分钟→5分钟');
+        console.log('3. 延长冷却时间:');
+        console.log('   - 喂食: 20秒→45秒');
+        console.log('   - 玩耍: 40秒→60秒');
+        console.log('   - 睡觉: 80秒→120秒');
+
+        if (!confirm('确定要手动应用这些平衡性调整吗？注意：系统会在数据迁移时自动应用。')) {
+            return;
+        }
+
+        // 应用平衡函数
+        applyBalancedFunctions();
+
+        // 更新数据版本
+        petData.dataVersion = 3.0;
+        savePetData();
+
+        console.log('✅ 平衡性调整已手动应用！');
+        toastr.success('数值平衡已调整！现在数值增长会更慢，衰减会更快。');
+
+        // 立即更新一次状态
+        updatePetStatus();
+        renderPetStatus();
+
+        return {
+            applied: true,
+            timestamp: new Date().toISOString(),
+            changes: {
+                feedEffect: { hunger: '15→8', happiness: '5→3', cooldown: '20s→45s' },
+                playEffect: { happiness: '12→8', energy: '-8→-10', cooldown: '40s→60s' },
+                sleepEffect: { energy: '20→15', health: '5→3', cooldown: '80s→120s' },
+                decay: { hunger: '0.8→1.5/h', energy: '0.6→1.2/h', frequency: '12min→5min' }
+            }
+        };
     };
 
     // 检查localStorage中的数据

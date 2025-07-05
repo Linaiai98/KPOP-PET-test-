@@ -265,7 +265,7 @@ jQuery(async () => {
             const testPrompt = "请简单回复'测试成功'，不超过10个字。";
             console.log(`[${extensionName}] 开始测试API连接...`);
 
-            const response = await callCustomAPI(testPrompt, settings);
+            const response = await callCustomAPI(testPrompt, settings, 10000); // 10秒超时用于测试
 
             if (response && response.trim()) {
                 statusElement.text('✅ 连接成功').css('color', '#48bb78');
@@ -283,13 +283,21 @@ jQuery(async () => {
             toastr.error('连接测试失败: ' + error.message);
 
             // 提供详细的错误帮助
-            if (error.message.includes('403')) {
+            if (error.message.includes('500')) {
+                setTimeout(() => {
+                    toastr.info('500错误表示服务器内部错误，可能是：1) API服务器故障 2) 请求格式不正确 3) 模型名称错误', '', { timeOut: 10000 });
+                }, 1000);
+            } else if (error.message.includes('403')) {
                 setTimeout(() => {
                     toastr.info('403错误通常表示API密钥无效或权限不足，请检查API密钥是否正确', '', { timeOut: 8000 });
                 }, 1000);
             } else if (error.message.includes('401')) {
                 setTimeout(() => {
                     toastr.info('401错误表示认证失败，请检查API密钥格式是否正确', '', { timeOut: 8000 });
+                }, 1000);
+            } else if (error.message.includes('404')) {
+                setTimeout(() => {
+                    toastr.info('404错误表示API端点不存在，请检查API URL是否正确', '', { timeOut: 8000 });
                 }, 1000);
             }
 
@@ -449,6 +457,8 @@ jQuery(async () => {
 
         const startTime = Date.now();
         console.log(`[${extensionName}] 开始发送请求，时间戳: ${startTime}`);
+        console.log(`[${extensionName}] 请求头:`, headers);
+        console.log(`[${extensionName}] 请求体:`, requestBody);
 
         try {
             const response = await fetch(apiUrl, {
@@ -464,7 +474,17 @@ jQuery(async () => {
             console.log(`[${extensionName}] API响应状态: ${response.status} ${response.statusText}，耗时: ${duration}ms`);
 
             if (!response.ok) {
-                throw new Error(`自定义API调用失败: ${response.status} ${response.statusText}`);
+                // 尝试读取错误响应内容
+                let errorDetails = '';
+                try {
+                    const errorText = await response.text();
+                    errorDetails = errorText ? ` - ${errorText}` : '';
+                    console.log(`[${extensionName}] API错误详情:`, errorText);
+                } catch (e) {
+                    console.log(`[${extensionName}] 无法读取错误详情:`, e);
+                }
+
+                throw new Error(`自定义API调用失败: ${response.status} ${response.statusText}${errorDetails}`);
             }
 
             const data = await response.json();
@@ -781,29 +801,64 @@ ${getCurrentPersonality()}
     }
     
     /**
+     * 验证并修复数值范围
+     */
+    function validateAndFixValues() {
+        // 确保所有数值都是数字且在合理范围内
+        petData.health = Math.max(0, Math.min(100, Number(petData.health) || 0));
+        petData.happiness = Math.max(0, Math.min(100, Number(petData.happiness) || 0));
+        petData.hunger = Math.max(0, Math.min(100, Number(petData.hunger) || 0));
+        petData.energy = Math.max(0, Math.min(100, Number(petData.energy) || 0));
+        petData.experience = Math.max(0, Number(petData.experience) || 0);
+        petData.level = Math.max(1, Number(petData.level) || 1);
+
+        // 确保时间戳是有效的
+        const now = Date.now();
+        if (!petData.lastUpdateTime || petData.lastUpdateTime > now) {
+            petData.lastUpdateTime = now;
+        }
+        if (!petData.lastFeedTime || petData.lastFeedTime > now) {
+            petData.lastFeedTime = now;
+        }
+        if (!petData.lastPlayTime || petData.lastPlayTime > now) {
+            petData.lastPlayTime = now;
+        }
+        if (!petData.lastSleepTime || petData.lastSleepTime > now) {
+            petData.lastSleepTime = now;
+        }
+    }
+
+    /**
      * 更新宠物状态（基于时间流逝）
      */
     function updatePetStatus() {
         const now = Date.now();
         const timeSinceLastUpdate = now - (petData.lastUpdateTime || now);
         const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
-        
+
+        // 防止异常大的时间差（超过24小时的按24小时计算）
+        const safeHoursElapsed = Math.min(hoursElapsed, 24);
+
         // 随时间降低的属性（减缓衰减速度）
-        if (hoursElapsed > 0.2) { // 每12分钟更新一次
-            petData.hunger = Math.max(0, petData.hunger - hoursElapsed * 0.8);
-            petData.energy = Math.max(0, petData.energy - hoursElapsed * 0.6);
+        if (safeHoursElapsed > 0.2) { // 每12分钟更新一次
+            petData.hunger = Math.max(0, petData.hunger - safeHoursElapsed * 0.8);
+            petData.energy = Math.max(0, petData.energy - safeHoursElapsed * 0.6);
 
             // 饥饿和疲劳影响健康和快乐（减缓影响）
             if (petData.hunger < 20) {
-                petData.health = Math.max(0, petData.health - hoursElapsed * 1);
-                petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 0.8);
+                petData.health = Math.max(0, petData.health - safeHoursElapsed * 1);
+                petData.happiness = Math.max(0, petData.happiness - safeHoursElapsed * 0.8);
             }
 
             if (petData.energy < 20) {
-                petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 0.5);
+                petData.happiness = Math.max(0, petData.happiness - safeHoursElapsed * 0.5);
             }
-            
+
             petData.lastUpdateTime = now;
+
+            // 验证并修复数值
+            validateAndFixValues();
+
             savePetData();
 
             // 检查是否需要发送通知
@@ -827,6 +882,9 @@ ${getCurrentPersonality()}
         petData.hunger = Math.min(100, petData.hunger + 15);
         petData.happiness = Math.min(100, petData.happiness + 5);
         petData.lastFeedTime = now;
+
+        // 验证数值
+        validateAndFixValues();
 
         // 获得经验
         gainExperience(3);
@@ -855,6 +913,9 @@ ${getCurrentPersonality()}
         petData.energy = Math.max(0, petData.energy - 8);
         petData.lastPlayTime = now;
 
+        // 验证数值
+        validateAndFixValues();
+
         // 获得经验
         gainExperience(4);
 
@@ -881,6 +942,9 @@ ${getCurrentPersonality()}
         petData.energy = Math.min(100, petData.energy + 20);
         petData.health = Math.min(100, petData.health + 5);
         petData.lastSleepTime = now;
+
+        // 验证数值
+        validateAndFixValues();
 
         // 获得经验
         gainExperience(2);
@@ -3425,6 +3489,80 @@ ${getCurrentPersonality()}
         const healthDisplay = $('.status-item').find('span').filter(function() {
             return $(this).text().includes('健康');
         }).next().text();
+    };
+
+    // 诊断状态数值问题
+    window.diagnosePetStatus = function() {
+        console.log('=== 🔍 宠物状态诊断 ===');
+
+        // 基本数值检查
+        console.log('\n📊 当前数值:');
+        console.log(`健康: ${petData.health} (${typeof petData.health})`);
+        console.log(`快乐: ${petData.happiness} (${typeof petData.happiness})`);
+        console.log(`饱食: ${petData.hunger} (${typeof petData.hunger})`);
+        console.log(`精力: ${petData.energy} (${typeof petData.energy})`);
+
+        // 范围检查
+        console.log('\n🎯 范围检查:');
+        const checkRange = (name, value) => {
+            if (value < 0) return `❌ ${name} 小于0: ${value}`;
+            if (value > 100) return `❌ ${name} 大于100: ${value}`;
+            if (isNaN(value)) return `❌ ${name} 不是数字: ${value}`;
+            return `✅ ${name} 正常: ${value}`;
+        };
+
+        console.log(checkRange('健康', petData.health));
+        console.log(checkRange('快乐', petData.happiness));
+        console.log(checkRange('饱食', petData.hunger));
+        console.log(checkRange('精力', petData.energy));
+
+        // 时间检查
+        console.log('\n⏰ 时间检查:');
+        const now = Date.now();
+        const timeSinceUpdate = now - (petData.lastUpdateTime || now);
+        const hoursElapsed = timeSinceUpdate / (1000 * 60 * 60);
+
+        console.log(`当前时间: ${new Date(now).toLocaleString()}`);
+        console.log(`上次更新: ${new Date(petData.lastUpdateTime).toLocaleString()}`);
+        console.log(`时间差: ${Math.round(hoursElapsed * 100) / 100} 小时`);
+        console.log(`时间差是否异常: ${hoursElapsed > 24 ? '❌ 超过24小时' : '✅ 正常'}`);
+
+        // UI显示检查
+        console.log('\n🖥️ UI显示检查:');
+        const statusBars = $('.stat-bar');
+        if (statusBars.length > 0) {
+            statusBars.each(function(index) {
+                const label = $(this).find('label').text();
+                const value = $(this).find('span').text();
+                const width = $(this).find('.progress-fill').css('width');
+                console.log(`${label}: 显示值=${value}, 进度条宽度=${width}`);
+            });
+        } else {
+            console.log('❌ 未找到状态条元素');
+        }
+
+        // 存储数据检查
+        console.log('\n💾 存储数据检查:');
+        const savedData = localStorage.getItem('virtual-pet-data');
+        if (savedData) {
+            try {
+                const parsed = JSON.parse(savedData);
+                console.log('存储的数据版本:', parsed.dataVersion);
+                console.log('存储的数值:', {
+                    health: parsed.health,
+                    happiness: parsed.happiness,
+                    hunger: parsed.hunger,
+                    energy: parsed.energy
+                });
+            } catch (e) {
+                console.log('❌ 存储数据解析失败:', e);
+            }
+        } else {
+            console.log('❌ 未找到存储数据');
+        }
+
+        return petData;
+    };
 
         const happinessDisplay = $('.status-item').find('span').filter(function() {
             return $(this).text().includes('快乐');
@@ -4827,7 +4965,6 @@ ${getCurrentPersonality()}
     console.log("  - testVirtualPetAI() - 检查AI功能状态");
     console.log("  - testAIReply('feed'|'play'|'sleep') - 手动测试AI回复");
     console.log("  - testPersonalitySwitch('default'|'cheerful'|'elegant'|'shy'|'smart'|'custom') - 测试人设切换");
-});
 
     /**
      * 测试新的提示词系统

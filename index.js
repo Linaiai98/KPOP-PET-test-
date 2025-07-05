@@ -115,6 +115,18 @@ jQuery(async () => {
         if (selectedType === 'custom') {
             const customPersonality = localStorage.getItem(`${extensionName}-custom-personality`) || '';
             return customPersonality || PRESET_PERSONALITIES.default;
+        } else if (selectedType === 'character') {
+            // 从角色卡获取人设
+            const settings = loadPersonalityAndInteractionSettings();
+            if (settings.selectedCharacter) {
+                // 尝试从已保存的角色卡数据中获取人设
+                const characterPersonality = localStorage.getItem(`${extensionName}-character-personality-${settings.selectedCharacter}`);
+                if (characterPersonality) {
+                    return characterPersonality;
+                }
+            }
+            // 如果没有角色卡人设，回退到默认
+            return PRESET_PERSONALITIES.default;
         } else {
             return PRESET_PERSONALITIES[selectedType] || PRESET_PERSONALITIES.default;
         }
@@ -124,150 +136,44 @@ jQuery(async () => {
      * 保存人设设置
      * @param {string} type 人设类型
      * @param {string} customText 自定义人设文本（仅当type为'custom'时使用）
+     * @param {string} characterId 角色卡ID（仅当type为'character'时使用）
      */
-    function savePersonalitySettings(type, customText = '') {
+    async function savePersonalitySettings(type, customText = '', characterId = '') {
         localStorage.setItem(`${extensionName}-personality-type`, type);
+
         if (type === 'custom') {
             localStorage.setItem(`${extensionName}-custom-personality`, customText);
+        } else if (type === 'character' && characterId) {
+            // 加载并保存角色卡人设
+            const characterPersonality = await loadPersonalityFromCharacter(characterId);
+            if (characterPersonality) {
+                localStorage.setItem(`${extensionName}-character-personality-${characterId}`, characterPersonality);
+            }
         }
+
+        // 保存完整的人设和互动设置
+        savePersonalityAndInteractionSettings();
 
         // 更新petData中的personality字段
         petData.personality = getCurrentPersonality();
         savePetData();
 
-        console.log(`[${extensionName}] 人设已更新为: ${type === 'custom' ? '自定义' : type}`);
+        console.log(`[${extensionName}] 人设已更新为: ${type === 'custom' ? '自定义' : type === 'character' ? '角色卡' : type}`);
         console.log(`[${extensionName}] 人设内容: ${petData.personality}`);
     }
 
     // -----------------------------------------------------------------
-    // SillyTavern API 集成
+    // SillyTavern API 集成 (简化版 - 仅手动配置)
     // -----------------------------------------------------------------
 
     /**
-     * 检测SillyTavern的API配置
-     */
-    async function detectSillyTavernConfig() {
-        try {
-            console.log(`[${extensionName}] 开始检测SillyTavern配置...`);
-
-            // 方法1: 通过SillyTavern的getContext()函数 - 最可靠的方法
-            if (window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
-                try {
-                    const context = window.SillyTavern.getContext();
-
-                    // 从上下文获取API配置 - 使用正确的字段名
-                    const api_type = context.mainApi; // 注意是 mainApi 不是 main_api
-                    const model = context.onlineStatus || context.model_name || context.model;
-                    const url = context.api_server || context.server_url || context.apiUrl;
-
-                    if (api_type) {
-                        const config = {
-                            api_type: api_type,
-                            model: model || 'unknown',
-                            url: url || '',
-                            available: true,
-                            source: 'sillytavern_context'
-                        };
-                        console.log(`[${extensionName}] 通过SillyTavern上下文检测到配置:`, config);
-                        return config;
-                    } else {
-                        console.log(`[${extensionName}] 上下文中未找到mainApi字段`);
-                    }
-                } catch (e) {
-                    console.log(`[${extensionName}] SillyTavern上下文读取失败:`, e.message);
-                }
-            }
-
-            // 方法2: 检查HTML select元素的值
-            if (typeof window.main_api !== 'undefined' && window.main_api) {
-                let api_value = null;
-
-                // 如果是DOM元素，获取其值
-                if (window.main_api.tagName === 'SELECT') {
-                    api_value = window.main_api.value;
-                } else if (typeof window.main_api === 'string') {
-                    api_value = window.main_api;
-                }
-
-                if (api_value) {
-                    const config = {
-                        api_type: api_value,
-                        model: window.online_status || window.model_name || 'unknown',
-                        url: window.api_server || '',
-                        available: true,
-                        source: 'main_api_select'
-                    };
-                    console.log(`[${extensionName}] 通过main_api select元素检测到配置:`, config);
-                    return config;
-                }
-            }
-
-            // 方法3: 检查其他可能的全局变量
-            const apiVars = ['api_type', 'current_api', 'selected_api'];
-            for (const varName of apiVars) {
-                if (typeof window[varName] !== 'undefined') {
-                    const config = {
-                        api_type: window[varName],
-                        model: window.online_status || window.model_name || 'unknown',
-                        url: window.api_server || '',
-                        available: true,
-                        source: `global_${varName}`
-                    };
-                    console.log(`[${extensionName}] 通过全局变量${varName}检测到配置:`, config);
-                    return config;
-                }
-            }
-
-            // 方法4: 检查settings对象
-            if (typeof window.settings !== 'undefined' && window.settings) {
-                const config = {
-                    api_type: window.settings.main_api,
-                    model: window.settings.online_status || window.settings.model,
-                    url: window.settings.api_server,
-                    available: true,
-                    source: 'settings_object'
-                };
-                console.log(`[${extensionName}] 通过settings对象检测到配置:`, config);
-                return config;
-            }
-
-            // 方法5: 从localStorage读取
-            try {
-                const savedSettings = localStorage.getItem('SillyTavern_Settings');
-                if (savedSettings) {
-                    const settings = JSON.parse(savedSettings);
-                    if (settings.main_api) {
-                        const config = {
-                            api_type: settings.main_api,
-                            model: settings.model || settings.online_status,
-                            url: settings.api_server,
-                            available: true,
-                            source: 'localStorage'
-                        };
-                        console.log(`[${extensionName}] 通过localStorage检测到配置:`, config);
-                        return config;
-                    }
-                }
-            } catch (e) {
-                console.log(`[${extensionName}] localStorage读取失败:`, e.message);
-            }
-
-            console.log(`[${extensionName}] 未能检测到SillyTavern配置`);
-            return { available: false, error: '未能检测到SillyTavern配置' };
-        } catch (error) {
-            console.error(`[${extensionName}] 检测SillyTavern配置失败:`, error);
-            return { available: false, error: error.message };
-        }
-    }
-
-    /**
-     * 获取SillyTavern的角色卡列表
+     * 获取SillyTavern的角色卡列表 (用于人设选择)
      */
     async function getSillyTavernCharacters() {
         try {
             console.log(`[${extensionName}] 开始获取SillyTavern角色卡列表...`);
 
-            // 方法1: 通过SillyTavern的getCharacters函数 - 最直接的方法
+            // 方法1: 通过SillyTavern的getContext函数获取角色
             if (window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
                 try {
                     const context = window.SillyTavern.getContext();
@@ -278,13 +184,13 @@ jQuery(async () => {
                         try {
                             const characters = await context.getCharacters();
                             if (Array.isArray(characters) && characters.length > 0) {
-                                console.log(`[${extensionName}] getCharacters()返回数据示例:`, characters.slice(0, 1));
                                 const result = characters
                                     .filter(char => char && (char.name || char.data?.name))
                                     .map(char => ({
                                         name: char.data?.name || char.name || '未知角色',
                                         id: char.avatar || char.name || char.data?.name,
-                                        description: (char.data?.description || char.description || char.data?.personality || char.personality || '').substring(0, 100),
+                                        description: (char.data?.description || char.description || char.data?.personality || char.personality || '').substring(0, 200),
+                                        personality: char.data?.personality || char.personality || '',
                                         creator: char.data?.creator || char.creator || '',
                                         tags: char.data?.tags || char.tags || []
                                     }));
@@ -299,21 +205,18 @@ jQuery(async () => {
                     // 回退到上下文中的characters数组
                     if (context.characters && Array.isArray(context.characters)) {
                         console.log(`[${extensionName}] 从SillyTavern上下文获取角色...`);
-                        console.log(`[${extensionName}] 原始角色数据示例:`, context.characters.slice(0, 1));
-
                         const result = context.characters
                             .filter(char => char && (char.name || char.data?.name))
                             .map(char => ({
                                 name: char.data?.name || char.name || '未知角色',
                                 id: char.avatar || char.name || char.data?.name,
-                                description: (char.data?.description || char.description || char.data?.personality || char.personality || '').substring(0, 100),
+                                description: (char.data?.description || char.description || char.data?.personality || char.personality || '').substring(0, 200),
+                                personality: char.data?.personality || char.personality || '',
                                 creator: char.data?.creator || char.creator || '',
                                 tags: char.data?.tags || char.tags || []
                             }));
-                        console.log(`[${extensionName}] 从上下文获取到 ${result.length} 个角色:`, result);
+                        console.log(`[${extensionName}] 从上下文获取到 ${result.length} 个角色`);
                         return result;
-                    } else {
-                        console.log(`[${extensionName}] 上下文中characters字段无效:`, context.characters);
                     }
                 } catch (e) {
                     console.log(`[${extensionName}] 上下文角色获取失败:`, e.message);
@@ -328,79 +231,13 @@ jQuery(async () => {
                     .map(char => ({
                         name: char.data?.name || char.name || '未知角色',
                         id: char.avatar || char.name || char.data?.name,
-                        description: (char.data?.description || char.description || char.data?.personality || char.personality || '').substring(0, 100),
+                        description: (char.data?.description || char.description || char.data?.personality || char.personality || '').substring(0, 200),
+                        personality: char.data?.personality || char.personality || '',
                         creator: char.data?.creator || char.creator || '',
                         tags: char.data?.tags || char.tags || []
                     }));
                 console.log(`[${extensionName}] 从全局变量获取到 ${result.length} 个角色`);
                 return result;
-            }
-
-            // 方法3: 通过SillyTavern API获取 - 使用正确的认证
-            if (window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
-                try {
-                    console.log(`[${extensionName}] 尝试通过API获取角色列表...`);
-                    const context = window.SillyTavern.getContext();
-
-                    // 获取正确的请求头
-                    let headers = { 'Content-Type': 'application/json' };
-                    if (context.getRequestHeaders && typeof context.getRequestHeaders === 'function') {
-                        try {
-                            const stHeaders = context.getRequestHeaders();
-                            headers = { ...headers, ...stHeaders };
-                        } catch (e) {
-                            console.log(`[${extensionName}] 获取请求头失败:`, e.message);
-                        }
-                    }
-
-                    const response = await fetch('/api/characters/all', {
-                        method: 'POST',
-                        headers: headers,
-                        body: JSON.stringify({})
-                    });
-
-                    if (response.ok) {
-                        const characters = await response.json();
-                        console.log(`[${extensionName}] API返回数据示例:`, characters.slice(0, 1));
-
-                        if (Array.isArray(characters) && characters.length > 0) {
-                            const result = characters
-                                .filter(char => char && (char.name || char.data?.name))
-                                .map(char => ({
-                                    name: char.data?.name || char.name || '未知角色',
-                                    id: char.avatar || char.name,
-                                    description: (char.data?.description || char.description || '').substring(0, 100),
-                                    creator: char.data?.creator || char.creator || '',
-                                    tags: char.data?.tags || char.tags || []
-                                }));
-                            console.log(`[${extensionName}] 通过API获取到 ${result.length} 个角色`);
-                            return result;
-                        }
-                    } else {
-                        console.log(`[${extensionName}] API请求失败:`, response.status, response.statusText);
-                    }
-                } catch (e) {
-                    console.log(`[${extensionName}] API角色列表获取失败:`, e.message);
-                }
-            }
-
-            // 方法4: 检查其他可能的全局变量
-            const possibleVars = ['character_list', 'characterList', 'chars', 'allCharacters'];
-            for (const varName of possibleVars) {
-                if (window[varName] && Array.isArray(window[varName])) {
-                    console.log(`[${extensionName}] 在全局变量 ${varName} 中找到角色数据`);
-                    const result = window[varName]
-                        .filter(char => char && (char.name || char.data?.name))
-                        .map(char => ({
-                            name: char.data?.name || char.name || '未知角色',
-                            id: char.avatar || char.name,
-                            description: (char.data?.description || char.description || '').substring(0, 100),
-                            creator: char.data?.creator || char.creator || '',
-                            tags: char.data?.tags || char.tags || []
-                        }));
-                    console.log(`[${extensionName}] 从 ${varName} 获取到 ${result.length} 个角色`);
-                    return result;
-                }
             }
 
             console.log(`[${extensionName}] 未能获取到任何角色卡`);
@@ -412,112 +249,45 @@ jQuery(async () => {
     }
 
     /**
-     * 测试SillyTavern连接
+     * 从角色卡加载人设
      */
-    async function testSillyTavernConnection() {
-        const statusElement = $('#connection-status');
-        const testButton = $('#test-connection-btn');
-        const settings = loadSillyTavernSettings();
-
-        // 更新状态为测试中
-        statusElement.text('🔄 测试中...').css('color', '#ffa500');
-        testButton.prop('disabled', true);
-
+    async function loadPersonalityFromCharacter(characterId) {
         try {
-            // 1. 根据选择的API类型进行不同的测试
-            if (settings.apiType === 'auto') {
-                // 使用SillyTavern已配置的API
-                console.log(`[${extensionName}] 测试SillyTavern已配置的API...`);
+            const characters = await getSillyTavernCharacters();
+            const character = characters.find(char => char.id === characterId);
 
-                // 检测API可用性
-                const apiAvailable = isSillyTavernAPIAvailable();
-                if (!apiAvailable) {
-                    throw new Error('SillyTavern API不可用，请确保SillyTavern正在运行');
-                }
-
-                // 检测配置
-                const config = await detectSillyTavernConfig();
-                if (!config.available) {
-                    throw new Error('无法检测到SillyTavern配置，请确保已在SillyTavern中配置API');
-                }
-
-                // 尝试发送测试请求
-                const testPrompt = "请简单回复'测试成功'，不超过10个字。";
-                const response = await callSillyTavernAPI(testPrompt, 8000);
-
-                if (response && response.trim()) {
-                    statusElement.text('✅ 连接成功').css('color', '#48bb78');
-                    toastr.success(`SillyTavern连接测试成功！使用API: ${config.api_type}，AI回复: ${response.substring(0, 50)}`);
-                } else {
-                    throw new Error('API返回空响应');
-                }
-
+            if (character && character.personality) {
+                console.log(`[${extensionName}] 从角色卡 "${character.name}" 加载人设`);
+                return character.personality;
             } else {
-                // 使用用户自定义的API配置
-                console.log(`[${extensionName}] 测试用户自定义API配置...`);
-
-                if (!settings.apiUrl || !settings.apiKey) {
-                    throw new Error('请填写完整的API配置信息（URL和密钥）');
-                }
-
-                // 这里可以添加对自定义API的测试逻辑
-                // 目前先显示配置验证成功
-                statusElement.text('✅ 配置验证成功').css('color', '#48bb78');
-                toastr.success(`API配置验证成功！类型: ${settings.apiType}，URL: ${settings.apiUrl}`);
-                toastr.info('注意：自定义API配置功能正在开发中，目前仅验证配置完整性');
+                console.log(`[${extensionName}] 角色卡 "${characterId}" 没有人设信息`);
+                return '';
             }
-
-            // 保存测试结果
-            saveSillyTavernSettings();
-            return true;
-
         } catch (error) {
-            statusElement.text('❌ 连接失败').css('color', '#f56565');
-            toastr.error('连接测试失败: ' + error.message);
-
-            // 提供详细的错误帮助
-            if (error.message.includes('API不可用')) {
-                setTimeout(() => {
-                    toastr.info('请确保：1. SillyTavern正在运行 2. 已在SillyTavern中配置并连接API 3. 刷新页面重试', '', { timeOut: 8000 });
-                }, 1000);
-            }
-
-            return false;
-        } finally {
-            testButton.prop('disabled', false);
+            console.error(`[${extensionName}] 加载角色卡人设失败:`, error);
+            return '';
         }
     }
 
     /**
-     * 刷新角色卡列表
+     * 刷新人设选择中的角色卡列表
      */
-    async function refreshCharacterList() {
-        const selectElement = $('#sillytavern-character-select');
-        const refreshButton = $('#refresh-characters-btn');
+    async function refreshPersonalityCharacterList() {
+        const selectElement = $('#virtual-pet-personality-character-select');
+        const refreshButton = $('#refresh-personality-characters-btn');
+
+        if (selectElement.length === 0) {
+            console.log(`[${extensionName}] 人设角色卡选择元素不存在，跳过刷新`);
+            return;
+        }
 
         // 显示加载状态
-        refreshButton.text('🔄 加载中...').prop('disabled', true);
+        if (refreshButton.length > 0) {
+            refreshButton.text('🔄 加载中...').prop('disabled', true);
+        }
 
         try {
-            // 先运行调试
-            debugSillyTavernState();
-
-            let characters = await getSillyTavernCharacters();
-
-            // 如果第一次获取失败，等待一段时间后重试
-            if (characters.length === 0) {
-                console.log(`[${extensionName}] 第一次获取失败，等待2秒后重试...`);
-                toastr.info('角色卡可能还在加载中，正在重试...');
-
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                characters = await getSillyTavernCharacters();
-
-                // 如果还是失败，再试一次使用getCharacters函数
-                if (characters.length === 0) {
-                    console.log(`[${extensionName}] 尝试使用getCharacters函数...`);
-                    characters = await tryGetCharactersFromContext();
-                }
-            }
+            const characters = await getSillyTavernCharacters();
 
             // 清空现有选项（保留默认选项）
             selectElement.find('option:not(:first)').remove();
@@ -530,22 +300,25 @@ jQuery(async () => {
 
                     const option = $('<option></option>')
                         .attr('value', char.id)
-                        .text(fullText);
+                        .text(fullText)
+                        .data('personality', char.personality || '');
                     selectElement.append(option);
                 });
 
-                toastr.success(`成功加载 ${characters.length} 个角色卡`);
-                console.log(`[${extensionName}] 角色卡列表:`, characters.map(c => c.name));
+                toastr.success(`成功加载 ${characters.length} 个角色卡到人设选择`);
+                console.log(`[${extensionName}] 人设角色卡列表:`, characters.map(c => c.name));
             } else {
-                selectElement.append('<option value="" disabled>未找到角色卡 - 可能需要等待SillyTavern完全加载</option>');
-                toastr.warning('未找到任何角色卡。请确保：1. SillyTavern已完全加载 2. 已导入角色卡 3. 稍后重试');
+                selectElement.append('<option value="" disabled>未找到角色卡 - 请确保SillyTavern已加载角色</option>');
+                toastr.warning('未找到任何角色卡，请确保SillyTavern已完全加载并导入了角色卡');
             }
 
         } catch (error) {
-            console.error(`[${extensionName}] 刷新角色列表失败:`, error);
+            console.error(`[${extensionName}] 刷新人设角色列表失败:`, error);
             toastr.error('刷新角色列表失败: ' + error.message);
         } finally {
-            refreshButton.text('🔄 刷新角色列表').prop('disabled', false);
+            if (refreshButton.length > 0) {
+                refreshButton.text('🔄 刷新').prop('disabled', false);
+            }
         }
     }
 
@@ -605,67 +378,105 @@ jQuery(async () => {
     }
 
     /**
-     * 保存SillyTavern集成设置
+     * 保存人设和互动设置
      */
-    function saveSillyTavernSettings() {
+    function savePersonalityAndInteractionSettings() {
+        const personalityType = $('#virtual-pet-personality-select').val();
+        const customPersonality = $('#virtual-pet-custom-personality').val();
+        const selectedCharacter = $('#virtual-pet-personality-character-select').val();
+        const apiType = $('#ai-api-select').val();
+        const apiUrl = $('#ai-url-input').val();
+        const apiKey = $('#ai-key-input').val();
+        const apiModel = $('#ai-model-input').val();
+
         const settings = {
-            apiType: $('#sillytavern-api-select').val(),
-            selectedCharacter: $('#sillytavern-character-select').val(),
-            apiUrl: $('#api-url-input').val(),
-            apiKey: $('#api-key-input').val(),
-            apiModel: $('#api-model-input').val(),
-            lastTestTime: Date.now(),
-            lastTestResult: $('#connection-status').text().includes('✅')
+            personalityType,
+            customPersonality,
+            selectedCharacter,
+            apiType,
+            apiUrl,
+            apiKey,
+            apiModel,
+            lastSaved: Date.now()
         };
 
-        localStorage.setItem(`${extensionName}-sillytavern-settings`, JSON.stringify(settings));
-        console.log(`[${extensionName}] SillyTavern设置已保存:`, settings);
+        localStorage.setItem(`${extensionName}-personality-interaction-settings`, JSON.stringify(settings));
+        console.log(`[${extensionName}] 人设和互动设置已保存:`, settings);
     }
 
     /**
-     * 加载SillyTavern集成设置
+     * 加载人设和互动设置
      */
-    function loadSillyTavernSettings() {
+    function loadPersonalityAndInteractionSettings() {
         try {
-            const saved = localStorage.getItem(`${extensionName}-sillytavern-settings`);
+            const saved = localStorage.getItem(`${extensionName}-personality-interaction-settings`);
             if (saved) {
                 const settings = JSON.parse(saved);
-                $('#sillytavern-api-select').val(settings.apiType || '');
-                $('#sillytavern-character-select').val(settings.selectedCharacter || '');
-                $('#api-url-input').val(settings.apiUrl || '');
-                $('#api-key-input').val(settings.apiKey || '');
-                $('#api-model-input').val(settings.apiModel || '');
 
-                // 根据API类型显示/隐藏配置输入框
+                // 加载人设设置
+                $('#virtual-pet-personality-select').val(settings.personalityType || 'default');
+                $('#virtual-pet-custom-personality').val(settings.customPersonality || '');
+                $('#virtual-pet-personality-character-select').val(settings.selectedCharacter || '');
+
+                // 加载API设置
+                $('#ai-api-select').val(settings.apiType || '');
+                $('#ai-url-input').val(settings.apiUrl || '');
+                $('#ai-key-input').val(settings.apiKey || '');
+                $('#ai-model-input').val(settings.apiModel || '');
+
+                // 根据人设类型显示/隐藏相关输入框
+                togglePersonalityInputs(settings.personalityType);
                 toggleApiConfigInputs(settings.apiType);
-
-                // 显示上次测试结果
-                if (settings.lastTestResult && settings.lastTestTime) {
-                    const timeAgo = Math.floor((Date.now() - settings.lastTestTime) / (1000 * 60));
-                    $('#connection-status').text(`✅ 上次测试成功 (${timeAgo}分钟前)`).css('color', '#48bb78');
-                }
 
                 return settings;
             }
         } catch (error) {
-            console.error(`[${extensionName}] 加载SillyTavern设置失败:`, error);
+            console.error(`[${extensionName}] 加载人设和互动设置失败:`, error);
         }
-        return {};
+
+        // 如果没有保存的设置，确保初始化UI状态
+        const defaultSettings = {};
+        togglePersonalityInputs('default');
+        toggleApiConfigInputs('');
+        return defaultSettings;
+    }
+
+    /**
+     * 切换人设输入框的显示状态
+     */
+    function togglePersonalityInputs(personalityType) {
+        const customContainer = $('#virtual-pet-custom-personality-container');
+        const characterContainer = $('#virtual-pet-personality-character-container');
+
+        if (personalityType === 'custom') {
+            customContainer.show();
+            characterContainer.hide();
+        } else if (personalityType === 'character') {
+            customContainer.hide();
+            characterContainer.show();
+        } else {
+            customContainer.hide();
+            characterContainer.hide();
+        }
     }
 
     /**
      * 切换API配置输入框的显示状态
      */
     function toggleApiConfigInputs(apiType) {
-        const container = $('#api-config-container');
+        const container = $('#ai-config-container');
+        console.log(`[${extensionName}] toggleApiConfigInputs called with apiType: ${apiType}`);
+        console.log(`[${extensionName}] Container found: ${container.length > 0}`);
+
         if (apiType && apiType !== 'auto' && apiType !== '') {
             container.show();
+            console.log(`[${extensionName}] Showing API config container for type: ${apiType}`);
 
             // 根据API类型设置默认值
             const defaults = {
                 'openai': { url: 'https://api.openai.com/v1', model: 'gpt-4' },
                 'claude': { url: 'https://api.anthropic.com', model: 'claude-3-sonnet-20240229' },
-                'google': { url: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-pro' },
+                'google': { url: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-1.5-flash' },
                 'mistral': { url: 'https://api.mistral.ai/v1', model: 'mistral-medium' },
                 'kobold': { url: 'http://localhost:5001', model: 'kobold' },
                 'ollama': { url: 'http://localhost:11434', model: 'llama2' },
@@ -673,12 +484,14 @@ jQuery(async () => {
                 'horde': { url: 'https://horde.koboldai.net', model: 'horde' }
             };
 
-            if (defaults[apiType] && !$('#api-url-input').val()) {
-                $('#api-url-input').attr('placeholder', defaults[apiType].url);
-                $('#api-model-input').attr('placeholder', defaults[apiType].model);
+            if (defaults[apiType] && !$('#ai-url-input').val()) {
+                $('#ai-url-input').attr('placeholder', defaults[apiType].url);
+                $('#ai-model-input').attr('placeholder', defaults[apiType].model);
+                console.log(`[${extensionName}] Set placeholders for ${apiType}`);
             }
         } else {
             container.hide();
+            console.log(`[${extensionName}] Hiding API config container`);
         }
     }
 
@@ -920,16 +733,7 @@ jQuery(async () => {
         console.log(`[${extensionName}] === 深度检测结束 ===`);
     }
 
-    /**
-     * 获取当前选择的角色卡信息
-     */
-    function getSelectedCharacterInfo() {
-        const settings = loadSillyTavernSettings();
-        return {
-            characterId: settings.selectedCharacter,
-            apiType: settings.apiType
-        };
-    }
+
 
     /**
      * 调用SillyTavern的AI生成API
@@ -1048,13 +852,13 @@ jQuery(async () => {
             return statuses.length > 0 ? statuses.join('，') : '状态正常';
         };
 
-        // 获取SillyTavern设置
-        const stSettings = loadSillyTavernSettings();
+        // 获取人设和互动设置
+        const settings = loadPersonalityAndInteractionSettings();
         let characterContext = '';
 
         // 如果选择了角色卡，添加角色卡上下文
-        if (stSettings.selectedCharacter) {
-            characterContext = `\n[特别指示：请结合角色卡"${stSettings.selectedCharacter}"的设定和语言风格来回应，但仍要保持虚拟宠物的身份]`;
+        if (settings.selectedCharacter) {
+            characterContext = `\n[特别指示：请结合角色卡"${settings.selectedCharacter}"的设定和语言风格来回应，但仍要保持虚拟宠物的身份]`;
         }
 
         // 构建完整的Prompt
@@ -1065,7 +869,7 @@ jQuery(async () => {
 - 类型：${getPetTypeName(petData.type)}
 - 等级：${petData.level}级
 - 人设：${getCurrentPersonality()}
-${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}` : ''}
+${settings.selectedCharacter ? `- 角色卡：${settings.selectedCharacter}` : ''}
 
 当前状态：
 - 健康：${Math.round(petData.health)}/100
@@ -1090,7 +894,12 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
      */
     async function handleAIReply(action, fallbackMessage) {
         try {
-            if (isSillyTavernAPIAvailable()) {
+            // 检查是否有可用的AI配置
+            const settings = loadPersonalityAndInteractionSettings();
+            const hasCustomAPI = settings.apiType && settings.apiUrl && settings.apiKey;
+            const hasSillyTavernAPI = isSillyTavernAPIAvailable();
+
+            if (hasCustomAPI || hasSillyTavernAPI) {
                 // 显示加载状态
                 const loadingToast = toastr.info(`${petData.name} 正在思考...`, "", {
                     timeOut: 0,
@@ -1101,7 +910,17 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
                 try {
                     // 构建Prompt并调用AI
                     const prompt = buildInteractionPrompt(action);
-                    const aiReply = await callSillyTavernAPI(prompt, 8000); // 8秒超时
+                    let aiReply;
+
+                    if (hasCustomAPI) {
+                        // 使用自定义API配置
+                        console.log(`[${extensionName}] 使用自定义API: ${settings.apiType}`);
+                        aiReply = await callCustomAPI(prompt, settings);
+                    } else {
+                        // 使用SillyTavern API
+                        console.log(`[${extensionName}] 使用SillyTavern API`);
+                        aiReply = await callSillyTavernAPI(prompt, 8000);
+                    }
 
                     // 清除加载提示
                     toastr.clear(loadingToast);
@@ -1132,17 +951,159 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
                     }
                 }
             } else {
-                // API不可用，直接使用回退消息
-                console.log(`[${extensionName}] SillyTavern API不可用，使用静态回复`);
-                toastr.success(fallbackMessage, "", {
-                    timeOut: 4000,
-                    extendedTimeOut: 1000
-                });
+                // 没有可用的API配置，直接使用回退消息
+                console.log(`[${extensionName}] 没有可用的AI配置，使用静态回复`);
+                toastr.info("💡 提示：配置AI API后可获得个性化回复", "", { timeOut: 2000 });
+                setTimeout(() => {
+                    toastr.success(fallbackMessage, "", {
+                        timeOut: 4000,
+                        extendedTimeOut: 1000
+                    });
+                }, 500);
             }
         } catch (error) {
             console.error(`[${extensionName}] 处理AI回复时发生错误:`, error);
             // 最终回退
             toastr.success(fallbackMessage);
+        }
+    }
+
+    /**
+     * 调用自定义API
+     * @param {string} prompt - 提示词
+     * @param {object} settings - API设置
+     * @returns {Promise<string>} - AI回复
+     */
+    async function callCustomAPI(prompt, settings) {
+        const { apiType, apiUrl, apiKey, apiModel } = settings;
+
+        console.log(`[${extensionName}] 调用自定义API: ${apiType}`);
+
+        try {
+            let requestBody, headers, finalUrl = apiUrl;
+
+            // 根据API类型构建请求
+            switch (apiType) {
+                case 'openai':
+                    headers = {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    };
+                    finalUrl = `${apiUrl}/chat/completions`;
+                    requestBody = {
+                        model: apiModel || 'gpt-4',
+                        messages: [
+                            { role: 'user', content: prompt }
+                        ],
+                        max_tokens: 150,
+                        temperature: 0.8
+                    };
+                    break;
+
+                case 'claude':
+                    headers = {
+                        'Content-Type': 'application/json',
+                        'x-api-key': apiKey,
+                        'anthropic-version': '2023-06-01'
+                    };
+                    finalUrl = `${apiUrl}/v1/messages`;
+                    requestBody = {
+                        model: apiModel || 'claude-3-sonnet-20240229',
+                        max_tokens: 150,
+                        messages: [
+                            { role: 'user', content: prompt }
+                        ]
+                    };
+                    break;
+
+                case 'google':
+                    headers = {
+                        'Content-Type': 'application/json'
+                    };
+                    finalUrl = `${apiUrl}/models/${apiModel || 'gemini-pro'}:generateContent?key=${apiKey}`;
+                    requestBody = {
+                        contents: [
+                            {
+                                parts: [
+                                    { text: prompt }
+                                ]
+                            }
+                        ]
+                    };
+                    break;
+
+                default:
+                    // 通用API格式
+                    headers = {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    };
+                    requestBody = {
+                        model: apiModel,
+                        prompt: prompt,
+                        max_tokens: 150,
+                        temperature: 0.8
+                    };
+            }
+
+            console.log(`[${extensionName}] 发送请求到: ${finalUrl}`);
+
+            // 发送请求
+            const response = await fetch(finalUrl, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                let errorMessage = `API请求失败: ${response.status} ${response.statusText}`;
+
+                // 针对不同API类型提供更好的错误提示
+                if (apiType === 'google') {
+                    if (response.status === 400 && errorText.includes('API_KEY_INVALID')) {
+                        errorMessage += '\n\n🔑 Google AI密钥无效，请检查：\n1. 访问 https://aistudio.google.com/\n2. 获取新的API密钥\n3. 确保密钥以"AIza"开头\n4. 检查密钥是否已启用';
+                    } else if (response.status === 404 && errorText.includes('is not found')) {
+                        errorMessage += '\n\n🤖 Google AI模型不存在，请检查：\n1. 使用正确的模型名称\n2. 推荐模型：gemini-1.5-flash, gemini-1.5-pro, gemini-pro\n3. 运行 fixGoogleAIModel() 自动修复';
+                    }
+                } else if (apiType === 'openai' && response.status === 401) {
+                    errorMessage += '\n\n🔑 OpenAI密钥无效，请检查API密钥是否正确';
+                } else if (apiType === 'claude' && response.status === 401) {
+                    errorMessage += '\n\n🔑 Claude密钥无效，请检查API密钥是否正确';
+                }
+
+                errorMessage += `\n\n详细错误: ${errorText}`;
+                throw new Error(errorMessage);
+            }
+
+            const data = await response.json();
+            console.log(`[${extensionName}] API响应:`, data);
+
+            // 根据API类型解析响应
+            let reply;
+            switch (apiType) {
+                case 'openai':
+                    reply = data.choices?.[0]?.message?.content;
+                    break;
+                case 'claude':
+                    reply = data.content?.[0]?.text;
+                    break;
+                case 'google':
+                    reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                    break;
+                default:
+                    reply = data.choices?.[0]?.text || data.response || data.content;
+            }
+
+            if (!reply) {
+                throw new Error('API返回了空回复');
+            }
+
+            return reply.trim();
+
+        } catch (error) {
+            console.error(`[${extensionName}] 自定义API调用失败:`, error);
+            throw error;
         }
     }
 
@@ -1158,28 +1119,8 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
         $("#virtual-pet-personality-select").val(currentPersonalityType);
         $("#virtual-pet-custom-personality").val(customPersonality);
 
-        // 根据选择显示/隐藏自定义输入框
-        toggleCustomPersonalityInput(currentPersonalityType === 'custom');
-
-        // 添加事件监听器
-        $("#virtual-pet-personality-select").on('change', function() {
-            const selectedType = $(this).val();
-            const isCustom = selectedType === 'custom';
-
-            toggleCustomPersonalityInput(isCustom);
-
-            if (!isCustom) {
-                // 如果选择了预设人设，立即保存
-                savePersonalitySettings(selectedType);
-                toastr.success(`已切换到${$(this).find('option:selected').text()}人设`);
-            }
-        });
-
-        $("#virtual-pet-custom-personality").on('input', function() {
-            // 自定义人设文本变化时保存
-            const customText = $(this).val().trim();
-            savePersonalitySettings('custom', customText);
-        });
+        // 根据选择显示/隐藏相关输入框
+        togglePersonalityInputs(currentPersonalityType);
 
         // 启用/禁用虚拟宠物系统的事件监听器
         $("#virtual-pet-enabled-toggle").on('change', function() {
@@ -1203,64 +1144,82 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
         const enabled = localStorage.getItem(`${extensionName}-enabled`) !== 'false';
         $("#virtual-pet-enabled-toggle").prop('checked', enabled);
 
-        // 加载SillyTavern设置
-        loadSillyTavernSettings();
+        // 加载人设和互动设置
+        loadPersonalityAndInteractionSettings();
 
         // 初始化角色卡列表 - 延迟加载，等待SillyTavern完全初始化
         setTimeout(() => {
-            refreshCharacterList();
-        }, 3000); // 增加延迟时间
+            refreshPersonalityCharacterList();
+        }, 3000);
 
-        // 绑定SillyTavern相关事件
-        $('#sillytavern-api-select').on('change', function() {
-            const apiType = $(this).val();
-            toggleApiConfigInputs(apiType);
-            saveSillyTavernSettings();
-            // 清除之前的测试结果
-            $('#connection-status').text('未测试').css('color', '#888');
+        // 绑定人设选择事件
+        $('#virtual-pet-personality-select').on('change', async function() {
+            const selectedType = $(this).val();
+            togglePersonalityInputs(selectedType);
 
-            // 如果选择了自动读取，尝试检测配置
-            if (apiType === 'auto') {
-                detectAndShowConfig();
+            if (selectedType === 'custom') {
+                // 自定义人设，等待用户输入
+                console.log(`[${extensionName}] 切换到自定义人设模式`);
+            } else if (selectedType === 'character') {
+                // 角色卡人设，等待用户选择角色卡
+                console.log(`[${extensionName}] 切换到角色卡人设模式`);
+                toastr.info('请选择一个角色卡来使用其人设');
+            } else {
+                // 预设人设，立即保存
+                await savePersonalitySettings(selectedType);
+                toastr.success(`已切换到${$(this).find('option:selected').text()}人设`);
             }
         });
 
-        // 添加一个手动检测按钮用于调试
-        if (!$('#debug-sillytavern-btn').length) {
-            $('#refresh-characters-btn').after(`
-                <button id="debug-sillytavern-btn" style="margin-top: 5px; margin-left: 5px; padding: 6px 12px; background: #6b46c1; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8em;">
-                    🔍 深度检测
-                </button>
-            `);
-
-            $('#debug-sillytavern-btn').on('click', function(e) {
-                e.preventDefault();
-                deepDebugSillyTavern();
-            });
-        }
-
-        $('#sillytavern-character-select').on('change', function() {
-            saveSillyTavernSettings();
-            const selectedChar = $(this).find('option:selected').text();
-            if ($(this).val()) {
-                toastr.success(`已选择角色卡: ${selectedChar.split(' - ')[0]}`);
+        // 绑定角色卡选择事件
+        $('#virtual-pet-personality-character-select').on('change', async function() {
+            const characterId = $(this).val();
+            if (characterId) {
+                const selectedChar = $(this).find('option:selected').text();
+                await savePersonalitySettings('character', '', characterId);
+                toastr.success(`已选择角色卡人设: ${selectedChar.split(' - ')[0]}`);
             }
+        });
+
+        // 绑定自定义人设输入事件
+        $('#virtual-pet-custom-personality').on('input', async function() {
+            const customText = $(this).val().trim();
+            await savePersonalitySettings('custom', customText);
+        });
+
+        // 绑定角色卡刷新按钮
+        $('#refresh-personality-characters-btn').on('click', function(e) {
+            e.preventDefault();
+            refreshPersonalityCharacterList();
+        });
+
+        // 绑定AI API配置事件
+        $('#ai-api-select').on('change', function() {
+            const apiType = $(this).val();
+            toggleApiConfigInputs(apiType);
+            savePersonalityAndInteractionSettings();
         });
 
         // 绑定API配置输入框事件
-        $('#api-url-input, #api-key-input, #api-model-input').on('input', function() {
-            saveSillyTavernSettings();
+        $('#ai-url-input, #ai-key-input, #ai-model-input').on('input', function() {
+            savePersonalityAndInteractionSettings();
         });
 
-        $('#test-connection-btn').on('click', function(e) {
+        // 绑定AI连接测试按钮
+        $('#test-ai-connection-btn').on('click', function(e) {
             e.preventDefault();
-            testSillyTavernConnection();
+            testAIConnection();
         });
 
-        $('#refresh-characters-btn').on('click', function(e) {
-            e.preventDefault();
-            refreshCharacterList();
-        });
+        // 确保在初始化完成后正确显示API配置输入框
+        setTimeout(() => {
+            const currentApiType = $('#ai-api-select').val();
+            console.log(`[${extensionName}] 当前API类型: ${currentApiType}`);
+            if (currentApiType) {
+                toggleApiConfigInputs(currentApiType);
+                console.log(`[${extensionName}] 强制显示API配置输入框`);
+            }
+        }, 100);
 
         console.log(`[${extensionName}] 设置面板初始化完成`);
         console.log(`[${extensionName}] 当前人设类型: ${currentPersonalityType}`);
@@ -1268,16 +1227,79 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
     }
 
     /**
-     * 切换自定义人设输入框的显示状态
-     * @param {boolean} show 是否显示
+     * 调试API配置显示问题
      */
-    function toggleCustomPersonalityInput(show) {
-        if (show) {
-            $("#virtual-pet-custom-personality-container").show();
-        } else {
-            $("#virtual-pet-custom-personality-container").hide();
+    window.debugApiConfig = function() {
+        console.log('=== API配置调试信息 ===');
+        console.log('API选择框:', $('#ai-api-select').length > 0 ? '存在' : '不存在');
+        console.log('API选择框值:', $('#ai-api-select').val());
+        console.log('API配置容器:', $('#ai-config-container').length > 0 ? '存在' : '不存在');
+        console.log('API配置容器显示状态:', $('#ai-config-container').is(':visible') ? '显示' : '隐藏');
+        console.log('API URL输入框:', $('#ai-url-input').length > 0 ? '存在' : '不存在');
+        console.log('API Key输入框:', $('#ai-key-input').length > 0 ? '存在' : '不存在');
+        console.log('API Model输入框:', $('#ai-model-input').length > 0 ? '存在' : '不存在');
+
+        // 强制显示配置容器
+        const apiType = $('#ai-api-select').val();
+        if (apiType) {
+            console.log('强制调用 toggleApiConfigInputs...');
+            toggleApiConfigInputs(apiType);
+        }
+
+        console.log('=== 调试完成 ===');
+    };
+
+    /**
+     * 测试AI连接
+     */
+    async function testAIConnection() {
+        const statusElement = $('#ai-connection-status');
+        const testButton = $('#test-ai-connection-btn');
+        const settings = loadPersonalityAndInteractionSettings();
+
+        // 更新状态为测试中
+        statusElement.text('🔄 测试中...').css('color', '#ffa500');
+        testButton.prop('disabled', true);
+
+        try {
+            if (!settings.apiType) {
+                throw new Error('请先选择API类型');
+            }
+
+            if (isSillyTavernAPIAvailable()) {
+                // 使用SillyTavern的API
+                const testPrompt = "请简单回复'测试成功'，不超过10个字。";
+                const response = await callSillyTavernAPI(testPrompt, 8000);
+
+                if (response && response.trim()) {
+                    statusElement.text('✅ 连接成功').css('color', '#48bb78');
+                    toastr.success(`AI连接测试成功！回复: ${response.substring(0, 50)}`);
+                } else {
+                    throw new Error('API返回空响应');
+                }
+            } else {
+                // 使用自定义API配置
+                if (!settings.apiUrl || !settings.apiKey) {
+                    throw new Error('请填写完整的API配置信息（URL和密钥）');
+                }
+
+                statusElement.text('✅ 配置验证成功').css('color', '#48bb78');
+                toastr.success(`API配置验证成功！类型: ${settings.apiType}`);
+                toastr.info('注意：自定义API功能正在开发中，目前仅验证配置完整性');
+            }
+
+            return true;
+
+        } catch (error) {
+            statusElement.text('❌ 连接失败').css('color', '#f56565');
+            toastr.error('连接测试失败: ' + error.message);
+            return false;
+        } finally {
+            testButton.prop('disabled', false);
         }
     }
+
+
 
     // -----------------------------------------------------------------
     // 3. 宠物系统核心逻辑
@@ -2670,7 +2692,7 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
 
                         <div class="flex-container">
                             <label for="virtual-pet-personality-select" style="display: block; margin-bottom: 8px; font-weight: bold;">
-                                🎭 宠物人设选择
+                                🎭 宠物人设与互动
                             </label>
                             <select id="virtual-pet-personality-select" style="width: 100%; padding: 8px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
                                 <option value="default">🐱 默认 - 高冷但温柔的猫</option>
@@ -2678,10 +2700,28 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
                                 <option value="elegant">🐉 优雅 - 古典文雅的龙</option>
                                 <option value="shy">🐰 害羞 - 轻声细语的兔子</option>
                                 <option value="smart">🐦 聪明 - 机智幽默的鸟</option>
+                                <option value="character">📋 使用角色卡人设</option>
                                 <option value="custom">✏️ 自定义人设</option>
                             </select>
                         </div>
 
+                        <!-- 角色卡选择容器 -->
+                        <div id="virtual-pet-personality-character-container" style="display: none; margin-top: 10px;">
+                            <label for="virtual-pet-personality-character-select" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
+                                选择角色卡：
+                            </label>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <select id="virtual-pet-personality-character-select" style="flex: 1; padding: 6px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+                                    <option value="">请选择角色卡...</option>
+                                </select>
+                                <button id="refresh-personality-characters-btn" style="padding: 6px 12px; background: #7289da; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8em;">
+                                    🔄 刷新
+                                </button>
+                            </div>
+                            <small style="color: #888; font-size: 0.8em;">从SillyTavern的角色卡中读取人设信息</small>
+                        </div>
+
+                        <!-- 自定义人设容器 -->
                         <div id="virtual-pet-custom-personality-container" style="display: none; margin-top: 10px;">
                             <label for="virtual-pet-custom-personality" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
                                 自定义人设描述：
@@ -2695,7 +2735,7 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
                         </div>
 
                         <small class="notes" style="margin-top: 10px; display: block;">
-                            选择或自定义宠物的性格，AI会根据人设生成个性化回复
+                            选择预设人设、角色卡人设或自定义人设，AI会根据人设生成个性化回复
                         </small>
 
                         <!-- AI 配置设置 -->
@@ -5365,6 +5405,230 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
     };
 
     /**
+     * 测试API配置和连接
+     */
+    window.testAPIConnection = async function() {
+        console.log('🔧 测试API配置和连接...');
+
+        const settings = loadPersonalityAndInteractionSettings();
+        console.log('当前设置:', settings);
+
+        if (!settings.apiType) {
+            console.log('❌ 没有配置API类型');
+            toastr.error('请先在设置中配置API类型');
+            return;
+        }
+
+        if (!settings.apiUrl || !settings.apiKey) {
+            console.log('❌ API配置不完整');
+            toastr.error('请填写完整的API配置（URL和密钥）');
+            return;
+        }
+
+        try {
+            const testPrompt = "请简单回复'测试成功'，不超过10个字。";
+            console.log('发送测试请求...');
+
+            const response = await callCustomAPI(testPrompt, settings);
+            console.log('✅ API测试成功:', response);
+            toastr.success(`API测试成功！回复: ${response}`);
+
+        } catch (error) {
+            console.error('❌ API测试失败:', error);
+            toastr.error(`API测试失败: ${error.message}`);
+        }
+    };
+
+    /**
+     * 测试Prompt构建功能
+     */
+    window.testPromptBuild = function() {
+        console.log('🔧 测试Prompt构建...');
+
+        try {
+            const testPrompt = buildInteractionPrompt('feed');
+            console.log('✅ Prompt构建成功:');
+            console.log(testPrompt);
+            toastr.success('Prompt构建测试成功，请查看控制台');
+
+        } catch (error) {
+            console.error('❌ Prompt构建失败:', error);
+            toastr.error(`Prompt构建失败: ${error.message}`);
+        }
+    };
+
+    /**
+     * 检查API配置
+     */
+    window.checkAPIConfig = function() {
+        console.log('🔍 检查API配置...');
+
+        const settings = loadPersonalityAndInteractionSettings();
+
+        console.log('=== API配置检查 ===');
+        console.log('API类型:', settings.apiType || '未设置');
+        console.log('API URL:', settings.apiUrl || '未设置');
+        console.log('API密钥:', settings.apiKey ? `${settings.apiKey.substring(0, 10)}...` : '未设置');
+        console.log('模型名称:', settings.apiModel || '未设置');
+
+        // 检查配置完整性
+        const issues = [];
+        if (!settings.apiType) issues.push('缺少API类型');
+        if (!settings.apiUrl) issues.push('缺少API URL');
+        if (!settings.apiKey) issues.push('缺少API密钥');
+        if (!settings.apiModel) issues.push('缺少模型名称');
+
+        if (issues.length > 0) {
+            console.log('❌ 配置问题:', issues.join(', '));
+            toastr.error(`配置不完整: ${issues.join(', ')}`);
+        } else {
+            console.log('✅ 配置完整');
+
+            // 检查Google AI特定配置
+            if (settings.apiType === 'google') {
+                console.log('=== Google AI 配置检查 ===');
+                console.log('预期URL格式: https://generativelanguage.googleapis.com/v1beta');
+                console.log('当前URL:', settings.apiUrl);
+                console.log('预期模型: gemini-pro 或 gemini-1.5-flash');
+                console.log('当前模型:', settings.apiModel);
+
+                if (!settings.apiKey.startsWith('AIza')) {
+                    console.log('⚠️ Google AI密钥通常以"AIza"开头');
+                    toastr.warning('Google AI密钥格式可能不正确');
+                }
+
+                if (!settings.apiUrl.includes('generativelanguage.googleapis.com')) {
+                    console.log('⚠️ Google AI URL可能不正确');
+                    toastr.warning('Google AI URL格式可能不正确');
+                }
+            }
+
+            toastr.success('API配置检查完成，请查看控制台');
+        }
+
+        console.log('=== 检查完成 ===');
+    };
+
+    /**
+     * 修复Google AI模型配置
+     */
+    window.fixGoogleAIModel = function() {
+        console.log('🔧 修复Google AI模型配置...');
+
+        const settings = loadPersonalityAndInteractionSettings();
+
+        if (settings.apiType !== 'google') {
+            console.log('❌ 当前不是Google AI配置');
+            toastr.error('当前不是Google AI配置');
+            return;
+        }
+
+        // 检查当前模型
+        const currentModel = settings.apiModel || $('#ai-model-input').val();
+        console.log('当前模型:', currentModel);
+
+        // 可用的Google AI模型列表
+        const availableModels = [
+            'gemini-1.5-flash',
+            'gemini-1.5-pro',
+            'gemini-pro',
+            'gemini-pro-vision'
+        ];
+
+        console.log('可用模型:', availableModels);
+
+        // 如果当前模型不在可用列表中，使用默认模型
+        if (!availableModels.includes(currentModel)) {
+            const newModel = 'gemini-1.5-flash';
+            console.log(`⚠️ 模型 "${currentModel}" 不可用，切换到 "${newModel}"`);
+
+            $('#ai-model-input').val(newModel);
+            savePersonalityAndInteractionSettings();
+
+            toastr.success(`已修复模型配置：${currentModel} → ${newModel}`);
+            console.log('✅ 模型配置已修复');
+        } else {
+            console.log('✅ 当前模型配置正确');
+            toastr.success('当前模型配置正确');
+        }
+
+        // 显示建议
+        console.log('💡 推荐模型:');
+        console.log('  - gemini-1.5-flash (快速，免费)');
+        console.log('  - gemini-1.5-pro (高质量)');
+        console.log('  - gemini-pro (经典版本)');
+    };
+
+    /**
+     * 快速配置Google AI
+     */
+    window.quickSetupGoogleAI = function(apiKey) {
+        if (!apiKey) {
+            console.log('❌ 请提供API密钥');
+            console.log('使用方法: quickSetupGoogleAI("你的API密钥")');
+            console.log('获取密钥: https://aistudio.google.com/');
+            toastr.error('请提供Google AI API密钥');
+            return;
+        }
+
+        if (!apiKey.startsWith('AIza')) {
+            console.log('⚠️ Google AI密钥通常以"AIza"开头，请检查密钥是否正确');
+            toastr.warning('API密钥格式可能不正确');
+        }
+
+        // 设置Google AI配置
+        $('#ai-api-select').val('google');
+        $('#ai-url-input').val('https://generativelanguage.googleapis.com/v1beta');
+        $('#ai-key-input').val(apiKey);
+        $('#ai-model-input').val('gemini-1.5-flash');
+
+        // 保存设置
+        savePersonalityAndInteractionSettings();
+
+        console.log('✅ Google AI配置完成');
+        console.log('API类型: Google AI');
+        console.log('URL: https://generativelanguage.googleapis.com/v1beta');
+        console.log('模型: gemini-pro');
+        console.log(`密钥: ${apiKey.substring(0, 10)}...`);
+
+        toastr.success('Google AI配置完成！可以开始测试了');
+
+        // 自动测试连接
+        setTimeout(() => {
+            testAPIConnection();
+        }, 1000);
+    };
+
+    /**
+     * 快速配置OpenAI
+     */
+    window.quickSetupOpenAI = function(apiKey) {
+        if (!apiKey) {
+            console.log('❌ 请提供API密钥');
+            console.log('使用方法: quickSetupOpenAI("你的API密钥")');
+            toastr.error('请提供OpenAI API密钥');
+            return;
+        }
+
+        // 设置OpenAI配置
+        $('#ai-api-select').val('openai');
+        $('#ai-url-input').val('https://api.openai.com/v1');
+        $('#ai-key-input').val(apiKey);
+        $('#ai-model-input').val('gpt-4');
+
+        // 保存设置
+        savePersonalityAndInteractionSettings();
+
+        console.log('✅ OpenAI配置完成');
+        toastr.success('OpenAI配置完成！可以开始测试了');
+
+        // 自动测试连接
+        setTimeout(() => {
+            testAPIConnection();
+        }, 1000);
+    };
+
+    /**
      * 测试人设切换功能
      */
     window.testPersonalitySwitch = function(personalityType = 'default') {
@@ -5389,10 +5653,44 @@ ${stSettings.selectedCharacter ? `- 角色卡：${stSettings.selectedCharacter}`
 
     console.log("🐾 虚拟宠物系统加载完成！");
     console.log("🐾 如果没有看到按钮，请在控制台运行: testVirtualPet()");
-    console.log("🎉 AI人设功能已加载！可用测试命令:");
-    console.log("  - testVirtualPetAI() - 检查AI功能状态");
-    console.log("  - testAIReply('feed'|'play'|'sleep') - 手动测试AI回复");
-    console.log("  - testPersonalitySwitch('default'|'cheerful'|'elegant'|'shy'|'smart'|'custom') - 测试人设切换");
+    /**
+     * 显示AI配置帮助
+     */
+    window.showAIHelp = function() {
+        console.log('🤖 === AI配置帮助 ===');
+        console.log('');
+        console.log('📋 可用命令:');
+        console.log('  checkAPIConfig()           - 检查当前API配置');
+        console.log('  quickSetupGoogleAI("密钥") - 快速配置Google AI');
+        console.log('  quickSetupOpenAI("密钥")   - 快速配置OpenAI');
+        console.log('  fixGoogleAIModel()         - 修复Google AI模型配置');
+        console.log('  testAPIConnection()        - 测试API连接');
+        console.log('  testPromptBuild()          - 测试提示词构建');
+        console.log('  testAIReply("feed")        - 测试AI回复');
+        console.log('');
+        console.log('🔑 获取API密钥:');
+        console.log('  Google AI: https://aistudio.google.com/');
+        console.log('  OpenAI:    https://platform.openai.com/api-keys');
+        console.log('  Claude:    https://console.anthropic.com/');
+        console.log('');
+        console.log('💡 快速开始:');
+        console.log('  1. 获取API密钥');
+        console.log('  2. 运行 quickSetupGoogleAI("你的密钥")');
+        console.log('  3. 等待自动测试完成');
+        console.log('  4. 开始与宠物互动！');
+        console.log('');
+        console.log('🐛 遇到问题?');
+        console.log('  - 运行 checkAPIConfig() 检查配置');
+        console.log('  - 确保API密钥正确且有效');
+        console.log('  - 检查网络连接');
+        console.log('=========================');
+
+        toastr.info('AI配置帮助已显示在控制台，请查看详细说明');
+    };
+
+    console.log("🎉 AI人设功能已加载！");
+    console.log("🤖 需要配置AI? 运行: showAIHelp()");
+    console.log("🎮 开始使用虚拟宠物吧！");
 });
 
 console.log("🐾 虚拟宠物系统脚本已加载完成");

@@ -75,22 +75,22 @@ jQuery(async () => {
         experience: '#87CEEB'    // 经验 - 天空蓝
     };
     
-    // 宠物数据结构
+    // 宠物数据结构 - 默认初始值（仅在首次创建时使用）
     let petData = {
         name: "小宠物",
         type: "cat", // cat, dog, dragon, etc.
         level: 1,
         experience: 0,
-        health: 40,
-        happiness: 30,
-        hunger: 50,
-        energy: 60,
+        health: 30,      // 更低的初始健康值
+        happiness: 20,   // 更低的初始快乐值
+        hunger: 35,      // 更低的初始饱食度
+        energy: 45,      // 更低的初始精力值
         lastFeedTime: Date.now(),
         lastPlayTime: Date.now(),
         lastSleepTime: Date.now(),
         lastUpdateTime: Date.now(),
         created: Date.now(),
-        dataVersion: 2.0 // 数据版本标记
+        dataVersion: 3.0 // 数据版本标识 - 更低的初始数值
     };
     
     // -----------------------------------------------------------------
@@ -674,25 +674,25 @@ jQuery(async () => {
         };
 
         // 构建完整的Prompt
-        const prompt = `[系统指令：请你扮演以下角色并对用户的行为做出简短回应。回应应该符合角色性格，简洁生动，不超过30字。]
+        const prompt = `你是一只名叫"${petData.name}"的虚拟宠物${getPetTypeName(petData.type)}。
 
-宠物信息：
-- 名称：${petData.name}
-- 类型：${getPetTypeName(petData.type)}
-- 等级：${petData.level}级
-- 人设：${getCurrentPersonality()}
+【重要】你必须：
+1. 直接以宠物的身份回应，不要分析角色设定
+2. 回应要简短生动，不超过30字
+3. 根据当前状态和心情来回应
+4. 体现出你的性格特点
 
-当前状态：
-- 健康：${Math.round(petData.health)}/100
-- 快乐：${Math.round(petData.happiness)}/100
-- 饥饿：${Math.round(petData.hunger)}/100
-- 精力：${Math.round(petData.energy)}/100
-- 状态描述：${getStatusDescription()}
+【你的性格】：${getCurrentPersonality()}
 
-情景：
-现在是${timeOfDay}，用户刚刚${actionDescriptions[action]}。
+【当前状态】：
+- 健康：${Math.round(petData.health)}/100 ${petData.health < 30 ? '(感觉不太舒服)' : petData.health > 70 ? '(精神很好)' : '(还算健康)'}
+- 快乐：${Math.round(petData.happiness)}/100 ${petData.happiness < 30 ? '(有点郁闷)' : petData.happiness > 70 ? '(很开心)' : '(心情一般)'}
+- 饱食：${Math.round(petData.hunger)}/100 ${petData.hunger < 30 ? '(很饿)' : petData.hunger > 70 ? '(很饱)' : '(有点饿)'}
+- 精力：${Math.round(petData.energy)}/100 ${petData.energy < 30 ? '(很累)' : petData.energy > 70 ? '(精力充沛)' : '(有点累)'}
 
-请以${petData.name}的身份，根据上述人设和当前状态，对用户的行为做出简短的回应：`;
+【情景】：现在是${timeOfDay}，主人刚刚${actionDescriptions[action]}。
+
+请直接以${petData.name}的身份回应主人的行为：`;
 
         return prompt;
     }
@@ -1100,8 +1100,8 @@ jQuery(async () => {
             try {
                 const savedData = JSON.parse(saved);
 
-                // 检查是否需要数据迁移（版本2.0 - 新的数值平衡）
-                const needsMigration = !savedData.dataVersion || savedData.dataVersion < 2.0;
+                // 检查是否需要数据迁移（版本3.0 - 更低的初始数值）
+                const needsMigration = !savedData.dataVersion || savedData.dataVersion < 3.0;
 
                 if (needsMigration) {
                     console.log(`[${extensionName}] 检测到旧数据，执行数据迁移...`);
@@ -1118,7 +1118,7 @@ jQuery(async () => {
                         lastPlayTime: savedData.lastPlayTime || petData.lastPlayTime,
                         lastSleepTime: savedData.lastSleepTime || petData.lastSleepTime,
                         lastUpdateTime: savedData.lastUpdateTime || petData.lastUpdateTime,
-                        dataVersion: 2.0 // 标记为新版本数据
+                        dataVersion: 3.0 // 标记为新版本数据
                     };
 
                     petData = migratedData;
@@ -1127,8 +1127,11 @@ jQuery(async () => {
                     console.log(`[${extensionName}] 数据迁移完成！新的初始数值已应用`);
                     console.log(`健康: ${petData.health}, 快乐: ${petData.happiness}, 饱食: ${petData.hunger}, 精力: ${petData.energy}`);
                 } else {
-                    // 数据版本正确，直接加载
+                    // 数据版本正确，加载数据并应用时间衰减
                     petData = { ...petData, ...savedData };
+
+                    // 应用时间衰减
+                    applyTimeDecay();
                 }
 
                 // 确保使用当前选择的人设
@@ -1138,11 +1141,68 @@ jQuery(async () => {
             }
         } else {
             // 没有保存的数据，添加版本标记
-            petData.dataVersion = 2.0;
+            petData.dataVersion = 3.0;
             savePetData();
         }
     }
-    
+
+    /**
+     * 应用时间衰减 - 让宠物数值随时间自然下降
+     */
+    function applyTimeDecay() {
+        const now = Date.now();
+        const lastUpdate = petData.lastUpdateTime || now;
+        const timeDiff = now - lastUpdate;
+
+        // 如果时间差小于5分钟，不应用衰减
+        if (timeDiff < 5 * 60 * 1000) {
+            return;
+        }
+
+        // 计算衰减小时数（最多24小时）
+        const hoursElapsed = Math.min(timeDiff / (1000 * 60 * 60), 24);
+
+        // 衰减率（每小时）
+        const decayRates = {
+            happiness: 2,  // 快乐度每小时下降2点
+            hunger: 3,     // 饱食度每小时下降3点
+            energy: 1.5,   // 精力每小时下降1.5点
+            health: 0.5    // 健康每小时下降0.5点
+        };
+
+        // 应用衰减
+        petData.happiness = Math.max(0, petData.happiness - (decayRates.happiness * hoursElapsed));
+        petData.hunger = Math.max(0, petData.hunger - (decayRates.hunger * hoursElapsed));
+        petData.energy = Math.max(0, petData.energy - (decayRates.energy * hoursElapsed));
+        petData.health = Math.max(0, petData.health - (decayRates.health * hoursElapsed));
+
+        // 更新最后更新时间
+        petData.lastUpdateTime = now;
+
+        // 保存数据
+        savePetData();
+
+        console.log(`[${extensionName}] 应用时间衰减: ${hoursElapsed.toFixed(1)}小时`);
+        console.log(`[${extensionName}] 当前数值: 健康${Math.round(petData.health)} 快乐${Math.round(petData.happiness)} 饱食${Math.round(petData.hunger)} 精力${Math.round(petData.energy)}`);
+    }
+
+    /**
+     * 启动定期数值衰减
+     */
+    function startPeriodicDecay() {
+        // 每10分钟检查一次数值衰减
+        setInterval(() => {
+            applyTimeDecay();
+
+            // 如果弹窗打开，更新UI显示
+            if (isPopupOpen) {
+                updateUnifiedUIStatus();
+            }
+        }, 10 * 60 * 1000); // 10分钟
+
+        console.log(`[${extensionName}] 定期数值衰减已启动（每10分钟检查一次）`);
+    }
+
     /**
      * 保存宠物数据
      */
@@ -2043,16 +2103,16 @@ jQuery(async () => {
             type: "cat",
             level: 1,
             experience: 0,
-            health: 40,
-            happiness: 30,
-            hunger: 50,
-            energy: 60,
+            health: 30,
+            happiness: 20,
+            hunger: 35,
+            energy: 45,
             lastFeedTime: Date.now(),
             lastPlayTime: Date.now(),
             lastSleepTime: Date.now(),
             created: Date.now(),
             lastUpdateTime: Date.now(),
-            dataVersion: 2.0 // 数据版本标记
+            dataVersion: 3.0 // 数据版本标记
         };
 
         savePetData();
@@ -2648,6 +2708,9 @@ jQuery(async () => {
 
         // 5. 加载自定义头像数据
         loadCustomAvatar();
+
+        // 6. 启动定期数值衰减
+        startPeriodicDecay();
 
         // 5. 只在非iOS设备上初始化原始弹窗功能
         if (!isIOS) {
@@ -3654,16 +3717,16 @@ jQuery(async () => {
             type: "cat",
             level: 1,
             experience: 0,
-            health: 40,
-            happiness: 30,
-            hunger: 50,
-            energy: 60,
+            health: 30,
+            happiness: 20,
+            hunger: 35,
+            energy: 45,
             lastFeedTime: Date.now(),
             lastPlayTime: Date.now(),
             lastSleepTime: Date.now(),
             lastUpdateTime: Date.now(),
             created: Date.now(),
-            dataVersion: 2.0
+            dataVersion: 3.0
         };
 
         // 保存新数据
@@ -3809,11 +3872,11 @@ jQuery(async () => {
 
         // 检查当前数值
         console.log("\n📊 当前宠物数值:");
-        console.log(`健康: ${petData.health}/100 ${petData.health === 40 ? '✅' : '❌ 应为40'}`);
-        console.log(`快乐度: ${petData.happiness}/100 ${petData.happiness === 30 ? '✅' : '❌ 应为30'}`);
-        console.log(`饱食度: ${petData.hunger}/100 ${petData.hunger === 50 ? '✅' : '❌ 应为50'}`);
-        console.log(`精力: ${petData.energy}/100 ${petData.energy === 60 ? '✅' : '❌ 应为60'}`);
-        console.log(`数据版本: ${petData.dataVersion} ${petData.dataVersion === 2.0 ? '✅' : '❌ 应为2.0'}`);
+        console.log(`健康: ${petData.health}/100 ${petData.health === 30 ? '✅' : '❌ 应为30'}`);
+        console.log(`快乐度: ${petData.happiness}/100 ${petData.happiness === 20 ? '✅' : '❌ 应为20'}`);
+        console.log(`饱食度: ${petData.hunger}/100 ${petData.hunger === 35 ? '✅' : '❌ 应为35'}`);
+        console.log(`精力: ${petData.energy}/100 ${petData.energy === 45 ? '✅' : '❌ 应为45'}`);
+        console.log(`数据版本: ${petData.dataVersion} ${petData.dataVersion === 3.0 ? '✅' : '❌ 应为3.0'}`);
 
         // 检查UI显示
         console.log("\n🖥️ UI显示检查:");
@@ -5370,6 +5433,86 @@ jQuery(async () => {
     };
 
     /**
+     * 测试新的数值系统
+     */
+    window.testValueSystem = function() {
+        console.log('🔍 测试新的数值系统...');
+
+        console.log('=== 当前数值状态 ===');
+        console.log(`健康: ${Math.round(petData.health)}/100`);
+        console.log(`快乐: ${Math.round(petData.happiness)}/100`);
+        console.log(`饱食: ${Math.round(petData.hunger)}/100`);
+        console.log(`精力: ${Math.round(petData.energy)}/100`);
+        console.log(`数据版本: ${petData.dataVersion}`);
+        console.log(`最后更新时间: ${new Date(petData.lastUpdateTime).toLocaleString()}`);
+
+        // 检查是否有满值问题
+        const hasMaxValues = petData.health === 100 || petData.happiness === 100 || petData.hunger === 100;
+        if (hasMaxValues) {
+            console.log('⚠️ 检测到满值数据，建议重置数值');
+            console.log('运行 resetToLowValues() 来重置为低数值');
+        } else {
+            console.log('✅ 数值系统正常，没有满值问题');
+        }
+
+        // 测试时间衰减
+        console.log('\n🧪 测试时间衰减功能...');
+        const oldValues = {
+            health: petData.health,
+            happiness: petData.happiness,
+            hunger: petData.hunger,
+            energy: petData.energy
+        };
+
+        // 模拟1小时前的时间
+        petData.lastUpdateTime = Date.now() - (60 * 60 * 1000);
+        applyTimeDecay();
+
+        console.log('衰减前后对比:');
+        console.log(`健康: ${Math.round(oldValues.health)} → ${Math.round(petData.health)}`);
+        console.log(`快乐: ${Math.round(oldValues.happiness)} → ${Math.round(petData.happiness)}`);
+        console.log(`饱食: ${Math.round(oldValues.hunger)} → ${Math.round(petData.hunger)}`);
+        console.log(`精力: ${Math.round(oldValues.energy)} → ${Math.round(petData.energy)}`);
+
+        // 更新UI
+        updateUnifiedUIStatus();
+
+        console.log('✅ 数值系统测试完成！');
+        toastr.success('数值系统测试完成，请查看控制台结果');
+    };
+
+    /**
+     * 重置为低数值（解决满值问题）
+     */
+    window.resetToLowValues = function() {
+        if (!confirm('确定要重置宠物数值吗？这将把所有数值设置为较低的初始值。')) {
+            return;
+        }
+
+        console.log('🔄 重置为低数值...');
+
+        // 保留用户设置，只重置数值
+        petData.health = 30;
+        petData.happiness = 20;
+        petData.hunger = 35;
+        petData.energy = 45;
+        petData.lastUpdateTime = Date.now();
+        petData.dataVersion = 3.0;
+
+        // 保存并更新UI
+        savePetData();
+        updateUnifiedUIStatus();
+
+        console.log('✅ 数值已重置为低初始值');
+        console.log(`健康: ${petData.health}/100`);
+        console.log(`快乐: ${petData.happiness}/100`);
+        console.log(`饱食: ${petData.hunger}/100`);
+        console.log(`精力: ${petData.energy}/100`);
+
+        toastr.success('数值已重置为低初始值！');
+    };
+
+    /**
      * 修复Google AI模型配置
      */
     window.fixGoogleAIModel = function() {
@@ -5567,6 +5710,8 @@ jQuery(async () => {
         console.log('  testAIReply("feed")        - 测试AI回复');
         console.log('  testCharacterCardRemoval() - 检查角色卡功能是否已移除');
         console.log('  testAvatarSync()           - 测试头像同步功能');
+        console.log('  testValueSystem()          - 测试新的数值系统');
+        console.log('  resetToLowValues()         - 重置为低数值（解决满值问题）');
         console.log('');
         console.log('🔑 获取API密钥:');
         console.log('  Google AI: https://aistudio.google.com/');

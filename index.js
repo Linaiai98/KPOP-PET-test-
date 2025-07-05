@@ -231,7 +231,7 @@ jQuery(async () => {
 
 
     /**
-     * 保存AI配置设置
+     * 保存AI配置设置（支持跨平台同步）
      */
     function saveAISettings() {
         const selectedModel = $('#ai-model-select').val() || $('#ai-model-input').val();
@@ -244,41 +244,184 @@ jQuery(async () => {
             lastTestResult: $('#ai-connection-status').text().includes('✅')
         };
 
+        // 保存到本地存储
         localStorage.setItem(`${extensionName}-ai-settings`, JSON.stringify(settings));
-        console.log(`[${extensionName}] AI设置已保存，模型: ${selectedModel}`);
+
+        // 同步到SillyTavern设置（跨平台同步）
+        syncAISettingsToSillyTavern(settings);
+
+        // 显示同步状态
+        showSyncStatus('AI配置已同步到所有设备', 'success');
+
+        console.log(`[${extensionName}] AI设置已保存并同步，模型: ${selectedModel}`);
     }
 
     /**
-     * 加载AI配置设置
+     * 同步AI设置到SillyTavern（跨平台数据同步）
+     */
+    function syncAISettingsToSillyTavern(settings) {
+        try {
+            if (typeof window.extension_settings === 'object' &&
+                typeof window.saveSettingsDebounced === 'function') {
+
+                // 确保扩展设置对象存在
+                if (!window.extension_settings[extensionName]) {
+                    window.extension_settings[extensionName] = {};
+                }
+
+                // 保存AI设置到SillyTavern的扩展设置中
+                window.extension_settings[extensionName].ai_settings = {
+                    ...settings,
+                    syncTime: Date.now(),
+                    platform: navigator.userAgent.includes('Mobile') ? 'mobile' : 'desktop'
+                };
+
+                // 同时同步头像数据
+                syncAvatarToSillyTavern();
+
+                // 触发SillyTavern保存设置
+                window.saveSettingsDebounced();
+
+                console.log(`[${extensionName}] AI设置已同步到SillyTavern设置系统`);
+            }
+        } catch (error) {
+            console.error(`[${extensionName}] 同步AI设置到SillyTavern失败:`, error);
+            showSyncStatus('同步失败，请检查网络连接', 'error');
+        }
+    }
+
+    /**
+     * 显示同步状态
+     */
+    function showSyncStatus(message, type = 'success') {
+        const statusDiv = $('#ai-sync-status');
+        const statusText = $('#ai-sync-status-text');
+
+        statusText.text(message);
+        statusDiv.show();
+
+        // 根据类型设置样式
+        if (type === 'success') {
+            statusDiv.css({
+                'background': 'rgba(72, 187, 120, 0.1)',
+                'border-color': 'rgba(72, 187, 120, 0.3)',
+                'color': '#48bb78'
+            });
+        } else if (type === 'error') {
+            statusDiv.css({
+                'background': 'rgba(245, 101, 101, 0.1)',
+                'border-color': 'rgba(245, 101, 101, 0.3)',
+                'color': '#f56565'
+            });
+        }
+
+        // 3秒后自动隐藏
+        setTimeout(() => {
+            statusDiv.fadeOut();
+        }, 3000);
+    }
+
+    /**
+     * 强制同步AI设置
+     */
+    function forceSyncAISettings() {
+        const settings = loadAISettingsFromLocal();
+        if (settings) {
+            syncAISettingsToSillyTavern(settings);
+            syncAvatarToSillyTavern();
+            showSyncStatus('AI配置和头像已强制同步到所有设备', 'success');
+            toastr.success('AI配置和头像已强制同步');
+        } else {
+            showSyncStatus('没有找到本地AI配置', 'error');
+            toastr.warning('没有找到本地AI配置');
+        }
+    }
+
+    /**
+     * 同步头像到SillyTavern设置
+     */
+    function syncAvatarToSillyTavern() {
+        try {
+            if (typeof window.extension_settings === 'object' &&
+                typeof window.saveSettingsDebounced === 'function') {
+
+                // 确保扩展设置对象存在
+                if (!window.extension_settings[extensionName]) {
+                    window.extension_settings[extensionName] = {};
+                }
+
+                // 获取当前头像数据
+                const avatarData = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
+
+                // 保存头像数据到SillyTavern设置
+                window.extension_settings[extensionName].custom_avatar = {
+                    data: avatarData,
+                    syncTime: Date.now(),
+                    platform: navigator.userAgent.includes('Mobile') ? 'mobile' : 'desktop'
+                };
+
+                // 触发SillyTavern保存设置
+                window.saveSettingsDebounced();
+
+                console.log(`[${extensionName}] 头像已同步到SillyTavern设置系统`);
+            }
+        } catch (error) {
+            console.error(`[${extensionName}] 同步头像到SillyTavern失败:`, error);
+        }
+    }
+
+    /**
+     * 从SillyTavern设置加载头像
+     */
+    function loadAvatarFromSillyTavern() {
+        try {
+            if (typeof window.extension_settings === 'object' &&
+                window.extension_settings[extensionName] &&
+                window.extension_settings[extensionName].custom_avatar) {
+
+                const avatarInfo = window.extension_settings[extensionName].custom_avatar;
+                console.log(`[${extensionName}] 从SillyTavern设置加载头像配置:`, avatarInfo);
+                return avatarInfo;
+            }
+        } catch (error) {
+            console.error(`[${extensionName}] 从SillyTavern设置加载头像配置失败:`, error);
+        }
+        return null;
+    }
+
+    /**
+     * 加载AI配置设置（支持跨平台同步）
      */
     function loadAISettings() {
         try {
-            const saved = localStorage.getItem(`${extensionName}-ai-settings`);
-            if (saved) {
-                const settings = JSON.parse(saved);
-                $('#ai-api-select').val(settings.apiType || '');
-                $('#ai-url-input').val(settings.apiUrl || '');
-                $('#ai-key-input').val(settings.apiKey || '');
-                $('#ai-model-input').val(settings.apiModel || '');
+            // 首先尝试从SillyTavern设置加载（跨平台同步数据）
+            const syncedSettings = loadAISettingsFromSillyTavern();
+            const localSettings = loadAISettingsFromLocal();
 
-                // 如果有保存的模型，也设置到下拉选择中
-                if (settings.apiModel) {
-                    const modelSelect = $('#ai-model-select');
-                    // 检查下拉中是否已有该选项
-                    if (modelSelect.find(`option[value="${settings.apiModel}"]`).length === 0) {
-                        // 如果没有，添加一个选项
-                        modelSelect.append(`<option value="${settings.apiModel}">${settings.apiModel}</option>`);
-                    }
-                    modelSelect.val(settings.apiModel);
+            // 选择最新的设置数据
+            let settings = null;
+            if (syncedSettings && localSettings) {
+                // 比较时间戳，选择最新的
+                const syncTime = syncedSettings.syncTime || 0;
+                const localTime = localSettings.lastTestTime || 0;
+                settings = syncTime > localTime ? syncedSettings : localSettings;
+                console.log(`[${extensionName}] 使用${syncTime > localTime ? '同步' : '本地'}AI设置数据`);
+            } else {
+                settings = syncedSettings || localSettings;
+                if (syncedSettings) {
+                    console.log(`[${extensionName}] 使用同步AI设置数据`);
+                } else if (localSettings) {
+                    console.log(`[${extensionName}] 使用本地AI设置数据`);
                 }
+            }
 
-                // 根据API类型显示/隐藏配置输入框
-                toggleApiConfigInputs(settings.apiType);
+            if (settings) {
+                // 应用设置到UI
+                applyAISettingsToUI(settings);
 
-                // 显示上次测试结果
-                if (settings.lastTestResult && settings.lastTestTime) {
-                    const timeAgo = Math.floor((Date.now() - settings.lastTestTime) / (1000 * 60));
-                    $('#ai-connection-status').text(`✅ 上次测试成功 (${timeAgo}分钟前)`).css('color', '#48bb78');
+                // 如果使用的是同步数据，也保存到本地以备用
+                if (syncedSettings && (!localSettings || syncedSettings.syncTime > (localSettings.lastTestTime || 0))) {
+                    localStorage.setItem(`${extensionName}-ai-settings`, JSON.stringify(settings));
                 }
 
                 return settings;
@@ -286,7 +429,73 @@ jQuery(async () => {
         } catch (error) {
             console.error(`[${extensionName}] 加载AI设置失败:`, error);
         }
-        return {};
+
+        return null;
+    }
+
+    /**
+     * 从SillyTavern设置加载AI配置
+     */
+    function loadAISettingsFromSillyTavern() {
+        try {
+            if (typeof window.extension_settings === 'object' &&
+                window.extension_settings[extensionName] &&
+                window.extension_settings[extensionName].ai_settings) {
+
+                const settings = window.extension_settings[extensionName].ai_settings;
+                console.log(`[${extensionName}] 从SillyTavern设置加载AI配置:`, settings);
+                return settings;
+            }
+        } catch (error) {
+            console.error(`[${extensionName}] 从SillyTavern设置加载AI配置失败:`, error);
+        }
+        return null;
+    }
+
+    /**
+     * 从本地存储加载AI配置
+     */
+    function loadAISettingsFromLocal() {
+        try {
+            const saved = localStorage.getItem(`${extensionName}-ai-settings`);
+            if (saved) {
+                return JSON.parse(saved);
+            }
+        } catch (error) {
+            console.error(`[${extensionName}] 从本地存储加载AI配置失败:`, error);
+        }
+        return null;
+    }
+
+    /**
+     * 将AI设置应用到UI
+     */
+    function applyAISettingsToUI(settings) {
+        $('#ai-api-select').val(settings.apiType || '');
+        $('#ai-url-input').val(settings.apiUrl || '');
+        $('#ai-key-input').val(settings.apiKey || '');
+        $('#ai-model-input').val(settings.apiModel || '');
+
+        // 如果有保存的模型，也设置到下拉选择中
+        if (settings.apiModel) {
+            const modelSelect = $('#ai-model-select');
+            // 检查下拉中是否已有该选项
+            if (modelSelect.find(`option[value="${settings.apiModel}"]`).length === 0) {
+                // 如果没有，添加一个选项
+                modelSelect.append(`<option value="${settings.apiModel}">${settings.apiModel}</option>`);
+            }
+            modelSelect.val(settings.apiModel);
+        }
+
+        // 根据API类型显示/隐藏配置输入框
+        toggleApiConfigInputs(settings.apiType);
+
+        // 显示上次测试结果
+        if (settings.lastTestResult && settings.lastTestTime) {
+            const timeAgo = Math.floor((Date.now() - settings.lastTestTime) / (1000 * 60));
+            $('#ai-connection-status').text(`✅ 上次测试成功 (${timeAgo}分钟前)`).css('color', '#48bb78');
+        }
+    }
     }
 
     /**
@@ -1058,6 +1267,12 @@ ${getCurrentPersonality()}
         $('#get-sillytavern-model-btn').on('click', function(e) {
             e.preventDefault();
             getSillyTavernCurrentModel();
+        });
+
+        // 绑定强制同步按钮事件
+        $('#force-sync-btn').on('click', function(e) {
+            e.preventDefault();
+            forceSyncAISettings();
         });
 
         $('#test-ai-connection-btn').on('click', function(e) {
@@ -2346,14 +2561,48 @@ ${getCurrentPersonality()}
     }
 
     /**
-     * 加载自定义头像数据
+     * 加载自定义头像数据（支持跨平台同步）
      */
     function loadCustomAvatar() {
         try {
-            const saved = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
-            if (saved) {
-                customAvatarData = saved;
-                console.log(`[${extensionName}] Custom avatar loaded`);
+            // 首先尝试从SillyTavern设置加载（跨平台同步数据）
+            const syncedAvatar = loadAvatarFromSillyTavern();
+            const localAvatar = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
+
+            // 选择最新的头像数据
+            let avatarData = null;
+            if (syncedAvatar && localAvatar) {
+                // 比较时间戳，选择最新的
+                const syncTime = syncedAvatar.syncTime || 0;
+                const localTime = parseInt(localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR + '_time')) || 0;
+                avatarData = syncTime > localTime ? syncedAvatar.data : localAvatar;
+                console.log(`[${extensionName}] 使用${syncTime > localTime ? '同步' : '本地'}头像数据`);
+            } else {
+                avatarData = syncedAvatar?.data || localAvatar;
+                if (syncedAvatar) {
+                    console.log(`[${extensionName}] 使用同步头像数据`);
+                } else if (localAvatar) {
+                    console.log(`[${extensionName}] 使用本地头像数据`);
+                }
+            }
+
+            if (avatarData) {
+                customAvatarData = avatarData;
+
+                // 如果使用的是同步数据，也保存到本地以备用
+                if (syncedAvatar && (!localAvatar || syncedAvatar.syncTime > (parseInt(localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR + '_time')) || 0))) {
+                    localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, avatarData);
+                    localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR + '_time', syncedAvatar.syncTime.toString());
+                }
+
+                console.log(`[${extensionName}] Custom avatar loaded and synced`);
+
+                // 显示头像同步状态（如果是从云端加载的）
+                if (syncedAvatar && syncedAvatar.data) {
+                    setTimeout(() => {
+                        showSyncStatus('头像已从云端同步', 'success');
+                    }, 1000); // 延迟显示，避免与其他同步状态冲突
+                }
             }
         } catch (error) {
             console.warn(`[${extensionName}] Failed to load custom avatar:`, error);
@@ -2361,31 +2610,66 @@ ${getCurrentPersonality()}
     }
 
     /**
-     * 保存自定义头像数据
+     * 保存自定义头像数据（支持跨平台同步）
      */
     function saveCustomAvatar(imageData) {
         try {
+            // 保存到本地存储
             localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, imageData);
+            localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR + '_time', Date.now().toString());
             customAvatarData = imageData;
-            console.log(`[${extensionName}] Custom avatar saved`);
+
+            // 同步到SillyTavern设置（跨平台同步）
+            syncAvatarToSillyTavern();
+
+            // 显示同步状态
+            showSyncStatus('头像已同步到所有设备', 'success');
+
+            console.log(`[${extensionName}] Custom avatar saved and synced`);
             return true;
         } catch (error) {
             console.error(`[${extensionName}] Failed to save custom avatar:`, error);
+            showSyncStatus('头像保存失败', 'error');
             return false;
         }
     }
 
     /**
-     * 清除自定义头像
+     * 清除自定义头像（支持跨平台同步）
      */
     function clearCustomAvatar() {
         try {
+            // 清除本地存储
             localStorage.removeItem(STORAGE_KEY_CUSTOM_AVATAR);
+            localStorage.removeItem(STORAGE_KEY_CUSTOM_AVATAR + '_time');
             customAvatarData = null;
-            console.log(`[${extensionName}] Custom avatar cleared`);
+
+            // 同步清除操作到SillyTavern设置
+            if (typeof window.extension_settings === 'object' &&
+                typeof window.saveSettingsDebounced === 'function') {
+
+                if (!window.extension_settings[extensionName]) {
+                    window.extension_settings[extensionName] = {};
+                }
+
+                // 清除头像数据
+                window.extension_settings[extensionName].custom_avatar = {
+                    data: null,
+                    syncTime: Date.now(),
+                    platform: navigator.userAgent.includes('Mobile') ? 'mobile' : 'desktop'
+                };
+
+                window.saveSettingsDebounced();
+            }
+
+            // 显示同步状态
+            showSyncStatus('头像已重置并同步到所有设备', 'success');
+
+            console.log(`[${extensionName}] Custom avatar cleared and synced`);
             return true;
         } catch (error) {
             console.error(`[${extensionName}] Failed to clear custom avatar:`, error);
+            showSyncStatus('头像重置失败', 'error');
             return false;
         }
     }
@@ -3196,6 +3480,16 @@ ${getCurrentPersonality()}
                                 <small style="color: #888; font-size: 0.8em; display: block; margin-top: 3px;">
                                     优先使用下拉选择，如果下拉中没有所需模型可手动输入
                                 </small>
+                            </div>
+
+                            <div style="margin-bottom: 10px;">
+                                <div id="ai-sync-status" style="padding: 8px; background: rgba(72, 187, 120, 0.1); border: 1px solid rgba(72, 187, 120, 0.3); border-radius: 4px; font-size: 0.85em; color: #48bb78; display: none;">
+                                    <span style="margin-right: 8px;">🔄</span>
+                                    <span id="ai-sync-status-text">AI配置和头像已同步到所有设备</span>
+                                    <button id="force-sync-btn" type="button" style="float: right; padding: 2px 6px; font-size: 0.75em; background: #48bb78; color: white; border: none; border-radius: 2px; cursor: pointer;" title="强制同步AI配置和头像">
+                                        强制同步
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -6762,6 +7056,34 @@ ${getCurrentPersonality()}
         } else {
             console.log("❌ 测试头像设置失败");
         }
+    };
+
+    // 测试头像同步功能
+    window.testAvatarSync = function() {
+        console.log("🔄 测试头像同步功能...");
+
+        // 检查本地头像
+        const localAvatar = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
+        console.log(`本地头像: ${localAvatar ? '存在' : '不存在'}`);
+
+        // 检查同步头像
+        const syncedAvatar = loadAvatarFromSillyTavern();
+        console.log(`同步头像: ${syncedAvatar ? '存在' : '不存在'}`);
+
+        if (syncedAvatar) {
+            console.log(`同步时间: ${new Date(syncedAvatar.syncTime).toLocaleString()}`);
+            console.log(`同步平台: ${syncedAvatar.platform}`);
+        }
+
+        // 检查当前显示的头像
+        console.log(`当前头像: ${customAvatarData ? '自定义' : '默认'}`);
+
+        // 强制重新加载头像
+        loadCustomAvatar();
+        updateAvatarDisplay();
+        updateFloatingButtonAvatar();
+
+        console.log("✅ 头像同步测试完成");
     };
 
     // 全面的拖动功能验证测试

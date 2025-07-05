@@ -7086,6 +7086,85 @@ ${getCurrentPersonality()}
         console.log("✅ 头像同步测试完成");
     };
 
+    // 检查CSS样式冲突
+    window.checkStyleConflicts = function() {
+        console.log("🎨 检查CSS样式冲突...");
+
+        // 检查是否有全局样式污染
+        const globalStyles = document.querySelectorAll('style[data-virtual-pet]');
+        console.log(`虚拟宠物全局样式: ${globalStyles.length}个`);
+
+        // 检查SillyTavern的图标元素
+        const sillyTavernIcons = document.querySelectorAll('i[class*="fa"], .fa, [class*="icon"]');
+        console.log(`SillyTavern图标元素: ${sillyTavernIcons.length}个`);
+
+        // 检查是否有样式被覆盖
+        let conflictCount = 0;
+        sillyTavernIcons.forEach((icon, index) => {
+            if (index < 5) { // 只检查前5个
+                const computedStyle = window.getComputedStyle(icon);
+                const hasConflict = computedStyle.fontFamily.includes('Courier New') ||
+                                  computedStyle.imageRendering === 'pixelated';
+                if (hasConflict) {
+                    conflictCount++;
+                    console.log(`图标冲突 #${index}:`, icon, computedStyle.fontFamily);
+                }
+            }
+        });
+
+        console.log(`发现样式冲突: ${conflictCount}个`);
+
+        if (conflictCount > 0) {
+            console.log("⚠️ 检测到样式冲突，建议运行修复函数");
+        } else {
+            console.log("✅ 未发现明显的样式冲突");
+        }
+    };
+
+    // 修复样式冲突
+    window.fixStyleConflicts = function() {
+        console.log("🔧 修复样式冲突...");
+
+        // 移除可能影响全局的样式
+        const globalStyles = document.querySelectorAll('style[data-virtual-pet]');
+        globalStyles.forEach(style => {
+            style.remove();
+            console.log("移除了虚拟宠物全局样式");
+        });
+
+        // 确保虚拟宠物的样式只影响自己的元素
+        const scopedCSS = `
+            /* 虚拟宠物专用样式 - 限制作用域 */
+            #virtual-pet-button,
+            #virtual-pet-popup-overlay,
+            #virtual-pet-popup,
+            .virtual-pet-popup-overlay,
+            .pet-popup-container,
+            .pet-avatar-circle,
+            .pet-main-content,
+            .action-btn {
+                font-family: 'Courier New', monospace !important;
+                image-rendering: pixelated !important;
+                image-rendering: -moz-crisp-edges !important;
+            }
+
+            /* 确保不影响SillyTavern的图标 */
+            body:not(#virtual-pet-button):not(#virtual-pet-popup-overlay) i[class*="fa"],
+            body:not(#virtual-pet-button):not(#virtual-pet-popup-overlay) .fa,
+            body:not(#virtual-pet-button):not(#virtual-pet-popup-overlay) [class*="icon"] {
+                font-family: inherit !important;
+                image-rendering: auto !important;
+            }
+        `;
+
+        const styleElement = document.createElement('style');
+        styleElement.setAttribute('data-virtual-pet-scoped', 'true');
+        styleElement.textContent = scopedCSS;
+        document.head.appendChild(styleElement);
+
+        console.log("✅ 样式冲突修复完成");
+    };
+
     // 全面的拖动功能验证测试
     window.validateDragFix = function() {
         console.log("🧪 开始全面验证拖动修复...");

@@ -902,8 +902,10 @@ ${getCurrentPersonality()}
                     applyBalancedFunctions();
                 }
 
-                // 确保使用当前选择的人设
-                petData.personality = getCurrentPersonality();
+                // 确保人设数据完整性
+                if (!petData.personality) {
+                    petData.personality = getCurrentPersonality();
+                }
             } catch (error) {
                 console.error(`[${extensionName}] Error loading pet data:`, error);
             }
@@ -5247,6 +5249,159 @@ ${getCurrentPersonality()}
             customPersonality: savedCustom,
             petDataPersonality: petData.personality,
             reloadedPersonality: reloadedPersonality,
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    // 调试自定义人设丢失问题
+    window.debugPersonalityLoss = function() {
+        console.log('🔍 调试自定义人设丢失问题...');
+
+        console.log('\n📋 当前状态检查:');
+        const personalityType = localStorage.getItem(`${extensionName}-personality-type`);
+        const customPersonality = localStorage.getItem(`${extensionName}-custom-personality`);
+        const petDataPersonality = petData.personality;
+
+        console.log(`localStorage人设类型: "${personalityType}"`);
+        console.log(`localStorage自定义人设: "${customPersonality}"`);
+        console.log(`petData.personality: "${petDataPersonality}"`);
+
+        console.log('\n🔍 问题诊断:');
+
+        // 检查localStorage是否存在
+        if (!personalityType) {
+            console.log('❌ localStorage中没有人设类型，可能被清除了');
+        } else if (personalityType !== 'custom') {
+            console.log(`❌ 人设类型不是custom，而是: ${personalityType}`);
+        } else {
+            console.log('✅ localStorage人设类型正确');
+        }
+
+        if (!customPersonality) {
+            console.log('❌ localStorage中没有自定义人设内容');
+        } else {
+            console.log('✅ localStorage自定义人设内容存在');
+        }
+
+        if (!petDataPersonality) {
+            console.log('❌ petData.personality为空');
+        } else {
+            console.log('✅ petData.personality有内容');
+        }
+
+        console.log('\n🧪 测试getCurrentPersonality():');
+        const currentPersonality = getCurrentPersonality();
+        console.log(`getCurrentPersonality()返回: "${currentPersonality}"`);
+
+        console.log('\n🔧 可能的原因:');
+        console.log('1. cleanupOldCharacterData()误删了数据');
+        console.log('2. 数据加载时被覆盖');
+        console.log('3. localStorage被其他代码清除');
+        console.log('4. 扩展名称变化导致key不匹配');
+
+        console.log('\n🔍 扩展名称检查:');
+        console.log(`当前extensionName: "${extensionName}"`);
+        console.log(`localStorage key前缀: "${extensionName}-"`);
+
+        // 列出所有相关的localStorage项
+        console.log('\n📦 相关localStorage项:');
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.includes('virtual-pet')) {
+                console.log(`${key}: "${localStorage.getItem(key)}"`);
+            }
+        }
+
+        console.log('\n🔧 修复建议:');
+        if (!personalityType || personalityType !== 'custom') {
+            console.log('- 运行: localStorage.setItem("virtual-pet-personality-type", "custom")');
+        }
+        if (!customPersonality) {
+            console.log('- 运行: localStorage.setItem("virtual-pet-custom-personality", "你的自定义人设")');
+        }
+
+        return {
+            personalityType: personalityType,
+            customPersonality: customPersonality,
+            petDataPersonality: petDataPersonality,
+            currentPersonality: currentPersonality,
+            extensionName: extensionName,
+            allVirtualPetKeys: Object.keys(localStorage).filter(key => key.includes('virtual-pet')),
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    // 强制修复自定义人设丢失问题
+    window.fixPersonalityLoss = function(customText) {
+        console.log('🔧 强制修复自定义人设丢失问题...');
+
+        if (!customText) {
+            customText = prompt('请输入你的自定义人设:', '我是一只特别可爱的宠物，喜欢和主人互动！');
+            if (!customText) {
+                console.log('❌ 用户取消了输入');
+                return;
+            }
+        }
+
+        console.log(`设置自定义人设: "${customText}"`);
+
+        // 1. 强制设置localStorage
+        localStorage.setItem(`${extensionName}-personality-type`, 'custom');
+        localStorage.setItem(`${extensionName}-custom-personality`, customText);
+
+        // 2. 更新petData
+        petData.personality = customText;
+
+        // 3. 保存到持久化存储
+        savePetData();
+
+        // 4. 验证设置结果
+        const verifyType = localStorage.getItem(`${extensionName}-personality-type`);
+        const verifyCustom = localStorage.getItem(`${extensionName}-custom-personality`);
+        const verifyPetData = petData.personality;
+        const verifyCurrent = getCurrentPersonality();
+
+        console.log('\n✅ 设置结果验证:');
+        console.log(`localStorage人设类型: "${verifyType}"`);
+        console.log(`localStorage自定义人设: "${verifyCustom}"`);
+        console.log(`petData.personality: "${verifyPetData}"`);
+        console.log(`getCurrentPersonality(): "${verifyCurrent}"`);
+
+        const success = verifyType === 'custom' &&
+                       verifyCustom === customText &&
+                       verifyPetData === customText &&
+                       verifyCurrent === customText;
+
+        if (success) {
+            console.log('✅ 自定义人设修复成功！');
+            toastr.success('🎭 自定义人设已修复！现在应该不会丢失了。');
+
+            // 更新设置界面（如果打开的话）
+            if ($("#virtual-pet-personality-select").length > 0) {
+                $("#virtual-pet-personality-select").val('custom');
+                $("#virtual-pet-custom-personality").val(customText);
+                toggleCustomPersonalityInput(true);
+            }
+        } else {
+            console.log('❌ 自定义人设修复失败！');
+            toastr.error('❌ 自定义人设修复失败，请检查控制台日志');
+        }
+
+        console.log('\n💡 防止丢失的建议:');
+        console.log('1. 定期运行 testPersonalitySave() 检查状态');
+        console.log('2. 如果发现丢失，立即运行 fixPersonalityLoss()');
+        console.log('3. 避免清除浏览器数据');
+        console.log('4. 定期备份重要的自定义人设');
+
+        return {
+            success: success,
+            customText: customText,
+            localStorage: {
+                type: verifyType,
+                custom: verifyCustom
+            },
+            petData: verifyPetData,
+            current: verifyCurrent,
             timestamp: new Date().toISOString()
         };
     };

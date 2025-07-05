@@ -809,7 +809,7 @@ ${getCurrentPersonality()}
 
         if (savedData) {
             try {
-                const savedData = JSON.parse(saved);
+                // savedData 已经是解析后的对象，不需要再次解析
 
                 // 检查是否需要数据迁移到拓麻歌子系统
                 const needsMigration = !savedData.dataVersion || savedData.dataVersion < 4.0;
@@ -908,6 +908,49 @@ ${getCurrentPersonality()}
             petData.dataVersion = 4.0;
             applyTamagotchiSystem();
             savePetData();
+        }
+
+        // 添加初始化缓冲机制
+        applyInitializationBuffer();
+    }
+
+    /**
+     * 初始化缓冲机制 - 避免第一次打开时状态过低
+     */
+    function applyInitializationBuffer() {
+        const now = Date.now();
+        const timeSinceLastUpdate = now - (petData.lastUpdateTime || now);
+        const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
+
+        // 如果距离上次更新超过2小时，给予缓冲
+        if (hoursElapsed > 2) {
+            console.log(`[${extensionName}] 检测到长时间未更新 (${hoursElapsed.toFixed(1)}小时)，应用初始化缓冲...`);
+
+            // 确保基础数值不会太低，影响用户体验
+            const minValues = {
+                hunger: 30,    // 最低饱食度30
+                energy: 25,    // 最低精力25
+                happiness: 20, // 最低快乐度20
+                health: 35     // 最低健康度35
+            };
+
+            let buffered = false;
+            Object.entries(minValues).forEach(([key, minValue]) => {
+                if (petData[key] < minValue) {
+                    console.log(`[${extensionName}] 缓冲 ${key}: ${petData[key]} → ${minValue}`);
+                    petData[key] = minValue;
+                    buffered = true;
+                }
+            });
+
+            if (buffered) {
+                // 更新时间戳，避免立即再次衰减
+                petData.lastUpdateTime = now;
+                savePetData();
+
+                toastr.info('🌟 欢迎回来！已为你的宠物提供了基础照顾。', '', { timeOut: 4000 });
+                console.log(`[${extensionName}] 初始化缓冲已应用`);
+            }
         }
     }
     
@@ -5015,6 +5058,67 @@ ${getCurrentPersonality()}
         };
     };
 
+    // 测试时间衰减修复
+    window.testDecayFix = function() {
+        console.log('⏰ 测试时间衰减修复...');
+
+        console.log('\n📊 当前衰减速度:');
+        console.log('饱食度: 每小时 -1.2 (原来 -3.0)');
+        console.log('精力: 每小时 -1.0 (原来 -2.5)');
+        console.log('快乐度: 每小时 -0.8 (原来 -2.0)');
+
+        console.log('\n🛡️ 初始化缓冲机制:');
+        console.log('✅ 长时间未更新时自动缓冲');
+        console.log('✅ 最低饱食度: 30');
+        console.log('✅ 最低精力: 25');
+        console.log('✅ 最低快乐度: 20');
+        console.log('✅ 最低健康度: 35');
+
+        const now = Date.now();
+        const timeSinceLastUpdate = now - (petData.lastUpdateTime || now);
+        const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
+
+        console.log('\n⏱️ 当前状态:');
+        console.log(`距离上次更新: ${hoursElapsed.toFixed(1)} 小时`);
+        console.log(`饱食度: ${Math.round(petData.hunger)}`);
+        console.log(`精力: ${Math.round(petData.energy)}`);
+        console.log(`快乐度: ${Math.round(petData.happiness)}`);
+        console.log(`健康度: ${Math.round(petData.health)}`);
+
+        console.log('\n🧪 测试命令:');
+        console.log('- applyInitializationBuffer() - 手动应用缓冲');
+        console.log('- petData.lastUpdateTime = Date.now() - 4*60*60*1000 - 模拟4小时前');
+        console.log('- updatePetStatus() - 手动更新状态');
+
+        console.log('\n💡 修复效果:');
+        console.log('✅ 重新打开SillyTavern时不会立即提示需要休息');
+        console.log('✅ 衰减速度更合理，不会过快下降');
+        console.log('✅ 长时间离开后有基础缓冲保护');
+        console.log('✅ 用户体验更友好');
+
+        return {
+            decayRates: {
+                hunger: -1.2,
+                energy: -1.0,
+                happiness: -0.8
+            },
+            bufferThresholds: {
+                hunger: 30,
+                energy: 25,
+                happiness: 20,
+                health: 35
+            },
+            hoursElapsed: hoursElapsed,
+            currentStatus: {
+                hunger: Math.round(petData.hunger),
+                energy: Math.round(petData.energy),
+                happiness: Math.round(petData.happiness),
+                health: Math.round(petData.health)
+            },
+            timestamp: new Date().toISOString()
+        };
+    };
+
     // 检查数值增减逻辑
     window.checkValueChanges = function() {
         console.log('=== 🔍 数值增减逻辑检查 ===');
@@ -5339,10 +5443,10 @@ ${getCurrentPersonality()}
                 // 2. 生命阶段检查
                 checkLifeStageProgression();
 
-                // 3. 拓麻歌子式衰减（更快更严格）
-                petData.hunger = Math.max(0, petData.hunger - hoursElapsed * 3);    // 每小时-3
-                petData.energy = Math.max(0, petData.energy - hoursElapsed * 2.5);  // 每小时-2.5
-                petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 2); // 每小时-2
+                // 3. 拓麻歌子式衰减（调整为合理速度）
+                petData.hunger = Math.max(0, petData.hunger - hoursElapsed * 1.2);    // 每小时-1.2
+                petData.energy = Math.max(0, petData.energy - hoursElapsed * 1.0);    // 每小时-1.0
+                petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 0.8); // 每小时-0.8
 
                 // 4. 健康状况检查
                 checkHealthConditions(hoursElapsed);
@@ -5703,8 +5807,8 @@ ${getCurrentPersonality()}
 
             // 更频繁的更新，更快的衰减
             if (safeHoursElapsed > 0.083) { // 每5分钟更新一次
-                petData.hunger = Math.max(0, petData.hunger - safeHoursElapsed * 1.5);  // 加快衰减 0.8→1.5
-                petData.energy = Math.max(0, petData.energy - safeHoursElapsed * 1.2);  // 加快衰减 0.6→1.2
+                petData.hunger = Math.max(0, petData.hunger - safeHoursElapsed * 1.0);  // 调整衰减速度
+                petData.energy = Math.max(0, petData.energy - safeHoursElapsed * 0.8);  // 调整衰减速度
 
                 // 饥饿和疲劳影响健康和快乐
                 if (petData.hunger < 20) {

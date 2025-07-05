@@ -37,42 +37,45 @@ jQuery(async () => {
     // 自定义头像管理
     let customAvatarData = null;
 
-    // 糖果色配色方案
+    // 拓麻歌子风格配色方案
     const candyColors = {
-        // 主色调 - 柔和的糖果色
-        primary: '#FF9EC7',      // 糖果粉
-        secondary: '#A8E6CF',    // 薄荷绿
-        accent: '#87CEEB',       // 天空蓝
-        warning: '#FFD93D',      // 柠檬黄
-        success: '#98FB98',      // 淡绿色
+        // 主色调 - 经典拓麻歌子风格
+        primary: '#000000',      // 黑色主色
+        secondary: '#333333',    // 深灰
+        accent: '#666666',       // 中灰
+        warning: '#FF8000',      // 橙色警告
+        success: '#008000',      // 绿色成功
 
-        // 背景色
-        background: 'linear-gradient(135deg, #FFE5F1 0%, #E5F9F0 50%, #E5F4FF 100%)', // 糖果渐变
-        backgroundSolid: '#FFF8FC', // 纯色背景备选
+        // 背景色 - 经典Game Boy风格
+        background: '#9bbc0f',   // 经典Game Boy绿色
+        backgroundSolid: '#8bac0f', // 深绿色背景
+        screen: '#9bbc0f',       // 屏幕绿色
+        screenDark: '#8bac0f',   // 深屏幕绿色
 
-        // 文字色
-        textPrimary: '#2D3748',   // 深灰色文字
-        textSecondary: '#4A5568', // 中灰色文字
-        textLight: '#718096',     // 浅灰色文字
+        // 文字色 - 像素风格
+        textPrimary: '#000000',   // 黑色文字
+        textSecondary: '#333333', // 深灰文字
+        textLight: '#666666',     // 浅灰文字
         textWhite: '#FFFFFF',     // 白色文字
 
-        // 边框和阴影
-        border: '#E2E8F0',       // 浅边框
-        borderAccent: '#FF9EC7', // 强调边框
-        shadow: 'rgba(255, 158, 199, 0.2)', // 粉色阴影
-        shadowLight: 'rgba(255, 158, 199, 0.1)', // 浅粉色阴影
+        // 边框和阴影 - 像素风格
+        border: '#000000',       // 黑色边框
+        borderAccent: '#333333', // 强调边框
+        shadow: 'rgba(0, 0, 0, 0.3)', // 黑色阴影
+        shadowLight: 'rgba(0, 0, 0, 0.1)', // 浅黑色阴影
 
-        // 按钮色
-        buttonPrimary: '#FF9EC7',
-        buttonSecondary: '#A8E6CF',
-        buttonAccent: '#87CEEB',
-        buttonHover: '#FF7FB3',
+        // 按钮色 - 拓麻歌子风格
+        buttonPrimary: '#8bac0f',
+        buttonSecondary: '#9bbc0f',
+        buttonAccent: '#6b8c0f',
+        buttonHover: '#7b9c0f',
 
-        // 状态栏色
-        health: '#FF9EC7',       // 健康 - 糖果粉
-        happiness: '#FFD93D',    // 快乐 - 柠檬黄
-        energy: '#A8E6CF',       // 精力 - 薄荷绿
-        experience: '#87CEEB'    // 经验 - 天空蓝
+        // 状态栏色 - 经典像素风格
+        health: '#FF0000',       // 健康 - 红色
+        happiness: '#FFFF00',    // 快乐 - 黄色
+        hunger: '#FF8000',       // 饱食 - 橙色
+        energy: '#0080FF',       // 精力 - 蓝色
+        experience: '#8000FF'    // 经验 - 紫色
     };
     
     // 宠物数据结构 - 拓麻歌子式设计
@@ -81,10 +84,10 @@ jQuery(async () => {
         type: "cat", // cat, dog, dragon, etc.
         level: 1,
         experience: 0,
-        health: 50,      // 拓麻歌子式：中等起始值
-        happiness: 50,   // 拓麻歌子式：中等起始值
-        hunger: 50,      // 拓麻歌子式：中等起始值
-        energy: 50,      // 拓麻歌子式：中等起始值
+        health: 35,      // 拓麻歌子式：合理起始值
+        happiness: 25,   // 拓麻歌子式：合理起始值
+        hunger: 40,      // 拓麻歌子式：合理起始值
+        energy: 50,      // 拓麻歌子式：合理起始值
 
         // 拓麻歌子式生命状态
         lifeStage: "baby",    // baby, child, teen, adult, senior
@@ -823,11 +826,11 @@ ${getCurrentPersonality()}
                         experience: savedData.experience || petData.experience,
                         created: savedData.created || petData.created,
 
-                        // 基础数值（重置到拓麻歌子式中等值）
-                        health: 50,
-                        happiness: 50,
-                        hunger: 50,
-                        energy: 50,
+                        // 基础数值（使用更合理的初始值）
+                        health: Math.min(savedData.health || 35, 70),
+                        happiness: Math.min(savedData.happiness || 25, 70),
+                        hunger: Math.min(savedData.hunger || 40, 70),
+                        energy: Math.min(savedData.energy || 50, 70),
 
                         // 新增拓麻歌子式属性
                         lifeStage: "baby",
@@ -1272,11 +1275,16 @@ ${getCurrentPersonality()}
                     max-height: calc(100vh - 60px) !important;
                     background: ${candyColors.background} !important;
                     color: ${candyColors.textPrimary} !important;
-                    border-radius: ${borderRadius} !important;
+                    border: 4px solid ${candyColors.border} !important;
+                    border-radius: 8px !important;
                     padding: ${containerPadding} !important;
                     overflow-y: auto !important;
                     -webkit-overflow-scrolling: touch !important;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.5) !important;
+                    box-shadow: 4px 4px 0px ${candyColors.shadow} !important;
+                    font-family: 'Courier New', monospace !important;
+                    image-rendering: pixelated !important;
+                    image-rendering: -moz-crisp-edges !important;
+                    image-rendering: crisp-edges !important;
                     ${iosTransform}
                 ">
                     ${generateUnifiedUI()}
@@ -1629,21 +1637,24 @@ ${getCurrentPersonality()}
                 gap: 12px !important;
                 padding: 20px !important;
             ">
-                <!-- 圆形头像框 -->
+                <!-- 拓麻歌子风格头像框 -->
                 <div class="pet-avatar-circle" style="
                     width: 80px !important;
                     height: 80px !important;
-                    border-radius: 50% !important;
-                    background: ${candyColors.primary} !important;
+                    border-radius: 8px !important;
+                    background: ${candyColors.screen} !important;
                     display: flex !important;
                     align-items: center !important;
                     justify-content: center !important;
                     font-size: 3em !important;
                     overflow: hidden !important;
-                    border: 3px solid #7289da !important;
-                    box-shadow: 0 4px 8px rgba(0,0,0,0.3) !important;
+                    border: 3px solid ${candyColors.border} !important;
+                    box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
                     cursor: pointer !important;
-                    transition: transform 0.2s ease !important;
+                    font-family: 'Courier New', monospace !important;
+                    image-rendering: pixelated !important;
+                    image-rendering: -moz-crisp-edges !important;
+                    image-rendering: crisp-edges !important;
                 " onclick="openAvatarSelector()" oncontextmenu="showAvatarContextMenu(event)" title="点击更换头像，右键重置">
                     ${getAvatarContent()}
                 </div>
@@ -1666,65 +1677,237 @@ ${getCurrentPersonality()}
                 </div>
             </div>
             <div class="pet-stats">
-                <div class="stat-bar">
-                    <label>健康</label>
-                    <div class="progress-bar">
-                        <div class="progress-fill health" style="width: ${petData.health}%"></div>
+                <div class="stat-bar" style="
+                    display: flex !important;
+                    align-items: center !important;
+                    margin-bottom: 8px !important;
+                    font-family: 'Courier New', monospace !important;
+                    font-size: 12px !important;
+                    font-weight: bold !important;
+                ">
+                    <label style="
+                        width: 50px !important;
+                        color: ${candyColors.textPrimary} !important;
+                        margin-right: 8px !important;
+                    ">HP</label>
+                    <div class="progress-bar" style="
+                        flex: 1 !important;
+                        height: 12px !important;
+                        background: ${candyColors.backgroundSolid} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        overflow: hidden !important;
+                        margin-right: 8px !important;
+                    ">
+                        <div class="progress-fill health" style="
+                            width: ${petData.health}% !important;
+                            height: 100% !important;
+                            background: ${candyColors.health} !important;
+                            transition: none !important;
+                        "></div>
                     </div>
-                    <span>${Math.round(petData.health)}/100</span>
+                    <span style="
+                        width: 40px !important;
+                        text-align: right !important;
+                        color: ${candyColors.textPrimary} !important;
+                    ">${Math.round(petData.health)}</span>
                 </div>
-                <div class="stat-bar">
-                    <label>快乐</label>
-                    <div class="progress-bar">
-                        <div class="progress-fill happiness" style="width: ${petData.happiness}%"></div>
+                <div class="stat-bar" style="
+                    display: flex !important;
+                    align-items: center !important;
+                    margin-bottom: 8px !important;
+                    font-family: 'Courier New', monospace !important;
+                    font-size: 12px !important;
+                    font-weight: bold !important;
+                ">
+                    <label style="
+                        width: 50px !important;
+                        color: ${candyColors.textPrimary} !important;
+                        margin-right: 8px !important;
+                    ">JOY</label>
+                    <div class="progress-bar" style="
+                        flex: 1 !important;
+                        height: 12px !important;
+                        background: ${candyColors.backgroundSolid} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        overflow: hidden !important;
+                        margin-right: 8px !important;
+                    ">
+                        <div class="progress-fill happiness" style="
+                            width: ${petData.happiness}% !important;
+                            height: 100% !important;
+                            background: ${candyColors.happiness} !important;
+                            transition: none !important;
+                        "></div>
                     </div>
-                    <span>${Math.round(petData.happiness)}/100</span>
+                    <span style="
+                        width: 40px !important;
+                        text-align: right !important;
+                        color: ${candyColors.textPrimary} !important;
+                    ">${Math.round(petData.happiness)}</span>
                 </div>
-                <div class="stat-bar">
-                    <label>饥饿</label>
-                    <div class="progress-bar">
-                        <div class="progress-fill hunger" style="width: ${petData.hunger}%"></div>
+                <div class="stat-bar" style="
+                    display: flex !important;
+                    align-items: center !important;
+                    margin-bottom: 8px !important;
+                    font-family: 'Courier New', monospace !important;
+                    font-size: 12px !important;
+                    font-weight: bold !important;
+                ">
+                    <label style="
+                        width: 50px !important;
+                        color: ${candyColors.textPrimary} !important;
+                        margin-right: 8px !important;
+                    ">FOOD</label>
+                    <div class="progress-bar" style="
+                        flex: 1 !important;
+                        height: 12px !important;
+                        background: ${candyColors.backgroundSolid} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        overflow: hidden !important;
+                        margin-right: 8px !important;
+                    ">
+                        <div class="progress-fill hunger" style="
+                            width: ${petData.hunger}% !important;
+                            height: 100% !important;
+                            background: ${candyColors.hunger} !important;
+                            transition: none !important;
+                        "></div>
                     </div>
-                    <span>${Math.round(petData.hunger)}/100</span>
+                    <span style="
+                        width: 40px !important;
+                        text-align: right !important;
+                        color: ${candyColors.textPrimary} !important;
+                    ">${Math.round(petData.hunger)}</span>
                 </div>
-                <div class="stat-bar">
-                    <label>精力</label>
-                    <div class="progress-bar">
-                        <div class="progress-fill energy" style="width: ${petData.energy}%"></div>
+                <div class="stat-bar" style="
+                    display: flex !important;
+                    align-items: center !important;
+                    margin-bottom: 8px !important;
+                    font-family: 'Courier New', monospace !important;
+                    font-size: 12px !important;
+                    font-weight: bold !important;
+                ">
+                    <label style="
+                        width: 50px !important;
+                        color: ${candyColors.textPrimary} !important;
+                        margin-right: 8px !important;
+                    ">PWR</label>
+                    <div class="progress-bar" style="
+                        flex: 1 !important;
+                        height: 12px !important;
+                        background: ${candyColors.backgroundSolid} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        overflow: hidden !important;
+                        margin-right: 8px !important;
+                    ">
+                        <div class="progress-fill energy" style="
+                            width: ${petData.energy}% !important;
+                            height: 100% !important;
+                            background: ${candyColors.energy} !important;
+                            transition: none !important;
+                        "></div>
                     </div>
-                    <span>${Math.round(petData.energy)}/100</span>
+                    <span style="
+                        width: 40px !important;
+                        text-align: right !important;
+                        color: ${candyColors.textPrimary} !important;
+                    ">${Math.round(petData.energy)}</span>
                 </div>
                 ${petData.dataVersion >= 4.0 ? `
-                <div class="stat-bar">
-                    <label>疾病</label>
-                    <div class="progress-bar">
-                        <div class="progress-fill sickness" style="width: ${petData.sickness || 0}%; background-color: #ff6b6b;"></div>
+                <div class="stat-bar" style="
+                    display: flex !important;
+                    align-items: center !important;
+                    margin-bottom: 8px !important;
+                    font-family: 'Courier New', monospace !important;
+                    font-size: 12px !important;
+                    font-weight: bold !important;
+                ">
+                    <label style="
+                        width: 50px !important;
+                        color: ${candyColors.textPrimary} !important;
+                        margin-right: 8px !important;
+                    ">SICK</label>
+                    <div class="progress-bar" style="
+                        flex: 1 !important;
+                        height: 12px !important;
+                        background: ${candyColors.backgroundSolid} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        overflow: hidden !important;
+                        margin-right: 8px !important;
+                    ">
+                        <div class="progress-fill sickness" style="
+                            width: ${petData.sickness || 0}% !important;
+                            height: 100% !important;
+                            background: #FF0000 !important;
+                            transition: none !important;
+                        "></div>
                     </div>
-                    <span>${Math.round(petData.sickness || 0)}/100</span>
+                    <span style="
+                        width: 40px !important;
+                        text-align: right !important;
+                        color: ${candyColors.textPrimary} !important;
+                    ">${Math.round(petData.sickness || 0)}</span>
                 </div>
-                <div class="stat-bar">
-                    <label>纪律</label>
-                    <div class="progress-bar">
-                        <div class="progress-fill discipline" style="width: ${petData.discipline || 50}%; background-color: #4ecdc4;"></div>
+                <div class="stat-bar" style="
+                    display: flex !important;
+                    align-items: center !important;
+                    margin-bottom: 8px !important;
+                    font-family: 'Courier New', monospace !important;
+                    font-size: 12px !important;
+                    font-weight: bold !important;
+                ">
+                    <label style="
+                        width: 50px !important;
+                        color: ${candyColors.textPrimary} !important;
+                        margin-right: 8px !important;
+                    ">DISC</label>
+                    <div class="progress-bar" style="
+                        flex: 1 !important;
+                        height: 12px !important;
+                        background: ${candyColors.backgroundSolid} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        overflow: hidden !important;
+                        margin-right: 8px !important;
+                    ">
+                        <div class="progress-fill discipline" style="
+                            width: ${petData.discipline || 50}% !important;
+                            height: 100% !important;
+                            background: #8000FF !important;
+                            transition: none !important;
+                        "></div>
                     </div>
-                    <span>${Math.round(petData.discipline || 50)}/100</span>
+                    <span style="
+                        width: 40px !important;
+                        text-align: right !important;
+                        color: ${candyColors.textPrimary} !important;
+                    ">${Math.round(petData.discipline || 50)}</span>
                 </div>
                 <div class="tamagotchi-info" style="
-                    margin-top: 10px;
-                    padding: 8px;
-                    background: rgba(255,255,255,0.1);
-                    border-radius: 5px;
-                    font-size: 0.9em;
-                    color: #ffffff;
+                    margin-top: 12px !important;
+                    padding: 8px !important;
+                    background: ${candyColors.backgroundSolid} !important;
+                    border: 2px solid ${candyColors.border} !important;
+                    border-radius: 0 !important;
+                    font-family: 'Courier New', monospace !important;
+                    font-size: 11px !important;
+                    font-weight: bold !important;
+                    color: ${candyColors.textPrimary} !important;
+                    text-transform: uppercase !important;
                 ">
-                    <div>年龄: ${Math.round(petData.age || 0)}小时</div>
-                    <div>体重: ${petData.weight || 30}kg</div>
-                    <div>状态: ${petData.isAlive ? '健康' : '💀 死亡'}</div>
-                    ${petData.deathReason ? `<div style="color: #ff6b6b;">死因: ${
-                        petData.deathReason === 'sickness' ? '疾病' :
-                        petData.deathReason === 'neglect' ? '忽视' :
-                        petData.deathReason === 'disease' ? '严重疾病' :
-                        petData.deathReason === 'natural' ? '自然死亡' : '未知'
+                    <div style="margin-bottom: 4px !important;">AGE: ${Math.round(petData.age || 0)}H</div>
+                    <div style="margin-bottom: 4px !important;">WT: ${petData.weight || 30}KG</div>
+                    <div style="margin-bottom: 4px !important;">STATUS: ${petData.isAlive ? 'ALIVE' : 'DEAD'}</div>
+                    ${petData.deathReason ? `<div style="color: #FF0000 !important;">CAUSE: ${
+                        petData.deathReason === 'sickness' ? 'SICK' :
+                        petData.deathReason === 'neglect' ? 'NEGLECT' :
+                        petData.deathReason === 'disease' ? 'DISEASE' :
+                        petData.deathReason === 'natural' ? 'OLD' : 'UNKNOWN'
                     }</div>` : ''}
                 </div>
                 ` : ''}
@@ -4632,6 +4815,78 @@ ${getCurrentPersonality()}
         location.reload();
     };
 
+    // 完整修复所有问题
+    window.fixAllIssues = function() {
+        console.log('🔧 开始完整修复所有问题...');
+
+        // 1. 强制更新到拓麻歌子系统
+        console.log('1. 更新到拓麻歌子系统...');
+        forceUpdateToTamagotchi();
+
+        // 2. 确保商店系统可用
+        console.log('2. 检查商店系统...');
+        if (!petData.coins) petData.coins = 100;
+        if (!petData.inventory) petData.inventory = {};
+
+        // 3. 重新绑定事件
+        console.log('3. 重新绑定UI事件...');
+        setTimeout(() => {
+            const $popup = $('.virtual-pet-popup-overlay');
+            if ($popup.length > 0) {
+                bindUnifiedUIEvents($popup);
+            }
+        }, 500);
+
+        // 4. 保存数据
+        savePetData();
+
+        console.log('✅ 所有问题修复完成！');
+        toastr.success('🎉 所有问题已修复！商店按钮和拓麻歌子系统现在应该正常工作了！');
+
+        return {
+            fixed: true,
+            timestamp: new Date().toISOString(),
+            petData: petData
+        };
+    };
+
+    // 测试拓麻歌子UI风格
+    window.testTamagotchiUI = function() {
+        console.log('🎮 测试拓麻歌子UI风格...');
+
+        console.log('\n🎨 配色方案:');
+        console.log(`主背景: ${candyColors.background}`);
+        console.log(`屏幕色: ${candyColors.screen}`);
+        console.log(`边框色: ${candyColors.border}`);
+        console.log(`文字色: ${candyColors.textPrimary}`);
+
+        console.log('\n🎯 UI特性:');
+        console.log('✅ 像素化字体 (Courier New)');
+        console.log('✅ 方形边框 (border-radius: 0)');
+        console.log('✅ 像素阴影效果');
+        console.log('✅ Game Boy绿色配色');
+        console.log('✅ 大写英文按钮文字');
+        console.log('✅ 拓麻歌子式状态栏');
+
+        console.log('\n🔧 可用命令:');
+        console.log('- fixAllIssues() - 修复所有问题');
+        console.log('- showPopup() - 显示拓麻歌子UI');
+        console.log('- testTamagotchiSystem() - 测试拓麻歌子系统');
+
+        // 强制刷新UI
+        if (typeof renderPetStatus === 'function') {
+            renderPetStatus();
+        }
+
+        toastr.success('🎮 拓麻歌子UI风格已应用！重新打开宠物界面查看效果。');
+
+        return {
+            uiStyle: 'tamagotchi',
+            colors: candyColors,
+            timestamp: new Date().toISOString()
+        };
+    };
+
     // 检查数值增减逻辑
     window.checkValueChanges = function() {
         console.log('=== 🔍 数值增减逻辑检查 ===');
@@ -5990,26 +6245,33 @@ ${getCurrentPersonality()}
                     text-align: center !important;
                     padding: 15px !important;
                 ">
-                    <!-- 圆形头像框 -->
+                    <!-- 拓麻歌子风格头像框 -->
                     <div class="pet-avatar-circle" style="
                         width: 70px !important;
                         height: 70px !important;
-                        border-radius: 50% !important;
-                        background: ${candyColors.primary} !important;
+                        border-radius: 6px !important;
+                        background: ${candyColors.screen} !important;
                         display: flex !important;
                         align-items: center !important;
                         justify-content: center !important;
                         font-size: 2.5em !important;
                         overflow: hidden !important;
-                        border: 2px solid #7289da !important;
-                        box-shadow: 0 3px 6px rgba(0,0,0,0.3) !important;
+                        border: 3px solid ${candyColors.border} !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
                         cursor: pointer !important;
                         margin: 0 auto 8px auto !important;
+                        font-family: 'Courier New', monospace !important;
+                        image-rendering: pixelated !important;
+                        image-rendering: -moz-crisp-edges !important;
+                        image-rendering: crisp-edges !important;
                     " onclick="openAvatarSelector()" oncontextmenu="showAvatarContextMenu(event)" title="点击更换头像，右键重置">
                         ${getAvatarContent()}
                     </div>
-                    <div class="pet-name" style="font-size: 1.2em !important; font-weight: bold !important; margin-bottom: 3px !important;">小宠物</div>
-                    <div class="pet-level" style="color: #7289da !important; font-size: 0.9em !important;">Lv.1</div>
+                    <div class="pet-name" style="font-size: 1.2em !important; font-weight: bold !important; margin-bottom: 3px !important;">${escapeHtml(petData.name)}</div>
+                    <div class="pet-level" style="color: #7289da !important; font-size: 0.9em !important;">${petData.isAlive ?
+                        `${LIFE_STAGES[petData.lifeStage]?.emoji || '🐾'} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` :
+                        '💀 已死亡'
+                    }</div>
                 </div>
 
                 <!-- 宠物状态栏 -->
@@ -6070,115 +6332,139 @@ ${getCurrentPersonality()}
                     gap: 6px !important;
                 ">
                     <button class="action-btn feed-btn" style="
-                        padding: 10px !important;
-                        background: #43b581 !important;
-                        color: white !important;
-                        border: none !important;
-                        border-radius: 6px !important;
-                        font-size: 12px !important;
+                        padding: 8px !important;
+                        background: ${candyColors.buttonPrimary} !important;
+                        color: ${candyColors.textPrimary} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 11px !important;
+                        font-weight: bold !important;
+                        text-transform: uppercase !important;
                         cursor: pointer !important;
-                        min-height: 40px !important;
+                        min-height: 36px !important;
                         display: flex !important;
                         align-items: center !important;
                         justify-content: center !important;
                         gap: 4px !important;
-                        transition: background 0.2s ease !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
                     ">
                         <span style="font-size: 1em !important;">🍖</span>
-                        <span>喂食</span>
+                        <span>FEED</span>
                     </button>
                     <button class="action-btn play-btn" style="
-                        padding: 10px !important;
-                        background: #7289da !important;
-                        color: white !important;
-                        border: none !important;
-                        border-radius: 6px !important;
-                        font-size: 12px !important;
+                        padding: 8px !important;
+                        background: ${candyColors.buttonSecondary} !important;
+                        color: ${candyColors.textPrimary} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 11px !important;
+                        font-weight: bold !important;
+                        text-transform: uppercase !important;
                         cursor: pointer !important;
-                        min-height: 40px !important;
+                        min-height: 36px !important;
                         display: flex !important;
                         align-items: center !important;
                         justify-content: center !important;
                         gap: 4px !important;
-                        transition: background 0.2s ease !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
                     ">
                         <span style="font-size: 1em !important;">🎮</span>
-                        <span>玩耍</span>
+                        <span>PLAY</span>
                     </button>
                     <button class="action-btn sleep-btn" style="
-                        padding: 10px !important;
-                        background: #99aab5 !important;
-                        color: white !important;
-                        border: none !important;
-                        border-radius: 6px !important;
-                        font-size: 12px !important;
+                        padding: 8px !important;
+                        background: ${candyColors.buttonAccent} !important;
+                        color: ${candyColors.textPrimary} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 11px !important;
+                        font-weight: bold !important;
+                        text-transform: uppercase !important;
                         cursor: pointer !important;
-                        min-height: 40px !important;
+                        min-height: 36px !important;
                         display: flex !important;
                         align-items: center !important;
                         justify-content: center !important;
                         gap: 4px !important;
-                        transition: background 0.2s ease !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
                     ">
                         <span style="font-size: 1em !important;">😴</span>
-                        <span>休息</span>
+                        <span>SLEEP</span>
                     </button>
                     ${petData.dataVersion >= 4.0 && (petData.sickness || 0) > 10 ? `
                     <button class="action-btn heal-btn" style="
-                        padding: 10px !important;
-                        background: #ff9ff3 !important;
-                        color: white !important;
-                        border: none !important;
-                        border-radius: 6px !important;
-                        font-size: 12px !important;
+                        padding: 8px !important;
+                        background: #FF0000 !important;
+                        color: ${candyColors.textWhite} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 11px !important;
+                        font-weight: bold !important;
+                        text-transform: uppercase !important;
                         cursor: pointer !important;
-                        min-height: 40px !important;
+                        min-height: 36px !important;
                         display: flex !important;
                         align-items: center !important;
                         justify-content: center !important;
                         gap: 4px !important;
-                        transition: background 0.2s ease !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
                     ">
                         <span style="font-size: 1em !important;">💊</span>
-                        <span>治疗</span>
+                        <span>HEAL</span>
                     </button>
                     ` : `
                     <button class="action-btn shop-btn" style="
-                        padding: 10px !important;
-                        background: #feca57 !important;
-                        color: white !important;
-                        border: none !important;
-                        border-radius: 6px !important;
-                        font-size: 12px !important;
+                        padding: 8px !important;
+                        background: #FFFF00 !important;
+                        color: ${candyColors.textPrimary} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 11px !important;
+                        font-weight: bold !important;
+                        text-transform: uppercase !important;
                         cursor: pointer !important;
-                        min-height: 40px !important;
+                        min-height: 36px !important;
                         display: flex !important;
                         align-items: center !important;
                         justify-content: center !important;
                         gap: 4px !important;
-                        transition: background 0.2s ease !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
                     ">
                         <span style="font-size: 1em !important;">🛒</span>
-                        <span>商店</span>
+                        <span>SHOP</span>
                     </button>
                     `}
                     <button class="action-btn settings-btn" style="
-                        padding: 10px !important;
-                        background: #f04747 !important;
-                        color: white !important;
-                        border: none !important;
-                        border-radius: 6px !important;
-                        font-size: 12px !important;
+                        padding: 8px !important;
+                        background: ${candyColors.secondary} !important;
+                        color: ${candyColors.textPrimary} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 11px !important;
+                        font-weight: bold !important;
+                        text-transform: uppercase !important;
                         cursor: pointer !important;
-                        min-height: 40px !important;
+                        min-height: 36px !important;
                         display: flex !important;
                         align-items: center !important;
                         justify-content: center !important;
                         gap: 4px !important;
-                        transition: background 0.2s ease !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
                     ">
                         <span style="font-size: 1em !important;">⚙️</span>
-                        <span>设置</span>
+                        <span>SET</span>
                     </button>
                 </div>
 
@@ -6232,8 +6518,11 @@ ${getCurrentPersonality()}
                     " onclick="openAvatarSelector()" oncontextmenu="showAvatarContextMenu(event)" title="点击更换头像，右键重置">
                         ${getAvatarContent()}
                     </div>
-                    <div class="pet-name" style="font-size: 1.3em !important; font-weight: bold !important; margin-bottom: 4px !important; color: ${candyColors.textPrimary} !important; cursor: pointer !important; text-decoration: underline !important;" onclick="editPetName()" title="点击编辑宠物名字">${petData.name}</div>
-                    <div class="pet-level" style="color: ${candyColors.primary} !important; font-size: 1em !important;">Lv.${petData.level}</div>
+                    <div class="pet-name" style="font-size: 1.3em !important; font-weight: bold !important; margin-bottom: 4px !important; color: ${candyColors.textPrimary} !important; cursor: pointer !important; text-decoration: underline !important;" onclick="editPetName()" title="点击编辑宠物名字">${escapeHtml(petData.name)}</div>
+                    <div class="pet-level" style="color: ${candyColors.primary} !important; font-size: 1em !important;">${petData.isAlive ?
+                        `${LIFE_STAGES[petData.lifeStage]?.emoji || '🐾'} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` :
+                        '💀 已死亡'
+                    }</div>
                 </div>
 
                 <!-- 宠物状态栏 -->
@@ -6271,6 +6560,21 @@ ${getCurrentPersonality()}
                         </div>
                     </div>
                 </div>
+
+                <!-- 金币显示 -->
+                ${petData.dataVersion >= 4.0 ? `
+                <div class="pet-coins-section" style="
+                    text-align: center !important;
+                    padding: 10px !important;
+                    background: rgba(255,215,0,0.1) !important;
+                    border-radius: 8px !important;
+                    margin-bottom: 10px !important;
+                ">
+                    <span style="color: #ffd700 !important; font-weight: bold !important; font-size: 1.1em !important;">
+                        💰 ${petData.coins || 100} 金币
+                    </span>
+                </div>
+                ` : ''}
 
                 <!-- 操作按钮 -->
                 <div class="pet-actions-section" style="
@@ -6332,6 +6636,45 @@ ${getCurrentPersonality()}
                         <span style="font-size: 1.1em !important;">😴</span>
                         <span>休息</span>
                     </button>
+                    ${petData.dataVersion >= 4.0 && (petData.sickness || 0) > 10 ? `
+                    <button class="action-btn heal-btn" style="
+                        padding: 12px !important;
+                        background: #ff9ff3 !important;
+                        color: white !important;
+                        border: none !important;
+                        border-radius: 6px !important;
+                        font-size: 13px !important;
+                        cursor: pointer !important;
+                        min-height: 44px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 6px !important;
+                        transition: background 0.2s ease !important;
+                    ">
+                        <span style="font-size: 1.1em !important;">💊</span>
+                        <span>治疗</span>
+                    </button>
+                    ` : `
+                    <button class="action-btn shop-btn" style="
+                        padding: 12px !important;
+                        background: #feca57 !important;
+                        color: white !important;
+                        border: none !important;
+                        border-radius: 6px !important;
+                        font-size: 13px !important;
+                        cursor: pointer !important;
+                        min-height: 44px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 6px !important;
+                        transition: background 0.2s ease !important;
+                    ">
+                        <span style="font-size: 1.1em !important;">🛒</span>
+                        <span>商店</span>
+                    </button>
+                    `}
                     <button class="action-btn settings-btn" style="
                         padding: 12px !important;
                         background: #f04747 !important;
@@ -6403,11 +6746,29 @@ ${getCurrentPersonality()}
             }, 100);
         });
 
+        // 治疗按钮
+        $container.find(".heal-btn").on("click touchend", function(e) {
+            e.preventDefault();
+            console.log("💊 治疗宠物");
+            healPet();
+            // 更新UI显示
+            setTimeout(() => {
+                updateUnifiedUIStatus();
+            }, 100);
+        });
+
+        // 商店按钮
+        $container.find(".shop-btn").on("click touchend", function(e) {
+            e.preventDefault();
+            console.log("🛒 打开商店");
+            openShop();
+        });
+
         // 设置按钮
         $container.find(".settings-btn").on("click touchend", function(e) {
             e.preventDefault();
             console.log("⚙️ 打开设置");
-            showNotification("⚙️ 设置功能开发中...", "info");
+            openSettings();
         });
 
         // 宠物名字点击事件（备用，主要通过onclick属性）

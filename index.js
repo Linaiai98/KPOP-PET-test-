@@ -305,7 +305,7 @@ jQuery(async () => {
      * @param {number} timeout - 超时时间（毫秒），默认15秒
      * @returns {Promise<string>} - AI生成的回复
      */
-    async function callAIAPI(prompt, timeout = 15000) {
+    async function callAIAPI(prompt, timeout = 30000) {
         try {
             let result = null;
 
@@ -388,8 +388,8 @@ jQuery(async () => {
      * @param {number} timeout - 超时时间（毫秒）
      * @returns {Promise<string>} - AI生成的回复
      */
-    async function callCustomAPI(prompt, settings, timeout = 15000) {
-        console.log(`[${extensionName}] 调用自定义API: ${settings.apiType}`);
+    async function callCustomAPI(prompt, settings, timeout = 30000) {
+        console.log(`[${extensionName}] 调用自定义API: ${settings.apiType}，超时时间: ${timeout}ms`);
 
         // 构建请求URL
         let apiUrl = settings.apiUrl;
@@ -442,7 +442,13 @@ jQuery(async () => {
 
         // 使用AbortController来处理超时
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeout);
+        const timeoutId = setTimeout(() => {
+            console.log(`[${extensionName}] API调用超时，取消请求`);
+            controller.abort();
+        }, timeout);
+
+        const startTime = Date.now();
+        console.log(`[${extensionName}] 开始发送请求，时间戳: ${startTime}`);
 
         try {
             const response = await fetch(apiUrl, {
@@ -452,8 +458,10 @@ jQuery(async () => {
                 signal: controller.signal
             });
 
+            const endTime = Date.now();
+            const duration = endTime - startTime;
             clearTimeout(timeoutId);
-            console.log(`[${extensionName}] API响应状态: ${response.status} ${response.statusText}`);
+            console.log(`[${extensionName}] API响应状态: ${response.status} ${response.statusText}，耗时: ${duration}ms`);
 
             if (!response.ok) {
                 throw new Error(`自定义API调用失败: ${response.status} ${response.statusText}`);
@@ -560,7 +568,8 @@ ${getCurrentPersonality()}
                 try {
                     // 构建Prompt并调用AI
                     const prompt = buildInteractionPrompt(action);
-                    const aiReply = await callAIAPI(prompt, 15000); // 15秒超时
+                    console.log(`[${extensionName}] 发送的提示词:`, prompt);
+                    const aiReply = await callAIAPI(prompt, 30000); // 30秒超时
 
                     // 清除加载提示
                     toastr.clear(loadingToast);

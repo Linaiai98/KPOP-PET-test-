@@ -46,29 +46,29 @@ jQuery(async () => {
         warning: '#FF8000',      // 橙色警告
         success: '#008000',      // 绿色成功
 
-        // 背景色 - 经典Game Boy风格
-        background: '#9bbc0f',   // 经典Game Boy绿色
-        backgroundSolid: '#8bac0f', // 深绿色背景
-        screen: '#9bbc0f',       // 屏幕绿色
-        screenDark: '#8bac0f',   // 深屏幕绿色
+        // 背景色 - 糖果色渐变
+        background: 'linear-gradient(135deg, #FFE5F1 0%, #E5F9F0 50%, #E5F4FF 100%)', // 糖果渐变
+        backgroundSolid: '#FFF8FC', // 纯色背景备选
+        screen: '#FFE5F1',       // 糖果粉屏幕
+        screenDark: '#E5F9F0',   // 薄荷绿屏幕
 
-        // 文字色 - 像素风格
-        textPrimary: '#000000',   // 黑色文字
-        textSecondary: '#333333', // 深灰文字
-        textLight: '#666666',     // 浅灰文字
+        // 文字色 - 糖果色适配
+        textPrimary: '#2D3748',   // 深灰色文字
+        textSecondary: '#4A5568', // 中灰色文字
+        textLight: '#718096',     // 浅灰色文字
         textWhite: '#FFFFFF',     // 白色文字
 
-        // 边框和阴影 - 像素风格
-        border: '#000000',       // 黑色边框
-        borderAccent: '#333333', // 强调边框
-        shadow: 'rgba(0, 0, 0, 0.3)', // 黑色阴影
-        shadowLight: 'rgba(0, 0, 0, 0.1)', // 浅黑色阴影
+        // 边框和阴影 - 柔和风格
+        border: '#E2E8F0',       // 浅边框
+        borderAccent: '#FF9EC7', // 强调边框
+        shadow: 'rgba(255, 158, 199, 0.2)', // 粉色阴影
+        shadowLight: 'rgba(255, 158, 199, 0.1)', // 浅粉色阴影
 
-        // 按钮色 - 拓麻歌子风格
-        buttonPrimary: '#8bac0f',
-        buttonSecondary: '#9bbc0f',
-        buttonAccent: '#6b8c0f',
-        buttonHover: '#7b9c0f',
+        // 按钮色 - 糖果色风格
+        buttonPrimary: '#FF9EC7',
+        buttonSecondary: '#A8E6CF',
+        buttonAccent: '#87CEEB',
+        buttonHover: '#FF7FB3',
 
         // 状态栏色 - 经典像素风格
         health: '#FF0000',       // 健康 - 红色
@@ -4850,9 +4850,9 @@ ${getCurrentPersonality()}
         };
     };
 
-    // 测试拓麻歌子UI风格
+    // 测试拓麻歌子UI风格 (糖果色版本)
     window.testTamagotchiUI = function() {
-        console.log('🎮 测试拓麻歌子UI风格...');
+        console.log('🎮 测试拓麻歌子UI风格 (糖果色版本)...');
 
         console.log('\n🎨 配色方案:');
         console.log(`主背景: ${candyColors.background}`);
@@ -4863,8 +4863,8 @@ ${getCurrentPersonality()}
         console.log('\n🎯 UI特性:');
         console.log('✅ 像素化字体 (Courier New)');
         console.log('✅ 方形边框 (border-radius: 0)');
-        console.log('✅ 像素阴影效果');
-        console.log('✅ Game Boy绿色配色');
+        console.log('✅ 糖果色渐变背景');
+        console.log('✅ 柔和粉色阴影');
         console.log('✅ 大写英文按钮文字');
         console.log('✅ 拓麻歌子式状态栏');
 
@@ -4878,10 +4878,10 @@ ${getCurrentPersonality()}
             renderPetStatus();
         }
 
-        toastr.success('🎮 拓麻歌子UI风格已应用！重新打开宠物界面查看效果。');
+        toastr.success('🎮 糖果色拓麻歌子UI风格已应用！重新打开宠物界面查看效果。');
 
         return {
-            uiStyle: 'tamagotchi',
+            uiStyle: 'tamagotchi-candy',
             colors: candyColors,
             timestamp: new Date().toISOString()
         };

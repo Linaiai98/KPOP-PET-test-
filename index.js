@@ -105,68 +105,7 @@ jQuery(async () => {
         'smart': "一只聪明的鸟，喜欢说俏皮话，有时会调皮捣蛋。说话机智幽默，喜欢用双关语和小聪明，偶尔会炫耀知识。"
     };
 
-    /**
-     * 将JSON格式的角色卡转换为自然语言描述
-     * @param {string} jsonString - JSON格式的角色卡字符串
-     * @returns {string} 自然语言描述
-     */
-    function parseCharacterCardToDescription(jsonString) {
-        try {
-            const character = JSON.parse(jsonString);
 
-            let description = '';
-
-            // 基本身份信息
-            if (character.name) {
-                description += `我是${character.name}`;
-                if (character.nickname) {
-                    description += `，绰号${character.nickname}`;
-                }
-                if (character.title) {
-                    description += `，人称${character.title}`;
-                }
-                description += '。';
-            }
-
-            // 基本属性
-            const basicInfo = [];
-            if (character.age) basicInfo.push(`${character.age}`);
-            if (character.gender) basicInfo.push(character.gender);
-            if (character.eye_color) basicInfo.push(`${character.eye_color}`);
-            if (character.hair_color) basicInfo.push(`${character.hair_color}`);
-
-            if (basicInfo.length > 0) {
-                description += `${basicInfo.join('，')}。`;
-            }
-
-            // 外貌描述
-            if (character.body_type) {
-                description += `外貌特征：${character.body_type}。`;
-            }
-
-            // 服装风格
-            if (character.clothing_style) {
-                description += `穿着打扮：${character.clothing_style}。`;
-            }
-
-            // 性格特点
-            if (character.personality && Array.isArray(character.personality)) {
-                description += `性格特点：${character.personality.join('、')}。`;
-            }
-
-            // 职业/背景
-            if (character.profession && Array.isArray(character.profession)) {
-                description += `职业背景：${character.profession.join('，')}。`;
-            }
-
-            return description;
-
-        } catch (error) {
-            console.warn(`[${extensionName}] 解析角色卡失败:`, error);
-            // 如果解析失败，返回原始字符串
-            return jsonString;
-        }
-    }
 
     /**
      * 获取当前有效的人设
@@ -177,19 +116,7 @@ jQuery(async () => {
 
         if (selectedType === 'custom') {
             const customPersonality = localStorage.getItem(`${extensionName}-custom-personality`) || '';
-
-            if (!customPersonality) {
-                return PRESET_PERSONALITIES.default;
-            }
-
-            // 检查是否为JSON格式的角色卡
-            if (customPersonality.trim().startsWith('{')) {
-                // 是JSON格式，转换为自然语言描述
-                return parseCharacterCardToDescription(customPersonality);
-            } else {
-                // 是普通文本描述，直接返回
-                return customPersonality;
-            }
+            return customPersonality || PRESET_PERSONALITIES.default;
         } else {
             return PRESET_PERSONALITIES[selectedType] || PRESET_PERSONALITIES.default;
         }
@@ -212,6 +139,21 @@ jQuery(async () => {
 
         console.log(`[${extensionName}] 人设已更新为: ${type === 'custom' ? '自定义' : type}`);
         console.log(`[${extensionName}] 人设内容: ${petData.personality}`);
+    }
+
+    /**
+     * 清理旧的角色卡数据
+     */
+    function cleanupOldCharacterData() {
+        // 检查自定义人设是否包含JSON格式的角色卡数据
+        const customPersonality = localStorage.getItem(`${extensionName}-custom-personality`) || '';
+        if (customPersonality.trim().startsWith('{')) {
+            console.log(`[${extensionName}] 检测到旧的JSON格式角色卡数据，正在清理...`);
+            // 清空自定义人设，回退到默认人设
+            localStorage.removeItem(`${extensionName}-custom-personality`);
+            localStorage.setItem(`${extensionName}-personality-type`, 'default');
+            toastr.info('检测到旧的角色卡数据格式，已自动清理并重置为默认人设');
+        }
     }
 
     // -----------------------------------------------------------------
@@ -645,6 +587,9 @@ ${getCurrentPersonality()}
      * 初始化设置面板
      */
     function initializeSettingsPanel() {
+        // 清理旧的角色卡数据
+        cleanupOldCharacterData();
+
         // 加载当前设置
         const currentPersonalityType = localStorage.getItem(`${extensionName}-personality-type`) || 'default';
         const customPersonality = localStorage.getItem(`${extensionName}-custom-personality`) || '';

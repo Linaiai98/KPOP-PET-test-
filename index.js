@@ -4927,6 +4927,51 @@ ${getCurrentPersonality()}
         };
     };
 
+    // 测试治疗按钮功能
+    window.testHealButton = function() {
+        console.log('💊 测试治疗按钮功能...');
+
+        const sicknessLevel = petData.sickness || 0;
+
+        console.log('\n🏥 当前状态:');
+        console.log(`疾病值: ${sicknessLevel}`);
+        console.log(`健康值: ${petData.health}`);
+        console.log(`是否存活: ${petData.isAlive}`);
+
+        console.log('\n🎯 治疗按钮状态:');
+        if (sicknessLevel > 10) {
+            console.log('✅ 治疗按钮激活 - 宠物生病了');
+            console.log(`- 背景色: ${candyColors.health} (糖果粉)`);
+            console.log('- 透明度: 1.0 (完全可见)');
+            console.log('- 鼠标样式: pointer (可点击)');
+        } else {
+            console.log('⚠️ 治疗按钮禁用 - 宠物很健康');
+            console.log(`- 背景色: ${candyColors.secondary} (灰色)`);
+            console.log('- 透明度: 0.5 (半透明)');
+            console.log('- 鼠标样式: not-allowed (禁用)');
+        }
+
+        console.log('\n🧪 测试命令:');
+        console.log('- healPet() - 尝试治疗宠物');
+        console.log('- petData.sickness = 50 - 设置宠物生病');
+        console.log('- petData.sickness = 0 - 设置宠物健康');
+        console.log('- renderPetStatus() - 刷新UI显示');
+
+        console.log('\n💡 功能特性:');
+        console.log('✅ 治疗按钮常驻显示');
+        console.log('✅ 生病时可点击，健康时禁用');
+        console.log('✅ 视觉反馈：颜色和透明度变化');
+        console.log('✅ 点击反馈：健康时显示随机提示');
+        console.log('✅ 治疗效果：降低疾病值，提升健康值');
+
+        return {
+            sicknessLevel: sicknessLevel,
+            canHeal: sicknessLevel > 10,
+            buttonState: sicknessLevel > 10 ? 'active' : 'disabled',
+            timestamp: new Date().toISOString()
+        };
+    };
+
     // 检查数值增减逻辑
     window.checkValueChanges = function() {
         console.log('=== 🔍 数值增减逻辑检查 ===');
@@ -5375,23 +5420,44 @@ ${getCurrentPersonality()}
                 return;
             }
 
-            if (petData.sickness < 10) {
-                toastr.info("😊 你的宠物很健康，不需要治疗！");
+            const sicknessLevel = petData.sickness || 0;
+
+            if (sicknessLevel < 10) {
+                // 没生病时的反馈
+                const healthyMessages = [
+                    "😊 你的宠物很健康，不需要治疗！",
+                    "🌟 宠物状态良好，无需用药！",
+                    "💪 你的宠物精神饱满，不用担心！",
+                    "✨ 宠物健康指数正常，暂时不需要治疗！"
+                ];
+                const randomMessage = healthyMessages[Math.floor(Math.random() * healthyMessages.length)];
+                toastr.info(randomMessage);
+
+                // 播放无效点击的视觉反馈
+                const healBtn = $('.heal-btn');
+                if (healBtn.length > 0) {
+                    healBtn.css('transform', 'scale(0.95)');
+                    setTimeout(() => {
+                        healBtn.css('transform', 'scale(1)');
+                    }, 150);
+                }
                 return;
             }
 
             // 治疗效果
-            petData.sickness = Math.max(0, petData.sickness - 30);
+            const healAmount = Math.min(30, sicknessLevel); // 实际治疗量
+            petData.sickness = Math.max(0, sicknessLevel - healAmount);
             petData.health = Math.min(100, petData.health + 15);
             petData.sicknessDuration = 0;
             petData.lastCareTime = Date.now();
 
             validateAndFixValues();
+
+            // 治疗成功的反馈
+            toastr.success(`💊 治疗成功！疾病值降低了 ${healAmount} 点`);
             await handleAIReply('heal', `${petData.name} 接受了治疗，感觉好多了！`);
             savePetData();
             renderPetStatus();
-
-            toastr.success("💊 治疗完成！宠物感觉好多了。");
         };
 
         // 添加商店功能
@@ -6446,10 +6512,9 @@ ${getCurrentPersonality()}
                         <span style="font-size: 1em !important;">😴</span>
                         <span>SLEEP</span>
                     </button>
-                    ${petData.dataVersion >= 4.0 && (petData.sickness || 0) > 10 ? `
                     <button class="action-btn heal-btn" style="
                         padding: 8px !important;
-                        background: ${candyColors.health} !important;
+                        background: ${(petData.sickness || 0) > 10 ? candyColors.health : candyColors.secondary} !important;
                         color: ${candyColors.textWhite} !important;
                         border: 2px solid ${candyColors.border} !important;
                         border-radius: 0 !important;
@@ -6457,7 +6522,7 @@ ${getCurrentPersonality()}
                         font-size: 11px !important;
                         font-weight: bold !important;
                         text-transform: uppercase !important;
-                        cursor: pointer !important;
+                        cursor: ${(petData.sickness || 0) > 10 ? 'pointer' : 'not-allowed'} !important;
                         min-height: 36px !important;
                         display: flex !important;
                         align-items: center !important;
@@ -6465,11 +6530,11 @@ ${getCurrentPersonality()}
                         gap: 4px !important;
                         box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
                         transition: none !important;
+                        opacity: ${(petData.sickness || 0) > 10 ? '1' : '0.5'} !important;
                     ">
                         <span style="font-size: 1em !important;">💊</span>
                         <span>HEAL</span>
                     </button>
-                    ` : `
                     <button class="action-btn shop-btn" style="
                         padding: 8px !important;
                         background: ${candyColors.happiness} !important;
@@ -6492,7 +6557,6 @@ ${getCurrentPersonality()}
                         <span style="font-size: 1em !important;">🛒</span>
                         <span>SHOP</span>
                     </button>
-                    `}
                     <button class="action-btn settings-btn" style="
                         padding: 8px !important;
                         background: ${candyColors.secondary} !important;
@@ -6694,45 +6758,51 @@ ${getCurrentPersonality()}
                         <span style="font-size: 1.1em !important;">😴</span>
                         <span>休息</span>
                     </button>
-                    ${petData.dataVersion >= 4.0 && (petData.sickness || 0) > 10 ? `
                     <button class="action-btn heal-btn" style="
                         padding: 12px !important;
-                        background: #ff9ff3 !important;
-                        color: white !important;
-                        border: none !important;
-                        border-radius: 6px !important;
-                        font-size: 13px !important;
-                        cursor: pointer !important;
+                        background: ${(petData.sickness || 0) > 10 ? candyColors.health : candyColors.secondary} !important;
+                        color: ${candyColors.textWhite} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 12px !important;
+                        font-weight: bold !important;
+                        text-transform: uppercase !important;
+                        cursor: ${(petData.sickness || 0) > 10 ? 'pointer' : 'not-allowed'} !important;
                         min-height: 44px !important;
                         display: flex !important;
                         align-items: center !important;
                         justify-content: center !important;
                         gap: 6px !important;
-                        transition: background 0.2s ease !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                        opacity: ${(petData.sickness || 0) > 10 ? '1' : '0.5'} !important;
                     ">
                         <span style="font-size: 1.1em !important;">💊</span>
-                        <span>治疗</span>
+                        <span>HEAL</span>
                     </button>
-                    ` : `
                     <button class="action-btn shop-btn" style="
                         padding: 12px !important;
-                        background: #feca57 !important;
-                        color: white !important;
-                        border: none !important;
-                        border-radius: 6px !important;
-                        font-size: 13px !important;
+                        background: ${candyColors.happiness} !important;
+                        color: ${candyColors.textPrimary} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 12px !important;
+                        font-weight: bold !important;
+                        text-transform: uppercase !important;
                         cursor: pointer !important;
                         min-height: 44px !important;
                         display: flex !important;
                         align-items: center !important;
                         justify-content: center !important;
                         gap: 6px !important;
-                        transition: background 0.2s ease !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
                     ">
                         <span style="font-size: 1.1em !important;">🛒</span>
-                        <span>商店</span>
+                        <span>SHOP</span>
                     </button>
-                    `}
                     <button class="action-btn settings-btn" style="
                         padding: 12px !important;
                         background: #f04747 !important;

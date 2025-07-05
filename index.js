@@ -3564,26 +3564,6 @@ ${getCurrentPersonality()}
         return petData;
     };
 
-        const happinessDisplay = $('.status-item').find('span').filter(function() {
-            return $(this).text().includes('快乐');
-        }).next().text();
-
-        console.log(`UI健康显示: ${healthDisplay}`);
-        console.log(`UI快乐显示: ${happinessDisplay}`);
-
-        // 检查是否需要迁移
-        const needsMigration = petData.health === 100 || petData.happiness === 100;
-
-        if (needsMigration) {
-            console.log("\n⚠️ 检测到旧数值，建议执行数据迁移:");
-            console.log("请运行: forceDataMigration()");
-            return false;
-        } else {
-            console.log("\n✅ 数值修复成功！新的初始数值已正确应用。");
-            return true;
-        }
-    };
-
     // 检查localStorage中的数据
     window.checkStoredData = function() {
         console.log("💾 检查localStorage中的数据...");
@@ -5000,5 +4980,7 @@ ${getCurrentPersonality()}
 
         return prompt;
     };
+
+})();
 
 console.log("🐾 虚拟宠物系统脚本已加载完成");

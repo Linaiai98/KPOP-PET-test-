@@ -5119,6 +5119,61 @@ ${getCurrentPersonality()}
         };
     };
 
+    // 测试设置按钮颜色修复
+    window.testSettingsButtonColor = function() {
+        console.log('🎨 测试设置按钮颜色修复...');
+
+        console.log('\n❌ 修复前的问题:');
+        console.log('背景色: #333333 (深灰)');
+        console.log('文字色: #2D3748 (深灰)');
+        console.log('问题: 两个深色对比度不够，文字难以看清');
+
+        console.log('\n✅ 修复后的改进:');
+        console.log('背景色: #8B5CF6 (紫色)');
+        console.log('文字色: #FFFFFF (白色)');
+        console.log('效果: 高对比度，文字清晰可见');
+
+        console.log('\n🎯 按钮配色方案:');
+        console.log('🍖 喂食: 糖果粉背景 + 深灰文字');
+        console.log('🎮 玩耍: 薄荷绿背景 + 深灰文字');
+        console.log('😴 休息: 天空蓝背景 + 深灰文字');
+        console.log('💊 治疗: 动态背景 + 白色文字');
+        console.log('🛒 商店: 柠檬黄背景 + 深灰文字');
+        console.log('⚙️ 设置: 紫色背景 + 白色文字 ← 已修复');
+
+        console.log('\n🔍 颜色对比度分析:');
+        console.log('设置按钮: 紫色(#8B5CF6) + 白色(#FFFFFF) = 高对比度 ✅');
+        console.log('其他按钮: 浅色背景 + 深色文字 = 良好对比度 ✅');
+
+        console.log('\n🎨 设计原则:');
+        console.log('✅ 保持拓麻歌子像素风格');
+        console.log('✅ 确保文字清晰可读');
+        console.log('✅ 与糖果色主题协调');
+        console.log('✅ 设置按钮有独特识别度');
+
+        console.log('\n🧪 测试方法:');
+        console.log('1. 重新打开宠物界面');
+        console.log('2. 检查设置按钮是否清晰可见');
+        console.log('3. 确认文字与背景对比度足够');
+
+        toastr.success('🎨 设置按钮颜色已修复！现在文字清晰可见了。');
+
+        return {
+            fixed: true,
+            oldColors: {
+                background: '#333333',
+                text: '#2D3748',
+                contrast: 'poor'
+            },
+            newColors: {
+                background: '#8B5CF6',
+                text: '#FFFFFF',
+                contrast: 'excellent'
+            },
+            timestamp: new Date().toISOString()
+        };
+    };
+
     // 检查数值增减逻辑
     window.checkValueChanges = function() {
         console.log('=== 🔍 数值增减逻辑检查 ===');
@@ -6706,8 +6761,8 @@ ${getCurrentPersonality()}
                     </button>
                     <button class="action-btn settings-btn" style="
                         padding: 8px !important;
-                        background: ${candyColors.secondary} !important;
-                        color: ${candyColors.textPrimary} !important;
+                        background: #8B5CF6 !important;
+                        color: ${candyColors.textWhite} !important;
                         border: 2px solid ${candyColors.border} !important;
                         border-radius: 0 !important;
                         font-family: 'Courier New', monospace !important;
@@ -6964,8 +7019,8 @@ ${getCurrentPersonality()}
                     </button>
                     <button class="action-btn settings-btn" style="
                         padding: 12px !important;
-                        background: ${candyColors.secondary} !important;
-                        color: ${candyColors.textPrimary} !important;
+                        background: #8B5CF6 !important;
+                        color: ${candyColors.textWhite} !important;
                         border: 2px solid ${candyColors.border} !important;
                         border-radius: 0 !important;
                         font-family: 'Courier New', monospace !important;

@@ -4543,6 +4543,95 @@ ${getCurrentPersonality()}
         };
     };
 
+    // 强制更新到拓麻歌子系统
+    window.forceUpdateToTamagotchi = function() {
+        console.log('🔄 强制更新到拓麻歌子系统...');
+
+        // 备份重要数据
+        const backup = {
+            name: petData.name,
+            type: petData.type,
+            level: petData.level,
+            experience: petData.experience,
+            created: petData.created,
+            coins: petData.coins || 100
+        };
+
+        console.log('备份数据:', backup);
+
+        // 重置为拓麻歌子式数据结构
+        petData = {
+            ...backup,
+
+            // 拓麻歌子式数值
+            health: 50,
+            happiness: 50,
+            hunger: 50,
+            energy: 50,
+
+            // 拓麻歌子式生命状态
+            lifeStage: "baby",
+            age: 0,
+            isAlive: true,
+            deathReason: null,
+
+            // 拓麻歌子式护理状态
+            sickness: 0,
+            discipline: 50,
+            weight: 30,
+
+            // 时间记录
+            lastFeedTime: Date.now(),
+            lastPlayTime: Date.now(),
+            lastSleepTime: Date.now(),
+            lastUpdateTime: Date.now(),
+            lastCareTime: Date.now(),
+
+            // 拓麻歌子式计数器
+            careNeglectCount: 0,
+            sicknessDuration: 0,
+
+            // 商店系统
+            inventory: petData.inventory || {},
+
+            dataVersion: 4.0
+        };
+
+        // 应用拓麻歌子系统
+        applyTamagotchiSystem();
+
+        // 保存数据
+        savePetData();
+
+        // 强制刷新UI
+        if (typeof renderPetStatus === 'function') {
+            renderPetStatus();
+        }
+
+        console.log('✅ 强制更新完成！');
+        console.log('新的拓麻歌子数据:', petData);
+
+        toastr.success('🥚 已强制更新到拓麻歌子系统！请重新打开宠物界面查看。');
+
+        return petData;
+    };
+
+    // 强制清除缓存并重新加载
+    window.forceClearAndReload = function() {
+        console.log('🧹 强制清除缓存并重新加载...');
+
+        // 清除所有弹窗
+        $('.virtual-pet-popup-overlay').remove();
+        $('#virtual-pet-popup-overlay').remove();
+        $('#shop-modal').remove();
+
+        // 清除按钮
+        $('#virtual-pet-button').remove();
+
+        // 重新加载脚本
+        location.reload();
+    };
+
     // 检查数值增减逻辑
     window.checkValueChanges = function() {
         console.log('=== 🔍 数值增减逻辑检查 ===');
@@ -5888,15 +5977,7 @@ ${getCurrentPersonality()}
     function generateMobileUI() {
         console.log(`[UI] Generating mobile UI`);
         return `
-            <div class="pet-popup-header" style="
-                display: flex !important;
-                justify-content: center !important;
-                align-items: center !important;
-                margin-bottom: 15px !important;
-                padding-bottom: 12px !important;
-                border-bottom: 1px solid #40444b !important;
-            ">
-                <h2 style="margin: 0 !important; color: #7289da !important; font-size: 1.2em !important;">🐾 虚拟宠物</h2>
+            <div class="pet-popup-header" style="display: none;">
             </div>
 
             <div class="pet-main-content" style="
@@ -6119,15 +6200,7 @@ ${getCurrentPersonality()}
     function generateDesktopUI() {
         console.log(`[UI] Generating desktop UI`);
         return `
-            <div class="pet-popup-header" style="
-                display: flex !important;
-                justify-content: center !important;
-                align-items: center !important;
-                margin-bottom: 20px !important;
-                padding-bottom: 15px !important;
-                border-bottom: 1px solid #40444b !important;
-            ">
-                <h2 style="margin: 0 !important; color: #7289da !important; font-size: 1.4em !important;">🐾 虚拟宠物</h2>
+            <div class="pet-popup-header" style="display: none;">
             </div>
 
             <div class="pet-main-content" style="

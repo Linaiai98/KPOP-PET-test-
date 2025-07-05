@@ -234,17 +234,18 @@ jQuery(async () => {
      * 保存AI配置设置
      */
     function saveAISettings() {
+        const selectedModel = $('#ai-model-select').val() || $('#ai-model-input').val();
         const settings = {
             apiType: $('#ai-api-select').val(),
             apiUrl: $('#ai-url-input').val(),
             apiKey: $('#ai-key-input').val(),
-            apiModel: $('#ai-model-input').val(),
+            apiModel: selectedModel,
             lastTestTime: Date.now(),
             lastTestResult: $('#ai-connection-status').text().includes('✅')
         };
 
         localStorage.setItem(`${extensionName}-ai-settings`, JSON.stringify(settings));
-        console.log(`[${extensionName}] AI设置已保存:`, settings);
+        console.log(`[${extensionName}] AI设置已保存，模型: ${selectedModel}`);
     }
 
     /**
@@ -259,6 +260,17 @@ jQuery(async () => {
                 $('#ai-url-input').val(settings.apiUrl || '');
                 $('#ai-key-input').val(settings.apiKey || '');
                 $('#ai-model-input').val(settings.apiModel || '');
+
+                // 如果有保存的模型，也设置到下拉选择中
+                if (settings.apiModel) {
+                    const modelSelect = $('#ai-model-select');
+                    // 检查下拉中是否已有该选项
+                    if (modelSelect.find(`option[value="${settings.apiModel}"]`).length === 0) {
+                        // 如果没有，添加一个选项
+                        modelSelect.append(`<option value="${settings.apiModel}">${settings.apiModel}</option>`);
+                    }
+                    modelSelect.val(settings.apiModel);
+                }
 
                 // 根据API类型显示/隐藏配置输入框
                 toggleApiConfigInputs(settings.apiType);
@@ -303,6 +315,260 @@ jQuery(async () => {
             }
         } else {
             container.hide();
+        }
+    }
+
+    /**
+     * 从SillyTavern获取当前模型信息
+     */
+    function getSillyTavernModelInfo() {
+        try {
+            // 方法1: 使用SillyTavern的getContext API
+            if (window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
+                const context = window.SillyTavern.getContext();
+                console.log(`[${extensionName}] SillyTavern上下文:`, context);
+                return {
+                    api: context.mainApi || context.main_api,
+                    model: context.currentModel || context.model,
+                    context: context
+                };
+            }
+
+            // 方法2: 检查DOM元素
+            const apiElement = document.querySelector('#main_api');
+            const modelElement = document.querySelector('#model_select, #models_select, #model_openai_select, #model_claude_select');
+
+            if (apiElement && modelElement) {
+                return {
+                    api: apiElement.value,
+                    model: modelElement.value,
+                    context: null
+                };
+            }
+
+            // 方法3: 尝试从window对象获取
+            if (window.main_api && window.main_api.value) {
+                const modelSelect = document.querySelector(`#model_${window.main_api.value}_select`) ||
+                                 document.querySelector('#model_select');
+                return {
+                    api: window.main_api.value,
+                    model: modelSelect ? modelSelect.value : null,
+                    context: null
+                };
+            }
+
+            return { api: null, model: null, context: null };
+        } catch (error) {
+            console.error(`[${extensionName}] 获取SillyTavern模型信息失败:`, error);
+            return { api: null, model: null, context: null };
+        }
+    }
+
+    /**
+     * 获取可用模型列表
+     */
+    async function getAvailableModels(apiType, apiUrl, apiKey) {
+        console.log(`[${extensionName}] 获取${apiType}模型列表...`);
+
+        try {
+            let modelsEndpoint = '';
+            let headers = {
+                'Content-Type': 'application/json'
+            };
+
+            // 根据API类型构建请求
+            switch(apiType) {
+                case 'openai':
+                case 'custom':
+                    modelsEndpoint = apiUrl.replace(/\/$/, '') + '/models';
+                    if (!modelsEndpoint.includes('/v1/models')) {
+                        modelsEndpoint = apiUrl.replace(/\/$/, '') + '/v1/models';
+                    }
+                    headers['Authorization'] = `Bearer ${apiKey}`;
+                    break;
+
+                case 'anthropic':
+                    // Anthropic没有公开的模型列表API，返回预定义列表
+                    return [
+                        { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet (Latest)' },
+                        { id: 'claude-3-5-sonnet-20240620', name: 'Claude 3.5 Sonnet' },
+                        { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus' },
+                        { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet' },
+                        { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku' }
+                    ];
+
+                case 'google':
+                    modelsEndpoint = 'https://generativelanguage.googleapis.com/v1beta/models';
+                    headers['x-goog-api-key'] = apiKey;
+                    break;
+
+                default:
+                    // 尝试通用的/models端点
+                    modelsEndpoint = apiUrl.replace(/\/$/, '') + '/models';
+                    headers['Authorization'] = `Bearer ${apiKey}`;
+            }
+
+            console.log(`[${extensionName}] 请求模型列表: ${modelsEndpoint}`);
+
+            const response = await fetch(modelsEndpoint, {
+                method: 'GET',
+                headers: headers,
+                timeout: 10000
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            console.log(`[${extensionName}] 模型列表响应:`, data);
+
+            // 解析不同API的响应格式
+            let models = [];
+            if (data.data && Array.isArray(data.data)) {
+                // OpenAI格式
+                models = data.data.map(model => ({
+                    id: model.id,
+                    name: model.id,
+                    type: model.object || 'model'
+                }));
+            } else if (data.models && Array.isArray(data.models)) {
+                // Google AI格式
+                models = data.models.map(model => ({
+                    id: model.name.split('/').pop(),
+                    name: model.displayName || model.name.split('/').pop(),
+                    type: 'model'
+                }));
+            } else if (Array.isArray(data)) {
+                // 直接数组格式
+                models = data.map(model => ({
+                    id: typeof model === 'string' ? model : model.id,
+                    name: typeof model === 'string' ? model : (model.name || model.id),
+                    type: 'model'
+                }));
+            }
+
+            // 过滤出聊天模型
+            const chatModels = models.filter(model => {
+                const id = model.id.toLowerCase();
+                return !id.includes('embedding') &&
+                       !id.includes('whisper') &&
+                       !id.includes('tts') &&
+                       !id.includes('dall-e') &&
+                       !id.includes('vision') &&
+                       (id.includes('gpt') || id.includes('claude') || id.includes('gemini') ||
+                        id.includes('chat') || id.includes('text') || id.includes('instruct'));
+            });
+
+            console.log(`[${extensionName}] 找到${chatModels.length}个聊天模型`);
+            return chatModels;
+
+        } catch (error) {
+            console.error(`[${extensionName}] 获取模型列表失败:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * 获取SillyTavern当前模型并设置到配置中
+     */
+    function getSillyTavernCurrentModel() {
+        const modelInfo = getSillyTavernModelInfo();
+        const statusElement = $('#ai-connection-status');
+
+        if (modelInfo.api && modelInfo.model) {
+            // 设置API类型
+            $('#ai-api-select').val(modelInfo.api);
+
+            // 设置模型
+            const modelSelect = $('#ai-model-select');
+            const modelInput = $('#ai-model-input');
+
+            // 检查下拉中是否已有该模型
+            if (modelSelect.find(`option[value="${modelInfo.model}"]`).length === 0) {
+                // 如果没有，添加一个选项
+                modelSelect.append(`<option value="${modelInfo.model}">${modelInfo.model} (来自SillyTavern)</option>`);
+            }
+
+            modelSelect.val(modelInfo.model);
+            modelInput.val(modelInfo.model);
+
+            // 触发API类型变化事件
+            toggleApiConfigInputs(modelInfo.api);
+
+            // 保存设置
+            saveAISettings();
+
+            statusElement.text(`✅ 已获取SillyTavern模型: ${modelInfo.api}/${modelInfo.model}`).css('color', '#48bb78');
+            toastr.success(`成功获取SillyTavern当前模型: ${modelInfo.api}/${modelInfo.model}`);
+
+            console.log(`[${extensionName}] 获取到SillyTavern模型信息:`, modelInfo);
+        } else {
+            statusElement.text('⚠️ 无法获取SillyTavern模型信息').css('color', '#f6ad55');
+            toastr.warning('无法获取SillyTavern当前模型信息，请确保SillyTavern已正确配置');
+            console.log(`[${extensionName}] 未能获取SillyTavern模型信息:`, modelInfo);
+        }
+    }
+
+    /**
+     * 刷新模型下拉列表
+     */
+    async function refreshModelList() {
+        const refreshBtn = $('#refresh-models-btn');
+        const modelSelect = $('#ai-model-select');
+        const statusElement = $('#ai-connection-status');
+
+        // 获取当前API配置
+        const apiType = $('#ai-api-select').val();
+        const apiUrl = $('#ai-url-input').val();
+        const apiKey = $('#ai-key-input').val();
+
+        if (!apiType || !apiUrl || !apiKey) {
+            toastr.warning('请先完整填写API配置信息');
+            return;
+        }
+
+        // 显示加载状态
+        refreshBtn.prop('disabled', true).text('🔄 获取中...');
+        modelSelect.html('<option value="">🔄 正在获取模型列表...</option>');
+        statusElement.text('获取模型列表中...').css('color', '#4a9eff');
+
+        try {
+            const models = await getAvailableModels(apiType, apiUrl, apiKey);
+
+            // 清空并重新填充下拉列表
+            modelSelect.empty();
+
+            if (models.length === 0) {
+                modelSelect.append('<option value="">未找到可用模型</option>');
+                statusElement.text('⚠️ 未找到可用模型').css('color', '#f6ad55');
+            } else {
+                modelSelect.append('<option value="">请选择模型</option>');
+
+                models.forEach(model => {
+                    const option = $('<option></option>')
+                        .attr('value', model.id)
+                        .text(`${model.name}${model.type ? ` (${model.type})` : ''}`);
+                    modelSelect.append(option);
+                });
+
+                statusElement.text(`✅ 找到${models.length}个可用模型`).css('color', '#48bb78');
+                toastr.success(`成功获取${models.length}个可用模型`);
+
+                // 如果之前有选择的模型，尝试恢复选择
+                const savedModel = $('#ai-model-input').val();
+                if (savedModel && modelSelect.find(`option[value="${savedModel}"]`).length > 0) {
+                    modelSelect.val(savedModel);
+                }
+            }
+
+        } catch (error) {
+            console.error('获取模型列表失败:', error);
+            modelSelect.html('<option value="">获取模型失败</option>');
+            statusElement.text('❌ 获取模型失败').css('color', '#f56565');
+            toastr.error(`获取模型列表失败: ${error.message}`);
+        } finally {
+            refreshBtn.prop('disabled', false).text('🔄 刷新模型');
         }
     }
 
@@ -771,6 +1037,27 @@ ${getCurrentPersonality()}
         // 绑定API配置输入框事件
         $('#ai-url-input, #ai-key-input, #ai-model-input').on('input', function() {
             saveAISettings();
+        });
+
+        // 绑定模型选择下拉框事件
+        $('#ai-model-select').on('change', function() {
+            const selectedModel = $(this).val();
+            if (selectedModel) {
+                $('#ai-model-input').val(selectedModel);
+            }
+            saveAISettings();
+        });
+
+        // 绑定刷新模型按钮事件
+        $('#refresh-models-btn').on('click', function(e) {
+            e.preventDefault();
+            refreshModelList();
+        });
+
+        // 绑定获取SillyTavern当前模型按钮事件
+        $('#get-sillytavern-model-btn').on('click', function(e) {
+            e.preventDefault();
+            getSillyTavernCurrentModel();
         });
 
         $('#test-ai-connection-btn').on('click', function(e) {
@@ -2892,11 +3179,23 @@ ${getCurrentPersonality()}
                                        style="width: 100%; padding: 6px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
                             </div>
                             <div style="margin-bottom: 10px;">
-                                <label for="ai-model-input" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
+                                <label for="ai-model-select" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
                                     模型名称:
+                                    <button id="refresh-models-btn" type="button" style="margin-left: 10px; padding: 2px 8px; font-size: 0.8em; background: #4a9eff; color: white; border: none; border-radius: 3px; cursor: pointer;" title="从API获取可用模型列表">
+                                        🔄 刷新模型
+                                    </button>
+                                    <button id="get-sillytavern-model-btn" type="button" style="margin-left: 5px; padding: 2px 8px; font-size: 0.8em; background: #48bb78; color: white; border: none; border-radius: 3px; cursor: pointer;" title="获取SillyTavern当前模型">
+                                        📥 获取当前
+                                    </button>
                                 </label>
-                                <input id="ai-model-input" type="text" placeholder="例如: gpt-4, claude-3-sonnet"
-                                       style="width: 100%; padding: 6px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+                                <select id="ai-model-select" style="width: 100%; padding: 6px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+                                    <option value="">请先配置API并点击刷新模型</option>
+                                </select>
+                                <input id="ai-model-input" type="text" placeholder="或手动输入模型名称"
+                                       style="width: 100%; padding: 6px; margin-top: 5px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px; font-size: 0.85em;">
+                                <small style="color: #888; font-size: 0.8em; display: block; margin-top: 3px;">
+                                    优先使用下拉选择，如果下拉中没有所需模型可手动输入
+                                </small>
                             </div>
                         </div>
 

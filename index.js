@@ -302,43 +302,41 @@ jQuery(async () => {
     /**
      * 调用AI生成API
      * @param {string} prompt - 要发送给AI的提示词
-     * @param {number} timeout - 超时时间（毫秒），默认10秒
+     * @param {number} timeout - 超时时间（毫秒），默认15秒
      * @returns {Promise<string>} - AI生成的回复
      */
-    async function callAIAPI(prompt, timeout = 10000) {
-        return new Promise(async (resolve, reject) => {
-            // 设置超时
-            const timeoutId = setTimeout(() => {
-                reject(new Error('API调用超时'));
-            }, timeout);
+    async function callAIAPI(prompt, timeout = 15000) {
+        try {
+            let result = null;
 
-            try {
-                let result = null;
+            // 首先尝试使用自定义API配置
+            const settings = loadAISettings();
+            if (settings.apiType && settings.apiUrl && settings.apiKey) {
+                console.log(`[${extensionName}] 使用自定义API: ${settings.apiType}`);
+                result = await callCustomAPI(prompt, settings, timeout);
+            }
 
-                // 首先尝试使用自定义API配置
-                const settings = loadAISettings();
-                if (settings.apiType && settings.apiUrl && settings.apiKey) {
-                    console.log(`[${extensionName}] 使用自定义API: ${settings.apiType}`);
-                    result = await callCustomAPI(prompt, settings);
-                }
+            // 如果自定义API失败或不可用，回退到SillyTavern API
+            if (!result) {
+                if (typeof window.generateReply === 'function') {
+                    // 方法1：直接调用generateReply函数
+                    console.log(`[${extensionName}] 使用generateReply API`);
+                    result = await window.generateReply(prompt);
+                } else if (typeof window.SillyTavern !== 'undefined' && window.SillyTavern.generateReply) {
+                    // 方法2：通过SillyTavern命名空间调用
+                    console.log(`[${extensionName}] 使用SillyTavern.generateReply API`);
+                    result = await window.SillyTavern.generateReply(prompt);
+                } else if (typeof window.Generate !== 'undefined') {
+                    // 方法3：使用Generate函数
+                    console.log(`[${extensionName}] 使用Generate API`);
+                    result = await window.Generate(prompt);
+                } else {
+                    // 方法4：尝试通过fetch调用SillyTavern的内部API
+                    console.log(`[${extensionName}] 尝试通过fetch调用SillyTavern内部API`);
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-                // 如果自定义API失败或不可用，回退到SillyTavern API
-                if (!result) {
-                    if (typeof window.generateReply === 'function') {
-                        // 方法1：直接调用generateReply函数
-                        console.log(`[${extensionName}] 使用generateReply API`);
-                        result = await window.generateReply(prompt);
-                    } else if (typeof window.SillyTavern !== 'undefined' && window.SillyTavern.generateReply) {
-                        // 方法2：通过SillyTavern命名空间调用
-                        console.log(`[${extensionName}] 使用SillyTavern.generateReply API`);
-                        result = await window.SillyTavern.generateReply(prompt);
-                    } else if (typeof window.Generate !== 'undefined') {
-                        // 方法3：使用Generate函数
-                        console.log(`[${extensionName}] 使用Generate API`);
-                        result = await window.Generate(prompt);
-                    } else {
-                        // 方法4：尝试通过fetch调用SillyTavern的内部API
-                        console.log(`[${extensionName}] 尝试通过fetch调用SillyTavern内部API`);
+                    try {
                         const response = await fetch('/api/v1/generate', {
                             method: 'POST',
                             headers: {
@@ -348,8 +346,11 @@ jQuery(async () => {
                                 prompt: prompt,
                                 max_length: 100,
                                 temperature: 0.8
-                            })
+                            }),
+                            signal: controller.signal
                         });
+
+                        clearTimeout(timeoutId);
 
                         if (response.ok) {
                             const data = await response.json();
@@ -357,33 +358,37 @@ jQuery(async () => {
                         } else {
                             throw new Error(`SillyTavern API调用失败: ${response.status}`);
                         }
+                    } catch (error) {
+                        clearTimeout(timeoutId);
+                        if (error.name === 'AbortError') {
+                            throw new Error('SillyTavern API调用超时');
+                        }
+                        throw error;
                     }
                 }
-
-                clearTimeout(timeoutId);
-
-                // 验证返回结果
-                if (typeof result === 'string' && result.trim().length > 0) {
-                    resolve(result.trim());
-                } else {
-                    reject(new Error('API返回了空的或无效的回复'));
-                }
-
-            } catch (error) {
-                clearTimeout(timeoutId);
-                console.error(`[${extensionName}] API调用失败:`, error);
-                reject(error);
             }
-        });
+
+            // 验证返回结果
+            if (typeof result === 'string' && result.trim().length > 0) {
+                return result.trim();
+            } else {
+                throw new Error('API返回了空的或无效的回复');
+            }
+
+        } catch (error) {
+            console.error(`[${extensionName}] API调用失败:`, error);
+            throw error;
+        }
     }
 
     /**
      * 调用自定义API
      * @param {string} prompt - 要发送给AI的提示词
      * @param {object} settings - API配置设置
+     * @param {number} timeout - 超时时间（毫秒）
      * @returns {Promise<string>} - AI生成的回复
      */
-    async function callCustomAPI(prompt, settings) {
+    async function callCustomAPI(prompt, settings, timeout = 15000) {
         console.log(`[${extensionName}] 调用自定义API: ${settings.apiType}`);
 
         // 构建请求URL
@@ -435,33 +440,48 @@ jQuery(async () => {
             };
         }
 
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify(requestBody)
-        });
+        // 使用AbortController来处理超时
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-        console.log(`[${extensionName}] API响应状态: ${response.status} ${response.statusText}`);
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(requestBody),
+                signal: controller.signal
+            });
 
-        if (!response.ok) {
-            throw new Error(`自定义API调用失败: ${response.status} ${response.statusText}`);
+            clearTimeout(timeoutId);
+            console.log(`[${extensionName}] API响应状态: ${response.status} ${response.statusText}`);
+
+            if (!response.ok) {
+                throw new Error(`自定义API调用失败: ${response.status} ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            console.log(`[${extensionName}] API响应数据:`, data);
+
+            // 根据API类型解析响应
+            let result = '';
+            if (settings.apiType === 'openai' || settings.apiType === 'custom') {
+                result = data.choices?.[0]?.message?.content || data.choices?.[0]?.text || '';
+            } else if (settings.apiType === 'claude') {
+                result = data.content?.[0]?.text || '';
+            } else {
+                result = data.text || data.response || data.result || '';
+            }
+
+            console.log(`[${extensionName}] 解析出的结果:`, result);
+            return result.trim();
+
+        } catch (error) {
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                throw new Error('API调用超时');
+            }
+            throw error;
         }
-
-        const data = await response.json();
-        console.log(`[${extensionName}] API响应数据:`, data);
-
-        // 根据API类型解析响应
-        let result = '';
-        if (settings.apiType === 'openai' || settings.apiType === 'custom') {
-            result = data.choices?.[0]?.message?.content || data.choices?.[0]?.text || '';
-        } else if (settings.apiType === 'claude') {
-            result = data.content?.[0]?.text || '';
-        } else {
-            result = data.text || data.response || data.result || '';
-        }
-
-        console.log(`[${extensionName}] 解析出的结果:`, result);
-        return result.trim();
     }
 
     /**

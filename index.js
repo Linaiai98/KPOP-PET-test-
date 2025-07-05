@@ -75,22 +75,45 @@ jQuery(async () => {
         experience: '#87CEEB'    // 经验 - 天空蓝
     };
     
-    // 宠物数据结构 - 使用更平衡的初始数值
+    // 宠物数据结构 - 拓麻歌子式设计
     let petData = {
         name: "小宠物",
         type: "cat", // cat, dog, dragon, etc.
         level: 1,
         experience: 0,
-        health: 35,      // 40→35 降低初始值
-        happiness: 25,   // 30→25 降低初始值
-        hunger: 40,      // 50→40 降低初始值
-        energy: 50,      // 60→50 降低初始值
+        health: 50,      // 拓麻歌子式：中等起始值
+        happiness: 50,   // 拓麻歌子式：中等起始值
+        hunger: 50,      // 拓麻歌子式：中等起始值
+        energy: 50,      // 拓麻歌子式：中等起始值
+
+        // 拓麻歌子式生命状态
+        lifeStage: "baby",    // baby, child, teen, adult, senior
+        age: 0,               // 年龄（小时）
+        isAlive: true,        // 是否存活
+        deathReason: null,    // 死亡原因
+
+        // 拓麻歌子式护理状态
+        sickness: 0,          // 疾病程度 0-100
+        discipline: 50,       // 纪律值 0-100
+        weight: 30,           // 体重
+
+        // 时间记录
         lastFeedTime: Date.now(),
         lastPlayTime: Date.now(),
         lastSleepTime: Date.now(),
         lastUpdateTime: Date.now(),
+        lastCareTime: Date.now(),     // 最后照顾时间
         created: Date.now(),
-        dataVersion: 3.0 // 数据版本标记 - 升级到3.0表示新的平衡系统
+
+        // 拓麻歌子式计数器
+        careNeglectCount: 0,          // 忽视照顾次数
+        sicknessDuration: 0,          // 生病持续时间
+
+        // 商店系统
+        coins: 100,                   // 金币
+        inventory: {},                // 物品库存
+
+        dataVersion: 4.0 // 数据版本标记 - 升级到4.0表示拓麻歌子系统
     };
     
     // -----------------------------------------------------------------
@@ -738,48 +761,135 @@ ${getCurrentPersonality()}
     // -----------------------------------------------------------------
     
     /**
-     * 加载宠物数据
+     * 加载宠物数据（支持跨设备同步）
      */
     function loadPetData() {
-        const saved = localStorage.getItem(STORAGE_KEY_PET_DATA);
-        if (saved) {
+        // 首先尝试从同步存储加载
+        const syncData = loadFromSyncStorage();
+        const localData = localStorage.getItem(STORAGE_KEY_PET_DATA);
+
+        let savedData = null;
+        let dataSource = 'none';
+
+        // 比较同步数据和本地数据，选择最新的
+        if (syncData && localData) {
+            try {
+                const syncParsed = typeof syncData === 'object' ? syncData : JSON.parse(syncData);
+                const localParsed = JSON.parse(localData);
+
+                const syncTime = syncParsed.lastSyncTime || 0;
+                const localTime = localParsed.lastSyncTime || 0;
+
+                if (syncTime > localTime) {
+                    savedData = syncParsed;
+                    dataSource = 'sync';
+                    console.log(`[${extensionName}] 使用同步数据（更新）`);
+                } else {
+                    savedData = localParsed;
+                    dataSource = 'local';
+                    console.log(`[${extensionName}] 使用本地数据（更新）`);
+                }
+            } catch (error) {
+                console.warn(`[${extensionName}] 数据比较失败，使用本地数据:`, error);
+                savedData = JSON.parse(localData);
+                dataSource = 'local';
+            }
+        } else if (syncData) {
+            savedData = typeof syncData === 'object' ? syncData : JSON.parse(syncData);
+            dataSource = 'sync';
+            console.log(`[${extensionName}] 使用同步数据（仅有同步）`);
+        } else if (localData) {
+            savedData = JSON.parse(localData);
+            dataSource = 'local';
+            console.log(`[${extensionName}] 使用本地数据（仅有本地）`);
+        }
+
+        if (savedData) {
             try {
                 const savedData = JSON.parse(saved);
 
-                // 检查是否需要数据迁移
-                const needsMigration = !savedData.dataVersion || savedData.dataVersion < 3.0;
+                // 检查是否需要数据迁移到拓麻歌子系统
+                const needsMigration = !savedData.dataVersion || savedData.dataVersion < 4.0;
 
                 if (needsMigration) {
-                    console.log(`[${extensionName}] 检测到旧数据版本 ${savedData.dataVersion || '未知'}，执行数据迁移到3.0...`);
+                    console.log(`[${extensionName}] 检测到旧数据版本 ${savedData.dataVersion || '未知'}，执行数据迁移到拓麻歌子系统4.0...`);
 
-                    // 保留用户的自定义设置，但使用新的平衡数值
+                    // 迁移到拓麻歌子式数据结构
                     const migratedData = {
-                        ...petData, // 使用新的默认值（已经是平衡后的数值）
-                        name: savedData.name || petData.name, // 保留自定义名字
-                        type: savedData.type || petData.type, // 保留宠物类型
-                        level: savedData.level || petData.level, // 保留等级
-                        experience: savedData.experience || petData.experience, // 保留经验
-                        created: savedData.created || petData.created, // 保留创建时间
+                        // 保留基本信息
+                        name: savedData.name || petData.name,
+                        type: savedData.type || petData.type,
+                        level: savedData.level || petData.level,
+                        experience: savedData.experience || petData.experience,
+                        created: savedData.created || petData.created,
+
+                        // 基础数值（重置到拓麻歌子式中等值）
+                        health: 50,
+                        happiness: 50,
+                        hunger: 50,
+                        energy: 50,
+
+                        // 新增拓麻歌子式属性
+                        lifeStage: "baby",
+                        age: 0,
+                        isAlive: true,
+                        deathReason: null,
+                        sickness: 0,
+                        discipline: 50,
+                        weight: 30,
+
+                        // 时间记录
                         lastFeedTime: savedData.lastFeedTime || petData.lastFeedTime,
                         lastPlayTime: savedData.lastPlayTime || petData.lastPlayTime,
                         lastSleepTime: savedData.lastSleepTime || petData.lastSleepTime,
                         lastUpdateTime: savedData.lastUpdateTime || petData.lastUpdateTime,
-                        dataVersion: 3.0 // 标记为新版本数据（平衡调整版本）
+                        lastCareTime: Date.now(),
+
+                        // 拓麻歌子式计数器
+                        careNeglectCount: 0,
+                        sicknessDuration: 0,
+
+                        // 商店系统
+                        coins: savedData.coins || 100,
+                        inventory: savedData.inventory || {},
+
+                        dataVersion: 4.0 // 标记为拓麻歌子系统版本
                     };
 
                     petData = migratedData;
 
-                    // 应用平衡性调整到函数
-                    applyBalancedFunctions();
+                    // 应用拓麻歌子式函数
+                    applyTamagotchiSystem();
 
                     savePetData(); // 保存迁移后的数据
 
-                    console.log(`[${extensionName}] 数据迁移完成！平衡调整已应用`);
-                    console.log(`新数值 - 健康: ${petData.health}, 快乐: ${petData.happiness}, 饱食: ${petData.hunger}, 精力: ${petData.energy}`);
-                    toastr.info('数据已升级到新的平衡版本！数值增减更合理了。', '', { timeOut: 5000 });
+                    console.log(`[${extensionName}] 数据迁移完成！拓麻歌子系统已启用`);
+                    console.log(`新的拓麻歌子式宠物 - 生命阶段: ${petData.lifeStage}, 年龄: ${petData.age}小时`);
+
+                    toastr.info('🥚 欢迎来到拓麻歌子世界！你的宠物现在需要真正的照顾，请定期关注它的状态！', '', { timeOut: 8000 });
                 } else {
-                    // 数据版本正确，直接加载
-                    petData = { ...petData, ...savedData };
+                    // 数据版本正确，但检查是否需要重置过高数值
+                    const hasHighValues = savedData.happiness > 90 || savedData.hunger > 90 ||
+                                         savedData.health > 90 || savedData.energy > 90;
+
+                    if (hasHighValues) {
+                        console.log(`[${extensionName}] 检测到3.0版本数据中有过高数值，进行调整...`);
+
+                        // 保留大部分数据，但调整过高的数值
+                        petData = {
+                            ...savedData,
+                            health: Math.min(savedData.health, 75),
+                            happiness: Math.min(savedData.happiness, 75),
+                            hunger: Math.min(savedData.hunger, 75),
+                            energy: Math.min(savedData.energy, 75)
+                        };
+
+                        savePetData();
+                        toastr.info('检测到过高数值，已调整到合理范围', '', { timeOut: 4000 });
+                    } else {
+                        // 数据正常，直接加载
+                        petData = { ...petData, ...savedData };
+                    }
 
                     // 确保平衡性调整已应用
                     applyBalancedFunctions();
@@ -791,9 +901,9 @@ ${getCurrentPersonality()}
                 console.error(`[${extensionName}] Error loading pet data:`, error);
             }
         } else {
-            // 没有保存的数据，添加版本标记并应用平衡调整
-            petData.dataVersion = 3.0;
-            applyBalancedFunctions();
+            // 没有保存的数据，添加版本标记并应用拓麻歌子系统
+            petData.dataVersion = 4.0;
+            applyTamagotchiSystem();
             savePetData();
         }
     }
@@ -803,9 +913,78 @@ ${getCurrentPersonality()}
      */
     function savePetData() {
         try {
-            localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(petData));
+            // 添加时间戳用于同步
+            const dataWithTimestamp = {
+                ...petData,
+                lastSyncTime: Date.now()
+            };
+
+            localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(dataWithTimestamp));
+
+            // 同时保存到全局同步存储（如果可用）
+            saveToSyncStorage(dataWithTimestamp);
+
         } catch (error) {
             console.error(`[${extensionName}] Error saving pet data:`, error);
+        }
+    }
+
+    /**
+     * 保存到同步存储（跨设备）
+     */
+    function saveToSyncStorage(data) {
+        try {
+            // 使用一个特殊的键名用于跨设备同步
+            const syncKey = `${extensionName}-sync-data`;
+            localStorage.setItem(syncKey, JSON.stringify(data));
+
+            // 如果在SillyTavern环境中，尝试使用其他同步方法
+            if (typeof window.saveSettingsDebounced === 'function') {
+                // 利用SillyTavern的设置保存机制
+                const syncData = {
+                    [`${extensionName}_pet_data`]: data
+                };
+
+                // 尝试保存到SillyTavern的设置中
+                if (typeof window.extension_settings === 'object') {
+                    window.extension_settings[extensionName] = syncData;
+                    window.saveSettingsDebounced();
+                }
+            }
+
+            console.log(`[${extensionName}] 数据已保存到同步存储`);
+        } catch (error) {
+            console.warn(`[${extensionName}] 同步存储保存失败:`, error);
+        }
+    }
+
+    /**
+     * 从同步存储加载数据
+     */
+    function loadFromSyncStorage() {
+        try {
+            // 首先尝试从SillyTavern设置加载
+            if (typeof window.extension_settings === 'object' &&
+                window.extension_settings[extensionName] &&
+                window.extension_settings[extensionName][`${extensionName}_pet_data`]) {
+
+                const syncData = window.extension_settings[extensionName][`${extensionName}_pet_data`];
+                console.log(`[${extensionName}] 从SillyTavern设置加载同步数据`);
+                return syncData;
+            }
+
+            // 其次尝试从同步键加载
+            const syncKey = `${extensionName}-sync-data`;
+            const syncData = localStorage.getItem(syncKey);
+            if (syncData) {
+                console.log(`[${extensionName}] 从同步存储加载数据`);
+                return JSON.parse(syncData);
+            }
+
+            return null;
+        } catch (error) {
+            console.warn(`[${extensionName}] 同步存储加载失败:`, error);
+            return null;
         }
     }
     
@@ -976,8 +1155,22 @@ ${getCurrentPersonality()}
             petData.level++;
             petData.experience -= expNeeded;
             petData.health = Math.min(100, petData.health + 30); // 升级恢复部分健康
-            toastr.success(`🎉 ${petData.name} 升级了！现在是 ${petData.level} 级！`);
+
+            // 升级奖励金币
+            const coinReward = petData.level * 10;
+            gainCoins(coinReward);
+
+            toastr.success(`🎉 ${petData.name} 升级了！现在是 ${petData.level} 级！获得 ${coinReward} 金币奖励！`);
         }
+    }
+
+    /**
+     * 获得金币
+     */
+    function gainCoins(amount) {
+        if (!petData.coins) petData.coins = 100;
+        petData.coins += amount;
+        console.log(`💰 获得 ${amount} 金币，当前金币: ${petData.coins}`);
     }
 
     /**
@@ -1466,7 +1659,10 @@ ${getCurrentPersonality()}
                     <div class="pet-level" style="
                         color: #7289da !important;
                         font-size: 1em !important;
-                    ">Lv.${petData.level}</div>
+                    ">${petData.isAlive ?
+                        `${LIFE_STAGES[petData.lifeStage]?.emoji || '🐾'} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` :
+                        '💀 已死亡'
+                    }</div>
                 </div>
             </div>
             <div class="pet-stats">
@@ -1498,6 +1694,40 @@ ${getCurrentPersonality()}
                     </div>
                     <span>${Math.round(petData.energy)}/100</span>
                 </div>
+                ${petData.dataVersion >= 4.0 ? `
+                <div class="stat-bar">
+                    <label>疾病</label>
+                    <div class="progress-bar">
+                        <div class="progress-fill sickness" style="width: ${petData.sickness || 0}%; background-color: #ff6b6b;"></div>
+                    </div>
+                    <span>${Math.round(petData.sickness || 0)}/100</span>
+                </div>
+                <div class="stat-bar">
+                    <label>纪律</label>
+                    <div class="progress-bar">
+                        <div class="progress-fill discipline" style="width: ${petData.discipline || 50}%; background-color: #4ecdc4;"></div>
+                    </div>
+                    <span>${Math.round(petData.discipline || 50)}/100</span>
+                </div>
+                <div class="tamagotchi-info" style="
+                    margin-top: 10px;
+                    padding: 8px;
+                    background: rgba(255,255,255,0.1);
+                    border-radius: 5px;
+                    font-size: 0.9em;
+                    color: #ffffff;
+                ">
+                    <div>年龄: ${Math.round(petData.age || 0)}小时</div>
+                    <div>体重: ${petData.weight || 30}kg</div>
+                    <div>状态: ${petData.isAlive ? '健康' : '💀 死亡'}</div>
+                    ${petData.deathReason ? `<div style="color: #ff6b6b;">死因: ${
+                        petData.deathReason === 'sickness' ? '疾病' :
+                        petData.deathReason === 'neglect' ? '忽视' :
+                        petData.deathReason === 'disease' ? '严重疾病' :
+                        petData.deathReason === 'natural' ? '自然死亡' : '未知'
+                    }</div>` : ''}
+                </div>
+                ` : ''}
             </div>
         `;
         
@@ -1715,27 +1945,47 @@ ${getCurrentPersonality()}
             return;
         }
 
-        // 重置为初始状态
+        // 重置为拓麻歌子式初始状态
         petData = {
             name: "小宠物",
             type: "cat",
             level: 1,
             experience: 0,
-            health: 40,
-            happiness: 30,
+            health: 50,
+            happiness: 50,
             hunger: 50,
-            energy: 60,
+            energy: 50,
+
+            // 拓麻歌子式属性
+            lifeStage: "baby",
+            age: 0,
+            isAlive: true,
+            deathReason: null,
+            sickness: 0,
+            discipline: 50,
+            weight: 30,
+
+            // 时间记录
             lastFeedTime: Date.now(),
             lastPlayTime: Date.now(),
             lastSleepTime: Date.now(),
-            created: Date.now(),
             lastUpdateTime: Date.now(),
-            dataVersion: 3.0 // 数据版本标记
+            lastCareTime: Date.now(),
+            created: Date.now(),
+
+            // 拓麻歌子式计数器
+            careNeglectCount: 0,
+            sicknessDuration: 0,
+
+            dataVersion: 4.0 // 拓麻歌子系统版本
         };
+
+        // 应用拓麻歌子系统
+        applyTamagotchiSystem();
 
         savePetData();
         renderSettings();
-        toastr.success("宠物已重置！");
+        toastr.success("🥚 新的拓麻歌子宠物诞生了！请好好照顾它！");
     }
     
     /**
@@ -1978,7 +2228,7 @@ ${getCurrentPersonality()}
 
         // 使用内联样式确保按钮可见，强制使用fixed定位
         const buttonHtml = `
-            <div id="${BUTTON_ID}" title="虚拟宠物" style="
+            <div id="${BUTTON_ID}" style="
                 position: fixed !important;
                 z-index: 2147483647 !important;
                 cursor: grab !important;
@@ -2286,8 +2536,8 @@ ${getCurrentPersonality()}
             const simplePopupHtml = `
                 <div id="virtual-pet-popup-overlay" class="virtual-pet-popup-overlay">
                     <div id="virtual-pet-popup" class="pet-popup-container">
-                        <div class="pet-popup-header">
-                            <div class="pet-popup-title">🐾 虚拟宠物</div>
+                        <div class="pet-popup-header" style="display: none;">
+                            <div class="pet-popup-title"></div>
                         </div>
                         <div class="pet-popup-body">
                             <div id="pet-main-view" class="pet-view">
@@ -2324,8 +2574,10 @@ ${getCurrentPersonality()}
         // 4. 加载宠物数据
         loadPetData();
 
-        // 4.1 确保平衡函数已应用（对于已有的3.0版本数据）
-        if (petData.dataVersion >= 3.0) {
+        // 4.1 确保拓麻歌子系统已应用（对于已有的4.0版本数据）
+        if (petData.dataVersion >= 4.0) {
+            applyTamagotchiSystem();
+        } else if (petData.dataVersion >= 3.0) {
             applyBalancedFunctions();
         }
 
@@ -2501,7 +2753,7 @@ ${getCurrentPersonality()}
 
         // 创建按钮并强制设置样式，确保正确定位
         const buttonHtml = `
-            <div id="${BUTTON_ID}" title="虚拟宠物" style="
+            <div id="${BUTTON_ID}" style="
                 position: fixed !important;
                 z-index: 2147483647 !important;
                 cursor: grab !important;
@@ -3682,6 +3934,615 @@ ${getCurrentPersonality()}
         return result;
     };
 
+    // 强制重置过高数值到平衡范围
+    window.resetHighValues = function() {
+        console.log('🔧 检查并重置过高数值...');
+
+        const before = {
+            health: petData.health,
+            happiness: petData.happiness,
+            hunger: petData.hunger,
+            energy: petData.energy
+        };
+
+        console.log('重置前数值:', before);
+
+        // 检查是否有过高数值
+        const hasHighValues = petData.happiness > 80 || petData.hunger > 80 ||
+                             petData.health > 80 || petData.energy > 80;
+
+        if (!hasHighValues) {
+            console.log('✅ 数值都在合理范围内，无需重置');
+            toastr.info('数值都在合理范围内，无需重置');
+            return false;
+        }
+
+        // 重置过高数值到平衡范围
+        petData.health = Math.min(petData.health, 65);
+        petData.happiness = Math.min(petData.happiness, 65);
+        petData.hunger = Math.min(petData.hunger, 65);
+        petData.energy = Math.min(petData.energy, 65);
+
+        // 验证并保存
+        validateAndFixValues();
+        savePetData();
+        renderPetStatus();
+
+        const after = {
+            health: petData.health,
+            happiness: petData.happiness,
+            hunger: petData.hunger,
+            energy: petData.energy
+        };
+
+        console.log('重置后数值:', after);
+        console.log('✅ 过高数值已重置到平衡范围');
+
+        toastr.success('过高数值已重置！现在数值变化会更有趣。');
+
+        return {
+            before: before,
+            after: after,
+            reset: true,
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    // 手动同步数据
+    window.syncPetData = function() {
+        console.log('🔄 手动同步宠物数据...');
+
+        // 强制保存当前数据到同步存储
+        const dataWithTimestamp = {
+            ...petData,
+            lastSyncTime: Date.now()
+        };
+
+        saveToSyncStorage(dataWithTimestamp);
+        localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(dataWithTimestamp));
+
+        console.log('✅ 数据同步完成！');
+        toastr.success('宠物数据已同步到所有设备！');
+
+        return {
+            synced: true,
+            timestamp: new Date().toISOString(),
+            data: dataWithTimestamp
+        };
+    };
+
+    // 导出宠物数据
+    window.exportPetData = function() {
+        console.log('📤 导出宠物数据...');
+
+        const exportData = {
+            ...petData,
+            exportTime: Date.now(),
+            exportVersion: '3.0'
+        };
+
+        const dataStr = JSON.stringify(exportData, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+
+        // 创建下载链接
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `virtual-pet-data-${new Date().toISOString().split('T')[0]}.json`;
+
+        // 触发下载
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        console.log('✅ 宠物数据已导出！');
+        toastr.success('宠物数据已导出到文件！');
+
+        return exportData;
+    };
+
+    // 导入宠物数据
+    window.importPetData = function() {
+        console.log('📥 导入宠物数据...');
+
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+
+        input.onchange = function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+
+                    // 验证数据格式
+                    if (!importedData.name || typeof importedData.health !== 'number') {
+                        throw new Error('无效的宠物数据格式');
+                    }
+
+                    // 确认导入
+                    if (confirm(`确定要导入宠物数据吗？\n\n宠物名称: ${importedData.name}\n等级: ${importedData.level}\n这将覆盖当前数据！`)) {
+                        // 保留当前的时间戳，更新数据版本
+                        const mergedData = {
+                            ...importedData,
+                            lastSyncTime: Date.now(),
+                            dataVersion: 3.0
+                        };
+
+                        petData = mergedData;
+
+                        // 应用平衡函数
+                        applyBalancedFunctions();
+
+                        // 保存数据
+                        savePetData();
+
+                        // 更新UI
+                        renderPetStatus();
+                        if (typeof renderSettings === 'function') {
+                            renderSettings();
+                        }
+
+                        console.log('✅ 宠物数据导入成功！');
+                        toastr.success('宠物数据导入成功！');
+                    }
+                } catch (error) {
+                    console.error('导入失败:', error);
+                    toastr.error('导入失败：' + error.message);
+                }
+            };
+
+            reader.readAsText(file);
+        };
+
+        input.click();
+    };
+
+    // 检查同步状态
+    window.checkSyncStatus = function() {
+        console.log('🔍 检查数据同步状态...');
+
+        const localData = localStorage.getItem(STORAGE_KEY_PET_DATA);
+        const syncData = loadFromSyncStorage();
+
+        console.log('\n📱 本地数据:');
+        if (localData) {
+            try {
+                const local = JSON.parse(localData);
+                console.log(`- 最后同步时间: ${local.lastSyncTime ? new Date(local.lastSyncTime).toLocaleString() : '未设置'}`);
+                console.log(`- 宠物名称: ${local.name}`);
+                console.log(`- 等级: ${local.level}`);
+                console.log(`- 数据版本: ${local.dataVersion}`);
+            } catch (e) {
+                console.log('- 本地数据解析失败');
+            }
+        } else {
+            console.log('- 无本地数据');
+        }
+
+        console.log('\n☁️ 同步数据:');
+        if (syncData) {
+            try {
+                const sync = typeof syncData === 'object' ? syncData : JSON.parse(syncData);
+                console.log(`- 最后同步时间: ${sync.lastSyncTime ? new Date(sync.lastSyncTime).toLocaleString() : '未设置'}`);
+                console.log(`- 宠物名称: ${sync.name}`);
+                console.log(`- 等级: ${sync.level}`);
+                console.log(`- 数据版本: ${sync.dataVersion}`);
+            } catch (e) {
+                console.log('- 同步数据解析失败');
+            }
+        } else {
+            console.log('- 无同步数据');
+        }
+
+        console.log('\n🔄 同步建议:');
+        if (!localData && !syncData) {
+            console.log('- 这是新设备，数据将自动同步');
+        } else if (localData && !syncData) {
+            console.log('- 建议运行 syncPetData() 将本地数据同步到云端');
+        } else if (!localData && syncData) {
+            console.log('- 将自动从云端恢复数据');
+        } else {
+            try {
+                const local = JSON.parse(localData);
+                const sync = typeof syncData === 'object' ? syncData : JSON.parse(syncData);
+                const localTime = local.lastSyncTime || 0;
+                const syncTime = sync.lastSyncTime || 0;
+
+                if (localTime > syncTime) {
+                    console.log('- 本地数据较新，建议运行 syncPetData() 同步到云端');
+                } else if (syncTime > localTime) {
+                    console.log('- 云端数据较新，将自动使用云端数据');
+                } else {
+                    console.log('- 数据已同步');
+                }
+            } catch (e) {
+                console.log('- 数据比较失败，建议手动同步');
+            }
+        }
+
+        return {
+            hasLocal: !!localData,
+            hasSync: !!syncData,
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    // 测试拓麻歌子系统
+    window.testTamagotchiSystem = function() {
+        console.log('🥚 测试拓麻歌子系统...');
+
+        console.log('\n📊 当前拓麻歌子状态:');
+        console.log(`生命阶段: ${petData.lifeStage} (${LIFE_STAGES[petData.lifeStage]?.name})`);
+        console.log(`年龄: ${Math.round(petData.age)}小时`);
+        console.log(`是否存活: ${petData.isAlive ? '✅ 是' : '❌ 否'}`);
+        console.log(`疾病程度: ${petData.sickness}/100`);
+        console.log(`纪律值: ${petData.discipline}/100`);
+        console.log(`体重: ${petData.weight}kg`);
+        console.log(`忽视次数: ${petData.careNeglectCount}`);
+        console.log(`生病持续: ${Math.round(petData.sicknessDuration)}小时`);
+
+        if (petData.deathReason) {
+            console.log(`死亡原因: ${petData.deathReason}`);
+        }
+
+        console.log('\n⏰ 时间检查:');
+        const now = Date.now();
+        const timeSinceLastCare = now - petData.lastCareTime;
+        const hoursSinceLastCare = timeSinceLastCare / (1000 * 60 * 60);
+        console.log(`距离上次照顾: ${Math.round(hoursSinceLastCare * 100) / 100}小时`);
+
+        console.log('\n🎯 拓麻歌子式特性:');
+        console.log('- ✅ 真实时间流逝（不限制24小时）');
+        console.log('- ✅ 生命阶段系统');
+        console.log('- ✅ 死亡机制');
+        console.log('- ✅ 疾病系统');
+        console.log('- ✅ 忽视照顾惩罚');
+        console.log('- ✅ 体重管理');
+
+        console.log('\n🔧 可用命令:');
+        console.log('- feedPet() - 喂食');
+        console.log('- playWithPet() - 玩耍');
+        console.log('- petSleep() - 休息');
+        console.log('- healPet() - 治疗');
+        console.log('- resetPet() - 重新开始');
+
+        return {
+            lifeStage: petData.lifeStage,
+            age: petData.age,
+            isAlive: petData.isAlive,
+            sickness: petData.sickness,
+            discipline: petData.discipline,
+            weight: petData.weight,
+            careNeglectCount: petData.careNeglectCount,
+            hoursSinceLastCare: hoursSinceLastCare,
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    // 商店系统功能
+    function showShopModal() {
+        // 创建商店弹窗
+        const shopModal = $(`
+            <div id="shop-modal" style="
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100vw !important;
+                height: 100vh !important;
+                background-color: rgba(0, 0, 0, 0.8) !important;
+                z-index: 1000000 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                padding: 20px !important;
+                box-sizing: border-box !important;
+            ">
+                <div style="
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+                    border-radius: 15px !important;
+                    padding: 20px !important;
+                    max-width: 500px !important;
+                    width: 100% !important;
+                    max-height: 80vh !important;
+                    overflow-y: auto !important;
+                    color: white !important;
+                    box-shadow: 0 20px 40px rgba(0,0,0,0.3) !important;
+                ">
+                    <div style="
+                        display: flex !important;
+                        justify-content: space-between !important;
+                        align-items: center !important;
+                        margin-bottom: 20px !important;
+                        border-bottom: 1px solid rgba(255,255,255,0.2) !important;
+                        padding-bottom: 15px !important;
+                    ">
+                        <h2 style="margin: 0 !important; color: #ffd700 !important;">🛒 宠物商店</h2>
+                        <div style="color: #ffd700 !important; font-weight: bold !important;">
+                            💰 ${petData.coins || 100} 金币
+                        </div>
+                    </div>
+
+                    <div id="shop-categories" style="
+                        display: flex !important;
+                        gap: 10px !important;
+                        margin-bottom: 15px !important;
+                        flex-wrap: wrap !important;
+                    ">
+                        <button class="shop-category-btn" data-category="all" style="
+                            padding: 8px 15px !important;
+                            background: #ffd700 !important;
+                            color: #333 !important;
+                            border: none !important;
+                            border-radius: 20px !important;
+                            cursor: pointer !important;
+                            font-size: 0.9em !important;
+                            font-weight: bold !important;
+                        ">全部</button>
+                        <button class="shop-category-btn" data-category="food" style="
+                            padding: 8px 15px !important;
+                            background: rgba(255,255,255,0.2) !important;
+                            color: white !important;
+                            border: none !important;
+                            border-radius: 20px !important;
+                            cursor: pointer !important;
+                            font-size: 0.9em !important;
+                        ">🍎 食物</button>
+                        <button class="shop-category-btn" data-category="medicine" style="
+                            padding: 8px 15px !important;
+                            background: rgba(255,255,255,0.2) !important;
+                            color: white !important;
+                            border: none !important;
+                            border-radius: 20px !important;
+                            cursor: pointer !important;
+                            font-size: 0.9em !important;
+                        ">💊 药品</button>
+                        <button class="shop-category-btn" data-category="toy" style="
+                            padding: 8px 15px !important;
+                            background: rgba(255,255,255,0.2) !important;
+                            color: white !important;
+                            border: none !important;
+                            border-radius: 20px !important;
+                            cursor: pointer !important;
+                            font-size: 0.9em !important;
+                        ">🎮 玩具</button>
+                        <button class="shop-category-btn" data-category="special" style="
+                            padding: 8px 15px !important;
+                            background: rgba(255,255,255,0.2) !important;
+                            color: white !important;
+                            border: none !important;
+                            border-radius: 20px !important;
+                            cursor: pointer !important;
+                            font-size: 0.9em !important;
+                        ">✨ 特殊</button>
+                    </div>
+
+                    <div id="shop-items" style="
+                        display: grid !important;
+                        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important;
+                        gap: 15px !important;
+                        margin-bottom: 20px !important;
+                    ">
+                        ${generateShopItems('all')}
+                    </div>
+
+                    <div style="text-align: center !important;">
+                        <button onclick="closeShopModal()" style="
+                            padding: 10px 30px !important;
+                            background: #f04747 !important;
+                            color: white !important;
+                            border: none !important;
+                            border-radius: 25px !important;
+                            cursor: pointer !important;
+                            font-size: 1em !important;
+                        ">关闭商店</button>
+                    </div>
+                </div>
+            </div>
+        `);
+
+        $('body').append(shopModal);
+
+        // 绑定分类按钮事件
+        $('.shop-category-btn').on('click', function() {
+            const category = $(this).data('category');
+            $('.shop-category-btn').css({
+                'background': 'rgba(255,255,255,0.2)',
+                'color': 'white'
+            });
+            $(this).css({
+                'background': '#ffd700',
+                'color': '#333'
+            });
+            $('#shop-items').html(generateShopItems(category));
+        });
+
+        // 点击外部关闭
+        shopModal.on('click', function(e) {
+            if (e.target === this) {
+                closeShopModal();
+            }
+        });
+    }
+
+    function generateShopItems(category) {
+        let itemsHtml = '';
+
+        Object.entries(SHOP_ITEMS).forEach(([itemId, item]) => {
+            if (category === 'all' || item.category === category) {
+                const canAfford = (petData.coins || 100) >= item.price;
+                const ownedCount = petData.inventory[itemId] || 0;
+
+                itemsHtml += `
+                    <div class="shop-item" style="
+                        background: rgba(255,255,255,0.1) !important;
+                        border-radius: 10px !important;
+                        padding: 15px !important;
+                        text-align: center !important;
+                        border: 2px solid ${canAfford ? 'rgba(255,215,0,0.5)' : 'rgba(255,255,255,0.2)'} !important;
+                    ">
+                        <div style="font-size: 2em !important; margin-bottom: 8px !important;">
+                            ${item.emoji}
+                        </div>
+                        <div style="font-weight: bold !important; margin-bottom: 5px !important;">
+                            ${item.name}
+                        </div>
+                        <div style="font-size: 0.8em !important; color: rgba(255,255,255,0.8) !important; margin-bottom: 8px !important; min-height: 32px !important;">
+                            ${item.description}
+                        </div>
+                        <div style="color: #ffd700 !important; font-weight: bold !important; margin-bottom: 8px !important;">
+                            💰 ${item.price} 金币
+                        </div>
+                        ${ownedCount > 0 ? `
+                        <div style="color: #4ecdc4 !important; font-size: 0.8em !important; margin-bottom: 8px !important;">
+                            拥有: ${ownedCount}
+                        </div>
+                        ` : ''}
+                        <button onclick="buyItem('${itemId}')" style="
+                            padding: 8px 16px !important;
+                            background: ${canAfford ? '#43b581' : '#99aab5'} !important;
+                            color: white !important;
+                            border: none !important;
+                            border-radius: 20px !important;
+                            cursor: ${canAfford ? 'pointer' : 'not-allowed'} !important;
+                            font-size: 0.9em !important;
+                            width: 100% !important;
+                        " ${!canAfford ? 'disabled' : ''}>
+                            ${canAfford ? '购买' : '金币不足'}
+                        </button>
+                    </div>
+                `;
+            }
+        });
+
+        return itemsHtml || '<div style="text-align: center; color: rgba(255,255,255,0.6); padding: 20px;">该分类暂无商品</div>';
+    }
+
+    window.buyItem = function(itemId) {
+        const item = SHOP_ITEMS[itemId];
+        if (!item) return;
+
+        if ((petData.coins || 100) < item.price) {
+            toastr.error('金币不足！');
+            return;
+        }
+
+        if (!confirm(`确定要购买 ${item.name} 吗？\n价格：${item.price} 金币\n\n${item.description}`)) {
+            return;
+        }
+
+        // 扣除金币
+        petData.coins = (petData.coins || 100) - item.price;
+
+        // 添加到库存
+        if (!petData.inventory) petData.inventory = {};
+        petData.inventory[itemId] = (petData.inventory[itemId] || 0) + 1;
+
+        // 立即使用物品效果
+        useItem(itemId);
+
+        // 保存数据
+        savePetData();
+
+        // 更新商店显示
+        const currentCategory = $('.shop-category-btn').filter(function() {
+            return $(this).css('background-color') === 'rgb(255, 215, 0)' || $(this).css('background') === '#ffd700';
+        }).data('category') || 'all';
+
+        $('#shop-items').html(generateShopItems(currentCategory));
+        $('.shop-modal h2').next().html(`💰 ${petData.coins} 金币`);
+
+        toastr.success(`购买成功！${item.name} 已自动使用。`);
+    };
+
+    function useItem(itemId) {
+        const item = SHOP_ITEMS[itemId];
+        if (!item || !item.effect) return;
+
+        const effect = item.effect;
+
+        // 应用效果
+        if (effect.hunger) petData.hunger = Math.min(100, Math.max(0, petData.hunger + effect.hunger));
+        if (effect.happiness) petData.happiness = Math.min(100, Math.max(0, petData.happiness + effect.happiness));
+        if (effect.health) petData.health = Math.min(100, Math.max(0, petData.health + effect.health));
+        if (effect.energy) petData.energy = Math.min(100, Math.max(0, petData.energy + effect.energy));
+        if (effect.sickness) petData.sickness = Math.min(100, Math.max(0, (petData.sickness || 0) + effect.sickness));
+        if (effect.discipline) petData.discipline = Math.min(100, Math.max(0, (petData.discipline || 50) + effect.discipline));
+
+        // 特殊效果
+        if (effect.timeFreeze) {
+            // 时间胶囊效果 - 延迟下次更新时间
+            petData.lastUpdateTime = Date.now() + (effect.timeFreeze * 60 * 60 * 1000);
+            toastr.info(`⏰ 时间已暂停 ${effect.timeFreeze} 小时！`);
+        }
+
+        if (effect.revive && !petData.isAlive) {
+            // 复活石效果
+            petData.isAlive = true;
+            petData.deathReason = null;
+            petData.health = Math.max(20, petData.health - (effect.healthPenalty || 0));
+            petData.sickness = 0;
+            petData.careNeglectCount = 0;
+            toastr.success(`💎 ${petData.name} 复活了！但最大健康值降低了。`);
+        }
+
+        // 装饰品效果（持续加成）
+        if (effect.happinessBonus || effect.disciplineBonus) {
+            // 这些效果需要在状态更新时持续应用
+            if (!petData.activeDecorations) petData.activeDecorations = [];
+            if (!petData.activeDecorations.includes(itemId)) {
+                petData.activeDecorations.push(itemId);
+            }
+        }
+
+        validateAndFixValues();
+    }
+
+    window.closeShopModal = function() {
+        $('#shop-modal').remove();
+    };
+
+    // 测试商店系统
+    window.testShopSystem = function() {
+        console.log('🛒 测试商店系统...');
+
+        console.log('\n💰 当前金币状态:');
+        console.log(`金币: ${petData.coins || 100}`);
+
+        console.log('\n📦 当前库存:');
+        if (petData.inventory && Object.keys(petData.inventory).length > 0) {
+            Object.entries(petData.inventory).forEach(([itemId, count]) => {
+                const item = SHOP_ITEMS[itemId];
+                console.log(`${item ? item.emoji + ' ' + item.name : itemId}: ${count}`);
+            });
+        } else {
+            console.log('库存为空');
+        }
+
+        console.log('\n🏪 商店物品:');
+        Object.entries(SHOP_ITEMS).forEach(([itemId, item]) => {
+            const canAfford = (petData.coins || 100) >= item.price;
+            console.log(`${item.emoji} ${item.name} - ${item.price}金币 ${canAfford ? '✅' : '❌'}`);
+        });
+
+        console.log('\n🎮 可用命令:');
+        console.log('- openShop() - 打开商店');
+        console.log('- buyItem("itemId") - 购买物品');
+        console.log('- gainCoins(amount) - 获得金币');
+        console.log('- petData.coins = 1000 - 设置金币数量');
+
+        return {
+            coins: petData.coins || 100,
+            inventory: petData.inventory || {},
+            shopItems: Object.keys(SHOP_ITEMS).length,
+            timestamp: new Date().toISOString()
+        };
+    };
+
     // 检查数值增减逻辑
     window.checkValueChanges = function() {
         console.log('=== 🔍 数值增减逻辑检查 ===');
@@ -3867,7 +4728,411 @@ ${getCurrentPersonality()}
         };
     }
 
-    // 应用平衡后的函数（内部使用，自动调用）
+    // 拓麻歌子式生命阶段定义
+    const LIFE_STAGES = {
+        baby: { name: "幼体", duration: 24, emoji: "🥚" },      // 24小时
+        child: { name: "儿童", duration: 48, emoji: "🐣" },     // 48小时
+        teen: { name: "少年", duration: 72, emoji: "🐤" },      // 72小时
+        adult: { name: "成年", duration: 120, emoji: "🐦" },    // 120小时
+        senior: { name: "老年", duration: 48, emoji: "🦅" }     // 48小时后死亡
+    };
+
+    // 商店物品定义
+    const SHOP_ITEMS = {
+        // 食物类
+        basic_food: {
+            name: "基础食物",
+            emoji: "🍎",
+            price: 10,
+            category: "food",
+            description: "普通的食物，恢复饱食度",
+            effect: { hunger: 15, happiness: 2 }
+        },
+        premium_food: {
+            name: "高级食物",
+            emoji: "🍖",
+            price: 25,
+            category: "food",
+            description: "营养丰富的食物，恢复饱食度和健康",
+            effect: { hunger: 25, happiness: 5, health: 5 }
+        },
+        special_treat: {
+            name: "特殊零食",
+            emoji: "🍰",
+            price: 40,
+            category: "food",
+            description: "美味的零食，大幅提升快乐度",
+            effect: { hunger: 10, happiness: 20 }
+        },
+
+        // 药品类
+        medicine: {
+            name: "感冒药",
+            emoji: "💊",
+            price: 30,
+            category: "medicine",
+            description: "治疗轻微疾病",
+            effect: { sickness: -20, health: 10 }
+        },
+        super_medicine: {
+            name: "特效药",
+            emoji: "💉",
+            price: 80,
+            category: "medicine",
+            description: "治疗严重疾病，完全恢复健康",
+            effect: { sickness: -50, health: 30 }
+        },
+
+        // 玩具类
+        ball: {
+            name: "小球",
+            emoji: "⚽",
+            price: 20,
+            category: "toy",
+            description: "简单的玩具，提升快乐度和纪律",
+            effect: { happiness: 10, discipline: 5, energy: -5 }
+        },
+        robot_toy: {
+            name: "机器人玩具",
+            emoji: "🤖",
+            price: 60,
+            category: "toy",
+            description: "高科技玩具，大幅提升纪律和快乐",
+            effect: { happiness: 15, discipline: 15, energy: -3 }
+        },
+
+        // 特殊道具类
+        time_capsule: {
+            name: "时间胶囊",
+            emoji: "⏰",
+            price: 100,
+            category: "special",
+            description: "暂停时间流逝2小时，紧急时使用",
+            effect: { timeFreeze: 2 }
+        },
+        revival_stone: {
+            name: "复活石",
+            emoji: "💎",
+            price: 200,
+            category: "special",
+            description: "死亡后可以复活宠物，但会降低最大健康值",
+            effect: { revive: true, healthPenalty: 20 }
+        },
+        energy_drink: {
+            name: "能量饮料",
+            emoji: "🥤",
+            price: 35,
+            category: "special",
+            description: "快速恢复精力，但会增加疾病风险",
+            effect: { energy: 30, sickness: 5 }
+        },
+
+        // 装饰类
+        hat: {
+            name: "小帽子",
+            emoji: "🎩",
+            price: 50,
+            category: "decoration",
+            description: "可爱的装饰，持续提升快乐度",
+            effect: { happinessBonus: 2 }
+        },
+        bow_tie: {
+            name: "蝴蝶结",
+            emoji: "🎀",
+            price: 45,
+            category: "decoration",
+            description: "优雅的装饰，提升纪律值",
+            effect: { disciplineBonus: 3 }
+        }
+    };
+
+    // 应用拓麻歌子式系统（内部使用，自动调用）
+    function applyTamagotchiSystem() {
+        console.log('🥚 应用拓麻歌子式系统...');
+
+        // 重新定义更新状态函数 - 拓麻歌子式
+        window.updatePetStatus = function() {
+            if (!petData.isAlive) return; // 死亡后不再更新
+
+            const now = Date.now();
+            const timeSinceLastUpdate = now - (petData.lastUpdateTime || now);
+            const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
+
+            // 拓麻歌子式：不限制最大时间差，真实时间流逝
+            if (hoursElapsed > 0.1) { // 每6分钟更新一次
+
+                // 1. 年龄增长
+                petData.age += hoursElapsed;
+
+                // 2. 生命阶段检查
+                checkLifeStageProgression();
+
+                // 3. 拓麻歌子式衰减（更快更严格）
+                petData.hunger = Math.max(0, petData.hunger - hoursElapsed * 3);    // 每小时-3
+                petData.energy = Math.max(0, petData.energy - hoursElapsed * 2.5);  // 每小时-2.5
+                petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 2); // 每小时-2
+
+                // 4. 健康状况检查
+                checkHealthConditions(hoursElapsed);
+
+                // 5. 死亡检查
+                checkDeathConditions();
+
+                petData.lastUpdateTime = now;
+                validateAndFixValues();
+                savePetData();
+                checkAndSendNotifications();
+            }
+        };
+
+        // 重新定义喂食函数 - 拓麻歌子式
+        window.feedPet = async function() {
+            if (!petData.isAlive) {
+                toastr.error("💀 你的宠物已经死亡，无法喂食...");
+                return;
+            }
+
+            const now = Date.now();
+            const timeSinceLastFeed = now - petData.lastFeedTime;
+
+            if (timeSinceLastFeed < 30000) { // 30秒冷却
+                toastr.warning("宠物还不饿，等一会再喂吧！");
+                return;
+            }
+
+            // 拓麻歌子式喂食效果
+            petData.hunger = Math.min(100, petData.hunger + 20);
+            petData.happiness = Math.min(100, petData.happiness + 5);
+            petData.weight += 1; // 体重增加
+            petData.lastFeedTime = now;
+            petData.lastCareTime = now;
+            petData.careNeglectCount = Math.max(0, petData.careNeglectCount - 1);
+
+            // 过度喂食检查
+            if (petData.weight > 50) {
+                petData.sickness = Math.min(100, petData.sickness + 10);
+                toastr.warning("⚠️ 宠物吃得太多了，可能会生病！");
+            }
+
+            validateAndFixValues();
+            gainExperience(2);
+            gainCoins(3); // 喂食获得3金币
+            await handleAIReply('feed', `${petData.name} 吃得很开心！`);
+            savePetData();
+            renderPetStatus();
+        };
+
+        // 重新定义玩耍函数 - 拓麻歌子式
+        window.playWithPet = async function() {
+            if (!petData.isAlive) {
+                toastr.error("💀 你的宠物已经死亡，无法玩耍...");
+                return;
+            }
+
+            const now = Date.now();
+            const timeSinceLastPlay = now - petData.lastPlayTime;
+
+            if (timeSinceLastPlay < 45000) { // 45秒冷却
+                toastr.warning("宠物需要休息一下！");
+                return;
+            }
+
+            // 拓麻歌子式玩耍效果
+            petData.happiness = Math.min(100, petData.happiness + 15);
+            petData.energy = Math.max(0, petData.energy - 10);
+            petData.discipline = Math.min(100, petData.discipline + 5);
+            petData.weight = Math.max(10, petData.weight - 1); // 运动减重
+            petData.lastPlayTime = now;
+            petData.lastCareTime = now;
+            petData.careNeglectCount = Math.max(0, petData.careNeglectCount - 1);
+
+            validateAndFixValues();
+            gainExperience(3);
+            gainCoins(5); // 玩耍获得5金币
+            await handleAIReply('play', `${petData.name} 玩得很开心！`);
+            savePetData();
+            renderPetStatus();
+        };
+
+        // 重新定义睡觉函数 - 拓麻歌子式
+        window.petSleep = async function() {
+            if (!petData.isAlive) {
+                toastr.error("💀 你的宠物已经死亡，无法休息...");
+                return;
+            }
+
+            const now = Date.now();
+            const timeSinceLastSleep = now - petData.lastSleepTime;
+
+            if (timeSinceLastSleep < 120000) { // 2分钟冷却
+                toastr.warning("宠物还不困！");
+                return;
+            }
+
+            // 拓麻歌子式睡觉效果
+            petData.energy = Math.min(100, petData.energy + 25);
+            petData.health = Math.min(100, petData.health + 10);
+            petData.sickness = Math.max(0, petData.sickness - 5); // 睡觉有助于康复
+            petData.lastSleepTime = now;
+            petData.lastCareTime = now;
+
+            validateAndFixValues();
+            gainExperience(1);
+            gainCoins(2); // 睡觉获得2金币
+            await handleAIReply('sleep', `${petData.name} 睡得很香！`);
+            savePetData();
+            renderPetStatus();
+        };
+
+        // 添加治疗功能
+        window.healPet = async function() {
+            if (!petData.isAlive) {
+                toastr.error("💀 你的宠物已经死亡，无法治疗...");
+                return;
+            }
+
+            if (petData.sickness < 10) {
+                toastr.info("😊 你的宠物很健康，不需要治疗！");
+                return;
+            }
+
+            // 治疗效果
+            petData.sickness = Math.max(0, petData.sickness - 30);
+            petData.health = Math.min(100, petData.health + 15);
+            petData.sicknessDuration = 0;
+            petData.lastCareTime = Date.now();
+
+            validateAndFixValues();
+            await handleAIReply('heal', `${petData.name} 接受了治疗，感觉好多了！`);
+            savePetData();
+            renderPetStatus();
+
+            toastr.success("💊 治疗完成！宠物感觉好多了。");
+        };
+
+        // 添加商店功能
+        window.openShop = function() {
+            if (!petData.isAlive) {
+                toastr.error("💀 你的宠物已经死亡，无法使用商店...");
+                return;
+            }
+
+            showShopModal();
+        };
+
+        console.log('✅ 拓麻歌子式系统已应用！');
+    }
+
+    // 检查生命阶段进展
+    function checkLifeStageProgression() {
+        const currentStage = LIFE_STAGES[petData.lifeStage];
+        if (!currentStage) return;
+
+        if (petData.age >= currentStage.duration) {
+            const stages = Object.keys(LIFE_STAGES);
+            const currentIndex = stages.indexOf(petData.lifeStage);
+
+            if (currentIndex < stages.length - 1) {
+                // 进化到下一阶段
+                const nextStage = stages[currentIndex + 1];
+                petData.lifeStage = nextStage;
+                petData.age = 0; // 重置年龄计数
+
+                const nextStageInfo = LIFE_STAGES[nextStage];
+                toastr.success(`🎉 ${petData.name} 进化了！现在是${nextStageInfo.name}阶段 ${nextStageInfo.emoji}`);
+
+                // 进化时恢复一些状态
+                petData.health = Math.min(100, petData.health + 20);
+                petData.happiness = Math.min(100, petData.happiness + 15);
+            } else if (petData.lifeStage === 'senior') {
+                // 老年阶段结束，自然死亡
+                petData.isAlive = false;
+                petData.deathReason = "natural";
+                toastr.error("😢 " + petData.name + " 因为年老而安详地离开了...");
+            }
+        }
+    }
+
+    // 检查健康状况
+    function checkHealthConditions(hoursElapsed) {
+        // 饥饿影响健康
+        if (petData.hunger < 20) {
+            petData.health = Math.max(0, petData.health - hoursElapsed * 2);
+            petData.sickness = Math.min(100, petData.sickness + hoursElapsed * 1.5);
+        }
+
+        // 疲劳影响健康
+        if (petData.energy < 20) {
+            petData.health = Math.max(0, petData.health - hoursElapsed * 1);
+            petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 1.5);
+        }
+
+        // 不快乐影响健康
+        if (petData.happiness < 20) {
+            petData.health = Math.max(0, petData.health - hoursElapsed * 0.5);
+            petData.sickness = Math.min(100, petData.sickness + hoursElapsed * 0.5);
+        }
+
+        // 生病持续时间
+        if (petData.sickness > 50) {
+            petData.sicknessDuration += hoursElapsed;
+            if (petData.sicknessDuration > 24) { // 生病超过24小时
+                petData.health = Math.max(0, petData.health - hoursElapsed * 3);
+            }
+        } else {
+            petData.sicknessDuration = 0;
+        }
+
+        // 忽视照顾计数
+        const timeSinceLastCare = Date.now() - petData.lastCareTime;
+        if (timeSinceLastCare > 4 * 60 * 60 * 1000) { // 4小时没有照顾
+            petData.careNeglectCount++;
+            petData.lastCareTime = Date.now(); // 重置计时器
+        }
+    }
+
+    // 检查死亡条件
+    function checkDeathConditions() {
+        if (!petData.isAlive) return;
+
+        let deathReason = null;
+
+        // 健康值归零
+        if (petData.health <= 0) {
+            deathReason = "sickness";
+        }
+        // 长期忽视照顾
+        else if (petData.careNeglectCount >= 6) { // 6次忽视（24小时）
+            deathReason = "neglect";
+        }
+        // 严重疾病
+        else if (petData.sickness >= 100 && petData.sicknessDuration > 48) {
+            deathReason = "disease";
+        }
+
+        if (deathReason) {
+            petData.isAlive = false;
+            petData.deathReason = deathReason;
+
+            const deathMessages = {
+                sickness: "😢 " + petData.name + " 因为健康状况恶化而死亡了...",
+                neglect: "💔 " + petData.name + " 因为长期缺乏照顾而死亡了...",
+                disease: "🦠 " + petData.name + " 因为严重疾病而死亡了...",
+                natural: "😇 " + petData.name + " 因为年老而安详地离开了..."
+            };
+
+            toastr.error(deathMessages[deathReason], '', { timeOut: 10000 });
+
+            // 显示复活选项
+            setTimeout(() => {
+                if (confirm("💀 你的宠物死亡了！\n\n是否要重新开始养育新的宠物？\n（点击确定重新开始，取消保持当前状态）")) {
+                    resetPet();
+                }
+            }, 3000);
+        }
+    }
+
+    // 应用平衡后的函数（保留兼容性）
     function applyBalancedFunctions() {
         // 重新定义喂食函数 - 平衡后的版本
         window.feedPet = async function() {
@@ -4702,6 +5967,21 @@ ${getCurrentPersonality()}
                     </div>
                 </div>
 
+                <!-- 金币显示 -->
+                ${petData.dataVersion >= 4.0 ? `
+                <div class="pet-coins-section" style="
+                    text-align: center !important;
+                    padding: 8px !important;
+                    background: rgba(255,215,0,0.1) !important;
+                    border-radius: 6px !important;
+                    margin-bottom: 8px !important;
+                ">
+                    <span style="color: #ffd700 !important; font-weight: bold !important; font-size: 1em !important;">
+                        💰 ${petData.coins || 100} 金币
+                    </span>
+                </div>
+                ` : ''}
+
                 <!-- 操作按钮 -->
                 <div class="pet-actions-section" style="
                     display: grid !important;
@@ -4762,6 +6042,45 @@ ${getCurrentPersonality()}
                         <span style="font-size: 1em !important;">😴</span>
                         <span>休息</span>
                     </button>
+                    ${petData.dataVersion >= 4.0 && (petData.sickness || 0) > 10 ? `
+                    <button class="action-btn heal-btn" style="
+                        padding: 10px !important;
+                        background: #ff9ff3 !important;
+                        color: white !important;
+                        border: none !important;
+                        border-radius: 6px !important;
+                        font-size: 12px !important;
+                        cursor: pointer !important;
+                        min-height: 40px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 4px !important;
+                        transition: background 0.2s ease !important;
+                    ">
+                        <span style="font-size: 1em !important;">💊</span>
+                        <span>治疗</span>
+                    </button>
+                    ` : `
+                    <button class="action-btn shop-btn" style="
+                        padding: 10px !important;
+                        background: #feca57 !important;
+                        color: white !important;
+                        border: none !important;
+                        border-radius: 6px !important;
+                        font-size: 12px !important;
+                        cursor: pointer !important;
+                        min-height: 40px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 4px !important;
+                        transition: background 0.2s ease !important;
+                    ">
+                        <span style="font-size: 1em !important;">🛒</span>
+                        <span>商店</span>
+                    </button>
+                    `}
                     <button class="action-btn settings-btn" style="
                         padding: 10px !important;
                         background: #f04747 !important;
@@ -5164,7 +6483,7 @@ ${getCurrentPersonality()}
                 console.log("按钮数量:", buttons.length);
                 console.log("按钮文字:", buttons.map((i, btn) => $(btn).text().trim()).get());
 
-                if (popup.length > 0 && header.text().includes("虚拟宠物") && buttons.length === 4) {
+                if (popup.length > 0 && buttons.length === 4) {
                     console.log("✅ 统一UI测试成功！所有平台显示相同内容");
                 } else {
                     console.log("❌ 统一UI测试失败！内容不一致");

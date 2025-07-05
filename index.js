@@ -2092,9 +2092,9 @@ ${getCurrentPersonality()}
                             <textarea id="virtual-pet-custom-personality"
                                       placeholder="描述你的宠物性格、喜好和特点..."
                                       rows="3"
-                                      maxlength="500"
+                                      maxlength="1000"
                                       style="width: 100%; padding: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px; resize: vertical; font-family: inherit;"></textarea>
-                            <small style="color: #888; font-size: 0.8em;">最多500字符，这将影响宠物与你互动时的回复风格</small>
+                            <small style="color: #888; font-size: 0.8em;">最多1000字符，这将影响宠物与你互动时的回复风格</small>
                         </div>
 
                         <small class="notes" style="margin-top: 10px; display: block;">

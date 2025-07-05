@@ -1,6 +1,34 @@
 // 虚拟宠物系统 - SillyTavern插件
 console.log("🐾 虚拟宠物系统脚本开始加载...");
 
+// 加载冲突修复模块
+if (typeof window.VirtualPetSystem === 'undefined') {
+    // 如果冲突修复模块未加载，创建基础命名空间
+    window.VirtualPetSystem = {
+        version: '1.0.1',
+        namespace: 'virtual-pet-system',
+        initialized: false,
+        safeSaveSettings: function(data) {
+            // 基础的安全保存函数
+            try {
+                const extensionName = 'virtual-pet-system';
+                if (typeof window.saveSettingsDebounced === 'function' &&
+                    typeof window.extension_settings === 'object') {
+
+                    if (!window.extension_settings[extensionName]) {
+                        window.extension_settings[extensionName] = {};
+                    }
+
+                    window.extension_settings[extensionName].pet_data = JSON.parse(JSON.stringify(data));
+                    window.saveSettingsDebounced();
+                }
+            } catch (error) {
+                console.warn('[virtual-pet-system] 设置保存失败:', error);
+            }
+        }
+    };
+}
+
 // 使用 jQuery 确保在 DOM 加载完毕后执行我们的代码
 jQuery(async () => {
     console.log("🐾 jQuery ready, 开始初始化...");
@@ -19,6 +47,11 @@ jQuery(async () => {
     const STORAGE_KEY_ENABLED = "virtual-pet-enabled";
     const STORAGE_KEY_PET_DATA = "virtual-pet-data";
     const STORAGE_KEY_CUSTOM_AVATAR = "virtual-pet-custom-avatar";
+
+    // 降低z-index值以避免与其他插件冲突
+    const Z_INDEX_BUTTON = 10000;  // 降低按钮z-index
+    const Z_INDEX_POPUP = 10001;   // 降低弹窗z-index
+    const Z_INDEX_MODAL = 10002;   // 降低模态框z-index
     
     // DOM IDs and Selectors
     const BUTTON_ID = "virtual-pet-button";
@@ -993,15 +1026,33 @@ ${getCurrentPersonality()}
 
             // 如果在SillyTavern环境中，尝试使用其他同步方法
             if (typeof window.saveSettingsDebounced === 'function') {
-                // 利用SillyTavern的设置保存机制
+                // 利用SillyTavern的设置保存机制，使用命名空间避免冲突
                 const syncData = {
                     [`${extensionName}_pet_data`]: data
                 };
 
-                // 尝试保存到SillyTavern的设置中
+                // 尝试保存到SillyTavern的设置中，使用安全的方式避免与其他插件冲突
                 if (typeof window.extension_settings === 'object') {
-                    window.extension_settings[extensionName] = syncData;
-                    window.saveSettingsDebounced();
+                    // 确保不覆盖其他插件的设置
+                    if (!window.extension_settings[extensionName]) {
+                        window.extension_settings[extensionName] = {};
+                    }
+                    // 只更新我们自己的数据
+                    Object.assign(window.extension_settings[extensionName], syncData);
+
+                    // 使用VirtualPetSystem的安全保存方法
+                    if (window.VirtualPetSystem && window.VirtualPetSystem.safeSaveSettings) {
+                        window.VirtualPetSystem.safeSaveSettings(data);
+                    } else {
+                        // 使用防抖保存，避免频繁调用
+                        if (window.virtualPetSaveTimeout) {
+                            clearTimeout(window.virtualPetSaveTimeout);
+                        }
+                        window.virtualPetSaveTimeout = setTimeout(() => {
+                            window.saveSettingsDebounced();
+                            delete window.virtualPetSaveTimeout;
+                        }, 1000);
+                    }
                 }
             }
 
@@ -1016,7 +1067,15 @@ ${getCurrentPersonality()}
      */
     function loadFromSyncStorage() {
         try {
-            // 首先尝试从SillyTavern设置加载
+            // 使用VirtualPetSystem的安全加载方法
+            if (window.VirtualPetSystem && window.VirtualPetSystem.safeLoadSettings) {
+                const syncData = window.VirtualPetSystem.safeLoadSettings();
+                if (syncData) {
+                    return syncData;
+                }
+            }
+
+            // 备用方法：直接从SillyTavern设置加载
             if (typeof window.extension_settings === 'object' &&
                 window.extension_settings[extensionName] &&
                 window.extension_settings[extensionName][`${extensionName}_pet_data`]) {
@@ -1307,7 +1366,7 @@ ${getCurrentPersonality()}
                 width: 100vw !important;
                 height: 100vh !important;
                 background-color: rgba(0, 0, 0, 0.8) !important;
-                z-index: 999999 !important;
+                z-index: ${Z_INDEX_POPUP} !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
@@ -2463,7 +2522,7 @@ ${getCurrentPersonality()}
         const buttonHtml = `
             <div id="${BUTTON_ID}" style="
                 position: fixed !important;
-                z-index: 2147483647 !important;
+                z-index: ${Z_INDEX_BUTTON} !important;
                 cursor: grab !important;
                 width: 48px !important;
                 height: 48px !important;

@@ -441,13 +441,14 @@ jQuery(async () => {
             body: JSON.stringify(requestBody)
         });
 
-        console.log(`[${extensionName}] API响应:`, response);
+        console.log(`[${extensionName}] API响应状态: ${response.status} ${response.statusText}`);
 
         if (!response.ok) {
             throw new Error(`自定义API调用失败: ${response.status} ${response.statusText}`);
         }
 
         const data = await response.json();
+        console.log(`[${extensionName}] API响应数据:`, data);
 
         // 根据API类型解析响应
         let result = '';
@@ -459,6 +460,7 @@ jQuery(async () => {
             result = data.text || data.response || data.result || '';
         }
 
+        console.log(`[${extensionName}] 解析出的结果:`, result);
         return result.trim();
     }
 
@@ -538,7 +540,7 @@ ${getCurrentPersonality()}
                 try {
                     // 构建Prompt并调用AI
                     const prompt = buildInteractionPrompt(action);
-                    const aiReply = await callAIAPI(prompt, 8000); // 8秒超时
+                    const aiReply = await callAIAPI(prompt, 15000); // 15秒超时
 
                     // 清除加载提示
                     toastr.clear(loadingToast);

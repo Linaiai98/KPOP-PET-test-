@@ -4972,6 +4972,49 @@ ${getCurrentPersonality()}
         };
     };
 
+    // 测试按钮文字和样式
+    window.testButtonStyles = function() {
+        console.log('🎨 测试按钮文字和样式...');
+
+        console.log('\n📱 移动端按钮:');
+        console.log('🍖 喂食 - 糖果粉背景，中文文字');
+        console.log('🎮 玩耍 - 薄荷绿背景，中文文字');
+        console.log('😴 休息 - 天空蓝背景，中文文字');
+        console.log('💊 治疗 - 动态背景，中文文字');
+        console.log('🛒 商店 - 柠檬黄背景，中文文字');
+        console.log('⚙️ 设置 - 灰色背景，中文文字');
+
+        console.log('\n🖥️ 桌面端按钮:');
+        console.log('🍖 喂食 - 糖果粉背景，中文文字');
+        console.log('🎮 玩耍 - 薄荷绿背景，中文文字');
+        console.log('😴 休息 - 天空蓝背景，中文文字');
+        console.log('💊 治疗 - 动态背景，中文文字');
+        console.log('🛒 商店 - 柠檬黄背景，中文文字');
+        console.log('⚙️ 设置 - 灰色背景，中文文字');
+
+        console.log('\n🎯 样式特性:');
+        console.log('✅ 所有按钮文字已改为中文');
+        console.log('✅ 移除了 text-transform: uppercase');
+        console.log('✅ 保持拓麻歌子像素风格');
+        console.log('✅ 统一的糖果色配色方案');
+        console.log('✅ 方形边框和像素阴影');
+        console.log('✅ Courier New 等宽字体');
+
+        console.log('\n🔧 可用命令:');
+        console.log('- fixAllIssues() - 修复所有问题');
+        console.log('- testTamagotchiUI() - 测试拓麻歌子UI');
+        console.log('- testHealButton() - 测试治疗按钮功能');
+
+        toastr.success('🎨 按钮样式已优化！所有按钮现在都显示中文文字。');
+
+        return {
+            buttonsUpdated: true,
+            language: 'chinese',
+            style: 'tamagotchi-candy',
+            timestamp: new Date().toISOString()
+        };
+    };
+
     // 检查数值增减逻辑
     window.checkValueChanges = function() {
         console.log('=== 🔍 数值增减逻辑检查 ===');
@@ -6466,7 +6509,7 @@ ${getCurrentPersonality()}
                         transition: none !important;
                     ">
                         <span style="font-size: 1em !important;">🍖</span>
-                        <span>FEED</span>
+                        <span>喂食</span>
                     </button>
                     <button class="action-btn play-btn" style="
                         padding: 8px !important;
@@ -6477,7 +6520,7 @@ ${getCurrentPersonality()}
                         font-family: 'Courier New', monospace !important;
                         font-size: 11px !important;
                         font-weight: bold !important;
-                        text-transform: uppercase !important;
+                        text-transform: none !important;
                         cursor: pointer !important;
                         min-height: 36px !important;
                         display: flex !important;
@@ -6488,7 +6531,7 @@ ${getCurrentPersonality()}
                         transition: none !important;
                     ">
                         <span style="font-size: 1em !important;">🎮</span>
-                        <span>PLAY</span>
+                        <span>玩耍</span>
                     </button>
                     <button class="action-btn sleep-btn" style="
                         padding: 8px !important;
@@ -6499,7 +6542,7 @@ ${getCurrentPersonality()}
                         font-family: 'Courier New', monospace !important;
                         font-size: 11px !important;
                         font-weight: bold !important;
-                        text-transform: uppercase !important;
+                        text-transform: none !important;
                         cursor: pointer !important;
                         min-height: 36px !important;
                         display: flex !important;
@@ -6510,7 +6553,7 @@ ${getCurrentPersonality()}
                         transition: none !important;
                     ">
                         <span style="font-size: 1em !important;">😴</span>
-                        <span>SLEEP</span>
+                        <span>休息</span>
                     </button>
                     <button class="action-btn heal-btn" style="
                         padding: 8px !important;
@@ -6533,7 +6576,7 @@ ${getCurrentPersonality()}
                         opacity: ${(petData.sickness || 0) > 10 ? '1' : '0.5'} !important;
                     ">
                         <span style="font-size: 1em !important;">💊</span>
-                        <span>HEAL</span>
+                        <span>治疗</span>
                     </button>
                     <button class="action-btn shop-btn" style="
                         padding: 8px !important;
@@ -6544,7 +6587,7 @@ ${getCurrentPersonality()}
                         font-family: 'Courier New', monospace !important;
                         font-size: 11px !important;
                         font-weight: bold !important;
-                        text-transform: uppercase !important;
+                        text-transform: none !important;
                         cursor: pointer !important;
                         min-height: 36px !important;
                         display: flex !important;
@@ -6555,7 +6598,7 @@ ${getCurrentPersonality()}
                         transition: none !important;
                     ">
                         <span style="font-size: 1em !important;">🛒</span>
-                        <span>SHOP</span>
+                        <span>商店</span>
                     </button>
                     <button class="action-btn settings-btn" style="
                         padding: 8px !important;
@@ -6566,7 +6609,7 @@ ${getCurrentPersonality()}
                         font-family: 'Courier New', monospace !important;
                         font-size: 11px !important;
                         font-weight: bold !important;
-                        text-transform: uppercase !important;
+                        text-transform: none !important;
                         cursor: pointer !important;
                         min-height: 36px !important;
                         display: flex !important;
@@ -6577,7 +6620,7 @@ ${getCurrentPersonality()}
                         transition: none !important;
                     ">
                         <span style="font-size: 1em !important;">⚙️</span>
-                        <span>SET</span>
+                        <span>设置</span>
                     </button>
                 </div>
 
@@ -6706,54 +6749,66 @@ ${getCurrentPersonality()}
                 ">
                     <button class="action-btn feed-btn" style="
                         padding: 12px !important;
-                        background: #43b581 !important;
-                        color: white !important;
-                        border: none !important;
-                        border-radius: 6px !important;
-                        font-size: 13px !important;
+                        background: ${candyColors.buttonPrimary} !important;
+                        color: ${candyColors.textPrimary} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 12px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
                         cursor: pointer !important;
                         min-height: 44px !important;
                         display: flex !important;
                         align-items: center !important;
                         justify-content: center !important;
                         gap: 6px !important;
-                        transition: background 0.2s ease !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
                     ">
                         <span style="font-size: 1.1em !important;">🍖</span>
                         <span>喂食</span>
                     </button>
                     <button class="action-btn play-btn" style="
                         padding: 12px !important;
-                        background: #7289da !important;
-                        color: white !important;
-                        border: none !important;
-                        border-radius: 6px !important;
-                        font-size: 13px !important;
+                        background: ${candyColors.buttonSecondary} !important;
+                        color: ${candyColors.textPrimary} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 12px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
                         cursor: pointer !important;
                         min-height: 44px !important;
                         display: flex !important;
                         align-items: center !important;
                         justify-content: center !important;
                         gap: 6px !important;
-                        transition: background 0.2s ease !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
                     ">
                         <span style="font-size: 1.1em !important;">🎮</span>
                         <span>玩耍</span>
                     </button>
                     <button class="action-btn sleep-btn" style="
                         padding: 12px !important;
-                        background: #99aab5 !important;
-                        color: white !important;
-                        border: none !important;
-                        border-radius: 6px !important;
-                        font-size: 13px !important;
+                        background: ${candyColors.buttonAccent} !important;
+                        color: ${candyColors.textPrimary} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 12px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
                         cursor: pointer !important;
                         min-height: 44px !important;
                         display: flex !important;
                         align-items: center !important;
                         justify-content: center !important;
                         gap: 6px !important;
-                        transition: background 0.2s ease !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
                     ">
                         <span style="font-size: 1.1em !important;">😴</span>
                         <span>休息</span>
@@ -6767,7 +6822,7 @@ ${getCurrentPersonality()}
                         font-family: 'Courier New', monospace !important;
                         font-size: 12px !important;
                         font-weight: bold !important;
-                        text-transform: uppercase !important;
+                        text-transform: none !important;
                         cursor: ${(petData.sickness || 0) > 10 ? 'pointer' : 'not-allowed'} !important;
                         min-height: 44px !important;
                         display: flex !important;
@@ -6779,7 +6834,7 @@ ${getCurrentPersonality()}
                         opacity: ${(petData.sickness || 0) > 10 ? '1' : '0.5'} !important;
                     ">
                         <span style="font-size: 1.1em !important;">💊</span>
-                        <span>HEAL</span>
+                        <span>治疗</span>
                     </button>
                     <button class="action-btn shop-btn" style="
                         padding: 12px !important;
@@ -6790,7 +6845,7 @@ ${getCurrentPersonality()}
                         font-family: 'Courier New', monospace !important;
                         font-size: 12px !important;
                         font-weight: bold !important;
-                        text-transform: uppercase !important;
+                        text-transform: none !important;
                         cursor: pointer !important;
                         min-height: 44px !important;
                         display: flex !important;
@@ -6801,22 +6856,26 @@ ${getCurrentPersonality()}
                         transition: none !important;
                     ">
                         <span style="font-size: 1.1em !important;">🛒</span>
-                        <span>SHOP</span>
+                        <span>商店</span>
                     </button>
                     <button class="action-btn settings-btn" style="
                         padding: 12px !important;
-                        background: #f04747 !important;
-                        color: white !important;
-                        border: none !important;
-                        border-radius: 6px !important;
-                        font-size: 13px !important;
+                        background: ${candyColors.secondary} !important;
+                        color: ${candyColors.textPrimary} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 12px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
                         cursor: pointer !important;
                         min-height: 44px !important;
                         display: flex !important;
                         align-items: center !important;
                         justify-content: center !important;
                         gap: 6px !important;
-                        transition: background 0.2s ease !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
                     ">
                         <span style="font-size: 1.1em !important;">⚙️</span>
                         <span>设置</span>

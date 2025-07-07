@@ -208,13 +208,25 @@ jQuery(async () => {
             // 方法1: 直接调用各大API提供商的模型列表端点
             console.log(`[${extensionName}] 🌐 尝试直接调用后端API...`);
 
+            // 构建API提供商列表，优先使用用户配置的URL
             const apiProviders = [
                 {
-                    name: 'OpenAI',
+                    name: 'OpenAI (用户配置)',
                     type: 'openai',
                     endpoints: [
+                        userApiUrls.openai + '/models',
+                        userApiUrls.openai.replace('/v1', '') + '/v1/models'  // 备用格式
+                    ],
+                    requiresAuth: true,
+                    authHeader: 'Authorization',
+                    authPrefix: 'Bearer '
+                },
+                {
+                    name: 'OpenAI (官方)',
+                    type: 'openai_official',
+                    endpoints: [
                         'https://api.openai.com/v1/models',
-                        'https://api.openai.com/v1/engines'  // 备用端点
+                        'https://api.openai.com/v1/engines'
                     ],
                     requiresAuth: true,
                     authHeader: 'Authorization',
@@ -269,11 +281,17 @@ jQuery(async () => {
                 }
             ];
 
-            // 尝试从用户配置中获取API密钥
+            // 尝试从用户配置中获取API密钥和URL
             const userApiKeys = {
                 openai: $('#ai-key-input').val() || localStorage.getItem('openai_api_key'),
                 claude: localStorage.getItem('claude_api_key'),
                 google: localStorage.getItem('google_api_key')
+            };
+
+            const userApiUrls = {
+                openai: $('#ai-url-input').val() || 'https://api.openai.com/v1',
+                claude: 'https://api.anthropic.com/v1',
+                google: 'https://generativelanguage.googleapis.com/v1beta'
             };
 
             for (const provider of apiProviders) {
@@ -1257,13 +1275,49 @@ ${getCurrentPersonality()}
 
             try {
                 console.log(`[${extensionName}] 开始刷新API列表...`);
-                const apis = await getAvailableAPIs();
+
+                // 优先尝试获取用户配置的API模型
+                const userApiUrl = $('#ai-url-input').val();
+                const userApiKey = $('#ai-key-input').val();
+
+                let apis = [];
+
+                if (userApiUrl) {
+                    console.log(`[${extensionName}] 检测到用户配置的API，优先获取其模型列表...`);
+
+                    // 先尝试第三方API专用方法
+                    const thirdPartyModels = await getThirdPartyModels();
+                    if (thirdPartyModels.length > 0) {
+                        apis = thirdPartyModels;
+                        console.log(`[${extensionName}] 从第三方API获取到 ${thirdPartyModels.length} 个模型`);
+                    } else {
+                        // 备选：使用通用方法
+                        const userModels = await getUserConfiguredModels();
+                        if (userModels.length > 0) {
+                            apis = userModels;
+                            console.log(`[${extensionName}] 从用户配置API获取到 ${userModels.length} 个模型`);
+                        }
+                    }
+                }
+
+                // 如果用户配置的API没有返回模型，则尝试通用方法
+                if (apis.length === 0) {
+                    console.log(`[${extensionName}] 用户配置API未返回模型，尝试通用方法...`);
+                    apis = await getAvailableAPIs();
+                }
+
                 updateAPIDropdown(apis);
 
                 if (apis.length > 0) {
-                    toastr.success(`🎉 发现 ${apis.length} 个可用API！`, '', { timeOut: 3000 });
+                    const message = userApiUrl ?
+                        `🎉 从您的API获取到 ${apis.length} 个模型！` :
+                        `🎉 发现 ${apis.length} 个可用API！`;
+                    toastr.success(message, '', { timeOut: 4000 });
                 } else {
-                    toastr.info('未检测到额外的API，显示默认选项', '', { timeOut: 3000 });
+                    const message = userApiUrl ?
+                        '未能从您的API获取到模型，请检查URL和密钥配置' :
+                        '未检测到额外的API，显示默认选项';
+                    toastr.info(message, '', { timeOut: 4000 });
                 }
             } catch (error) {
                 console.error(`[${extensionName}] 刷新API列表失败:`, error);
@@ -8553,6 +8607,503 @@ ${getCurrentPersonality()}
             return null;
         }
     };
+
+    /**
+     * 获取用户配置API的模型列表
+     */
+    window.getUserConfiguredModels = async function() {
+        console.log("🎯 获取用户配置API的模型列表...");
+
+        const apiUrl = $('#ai-url-input').val();
+        const apiKey = $('#ai-key-input').val();
+
+        if (!apiUrl) {
+            console.log("❌ 未配置API URL");
+            return [];
+        }
+
+        console.log(`🔗 API URL: ${apiUrl}`);
+        console.log(`🔑 API Key: ${apiKey ? '已设置' : '未设置'}`);
+
+        // 构建模型列表端点
+        let modelsEndpoint = apiUrl;
+        if (!modelsEndpoint.endsWith('/models')) {
+            if (modelsEndpoint.endsWith('/')) {
+                modelsEndpoint += 'models';
+            } else {
+                modelsEndpoint += '/models';
+            }
+        }
+
+        console.log(`📡 尝试获取模型列表: ${modelsEndpoint}`);
+
+        try {
+            const headers = {
+                'Content-Type': 'application/json'
+            };
+
+            // 添加认证头
+            if (apiKey) {
+                headers['Authorization'] = `Bearer ${apiKey}`;
+            }
+
+            const response = await fetch(modelsEndpoint, {
+                method: 'GET',
+                headers: headers,
+                signal: AbortSignal.timeout(15000) // 15秒超时
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log(`✅ 成功获取模型列表:`, data);
+
+                // 解析模型数据
+                let models = [];
+                if (data.data && Array.isArray(data.data)) {
+                    // OpenAI格式
+                    models = data.data.map(model => ({
+                        id: model.id,
+                        name: model.id,
+                        type: 'user_configured',
+                        status: 'available',
+                        source: modelsEndpoint,
+                        provider: '用户配置API'
+                    }));
+                } else if (data.models && Array.isArray(data.models)) {
+                    // 其他格式
+                    models = data.models.map(model => ({
+                        id: typeof model === 'string' ? model : model.id || model.name,
+                        name: typeof model === 'string' ? model : model.id || model.name,
+                        type: 'user_configured',
+                        status: 'available',
+                        source: modelsEndpoint,
+                        provider: '用户配置API'
+                    }));
+                }
+
+                console.log(`📋 解析出 ${models.length} 个模型:`, models.map(m => m.name));
+                return models;
+
+            } else {
+                console.log(`❌ 获取模型列表失败: HTTP ${response.status}`);
+
+                // 尝试读取错误信息
+                try {
+                    const errorText = await response.text();
+                    console.log(`错误详情:`, errorText.substring(0, 200));
+                } catch (e) {
+                    console.log(`无法读取错误详情`);
+                }
+
+                return [];
+            }
+
+        } catch (error) {
+            console.log(`❌ 请求失败: ${error.message}`);
+            return [];
+        }
+    };
+
+    /**
+     * 刷新并显示用户配置的模型
+     */
+    window.refreshUserModels = async function() {
+        console.log("🔄 刷新用户配置的模型...");
+
+        const models = await getUserConfiguredModels();
+
+        if (models.length > 0) {
+            console.log(`🎉 发现 ${models.length} 个可用模型:`);
+            models.forEach((model, index) => {
+                console.log(`  ${index + 1}. ${model.name}`);
+            });
+
+            // 更新下拉列表
+            updateAPIDropdown(models);
+
+            toastr.success(`发现 ${models.length} 个可用模型！`, '🎉 模型获取成功', { timeOut: 5000 });
+        } else {
+            console.log("❌ 未发现任何模型");
+            toastr.warning('未发现任何模型，请检查API配置', '⚠️ 模型获取失败', { timeOut: 5000 });
+        }
+
+        return models;
+    };
+
+    /**
+     * 通用第三方API模型获取器 - 支持任意第三方API
+     */
+    window.getThirdPartyModels = async function() {
+        console.log("🌐 通用第三方API模型获取器启动...");
+
+        const apiUrl = $('#ai-url-input').val();
+        const apiKey = $('#ai-key-input').val();
+
+        if (!apiUrl) {
+            console.log("❌ 请先配置API URL");
+            return [];
+        }
+
+        console.log(`🔗 API URL: ${apiUrl}`);
+        console.log(`🔑 API Key: ${apiKey ? '已设置' : '未设置'}`);
+
+        // 智能检测API服务类型
+        let serviceType = 'unknown';
+        const urlLower = apiUrl.toLowerCase();
+
+        if (urlLower.includes('openai.com')) {
+            serviceType = 'openai_official';
+        } else if (urlLower.includes('anthropic.com')) {
+            serviceType = 'anthropic_official';
+        } else if (urlLower.includes('googleapis.com')) {
+            serviceType = 'google_official';
+        } else if (urlLower.includes('nyabit.com')) {
+            serviceType = 'nyabit';
+        } else if (urlLower.includes('api2d.com')) {
+            serviceType = 'api2d';
+        } else if (urlLower.includes('closeai') || urlLower.includes('openai-proxy')) {
+            serviceType = 'openai_proxy';
+        } else if (urlLower.includes('claude') || urlLower.includes('anthropic')) {
+            serviceType = 'claude_proxy';
+        } else if (urlLower.includes('gemini') || urlLower.includes('google')) {
+            serviceType = 'google_proxy';
+        } else if (urlLower.includes('localhost') || urlLower.includes('127.0.0.1')) {
+            serviceType = 'local_api';
+        } else {
+            serviceType = 'generic_third_party';
+        }
+
+        console.log(`🏷️ 检测到服务类型: ${serviceType}`);
+
+        // 构建可能的模型端点列表
+        const baseUrl = apiUrl.replace(/\/+$/, ''); // 移除末尾斜杠
+        const possibleEndpoints = [];
+
+        // 标准OpenAI兼容端点
+        possibleEndpoints.push(
+            `${baseUrl}/models`,
+            `${baseUrl}/v1/models`,
+            `${baseUrl}/api/models`,
+            `${baseUrl}/api/v1/models`,
+            `${baseUrl}/openai/v1/models`
+        );
+
+        // 其他常见端点格式
+        possibleEndpoints.push(
+            `${baseUrl}/engines`,
+            `${baseUrl}/v1/engines`,
+            `${baseUrl}/model/list`,
+            `${baseUrl}/models/list`,
+            `${baseUrl}/list/models`
+        );
+
+        // 特定服务的端点
+        if (serviceType === 'anthropic_official' || serviceType === 'claude_proxy') {
+            possibleEndpoints.push(`${baseUrl}/v1/models`);
+        }
+        if (serviceType === 'google_official' || serviceType === 'google_proxy') {
+            possibleEndpoints.push(`${baseUrl}/models`, `${baseUrl}/v1beta/models`);
+        }
+        if (serviceType === 'local_api') {
+            possibleEndpoints.push(
+                `${baseUrl}/api/tags`, // Ollama
+                `${baseUrl}/tags`,     // Ollama简化
+                `${baseUrl}/info`      // 一些本地API的信息端点
+            );
+        }
+
+        console.log(`📡 将尝试 ${possibleEndpoints.length} 个端点:`, possibleEndpoints);
+
+        // 尝试不同的认证方式
+        const authMethods = [];
+
+        if (apiKey) {
+            // 标准Bearer Token认证
+            authMethods.push({
+                name: 'Bearer Token',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            // Claude风格的x-api-key认证
+            authMethods.push({
+                name: 'x-api-key',
+                headers: {
+                    'x-api-key': apiKey,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            // 一些API使用的api-key头
+            authMethods.push({
+                name: 'api-key',
+                headers: {
+                    'api-key': apiKey,
+                    'Content-Type': 'application/json'
+                }
+            });
+        }
+
+        // 无认证方式（本地API）
+        authMethods.push({
+            name: 'No Auth',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        console.log(`🔐 将尝试 ${authMethods.length} 种认证方式`);
+
+        // 遍历所有端点和认证方式的组合
+        for (const endpoint of possibleEndpoints) {
+            for (const authMethod of authMethods) {
+                try {
+                    console.log(`🔍 测试: ${endpoint} (${authMethod.name})`);
+
+                    const response = await fetch(endpoint, {
+                        method: 'GET',
+                        headers: authMethod.headers,
+                        signal: AbortSignal.timeout(8000) // 8秒超时
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        console.log(`✅ 成功: ${endpoint} (${authMethod.name})`, data);
+
+                        // 通用模型数据解析器
+                        const models = parseModelsFromResponse(data, endpoint, serviceType);
+
+                        if (models.length > 0) {
+                            console.log(`🎉 成功获取 ${models.length} 个模型:`, models.map(m => m.name));
+                            return models;
+                        }
+                    } else if (response.status === 401 || response.status === 403) {
+                        console.log(`🔐 ${endpoint}: 认证失败 (${response.status}) - ${authMethod.name}`);
+                        // 继续尝试其他认证方式
+                    } else {
+                        console.log(`❌ ${endpoint}: HTTP ${response.status} - ${authMethod.name}`);
+
+                        // 对于非认证错误，尝试读取错误信息
+                        if (response.status !== 404) {
+                            try {
+                                const errorText = await response.text();
+                                if (errorText.length < 300) {
+                                    console.log(`错误详情:`, errorText);
+                                }
+                            } catch (e) {
+                                // 忽略错误读取失败
+                            }
+                        }
+                    }
+                } catch (error) {
+                    if (error.name === 'TimeoutError') {
+                        console.log(`⏰ ${endpoint}: 超时 - ${authMethod.name}`);
+                    } else if (error.message.includes('CORS')) {
+                        console.log(`🚫 ${endpoint}: CORS限制 - ${authMethod.name}`);
+                    } else {
+                        console.log(`❌ ${endpoint}: ${error.message} - ${authMethod.name}`);
+                    }
+                }
+            }
+        }
+
+        // 如果所有端点都失败，返回智能推荐的模型
+        console.log("⚠️ 无法从API获取模型列表，根据服务类型提供推荐模型");
+
+        return getRecommendedModels(serviceType, apiUrl);
+    };
+
+    /**
+     * 通用模型数据解析器
+     */
+    function parseModelsFromResponse(data, endpoint, serviceType) {
+        const models = [];
+
+        console.log(`🔍 解析响应数据，服务类型: ${serviceType}`);
+
+        // OpenAI标准格式: {data: [{id: "model-name", ...}, ...]}
+        if (data.data && Array.isArray(data.data)) {
+            console.log(`📋 检测到OpenAI标准格式，${data.data.length} 个模型`);
+            data.data.forEach(model => {
+                if (model.id || model.name) {
+                    models.push({
+                        id: model.id || model.name,
+                        name: model.id || model.name,
+                        type: 'third_party',
+                        status: 'available',
+                        source: endpoint,
+                        provider: `第三方API (${serviceType})`,
+                        details: model
+                    });
+                }
+            });
+        }
+
+        // 通用models数组格式: {models: [...]}
+        else if (data.models && Array.isArray(data.models)) {
+            console.log(`📋 检测到通用models格式，${data.models.length} 个模型`);
+            data.models.forEach(model => {
+                let modelId, modelName;
+
+                if (typeof model === 'string') {
+                    modelId = modelName = model;
+                } else if (model.id) {
+                    modelId = model.id;
+                    modelName = model.name || model.id;
+                } else if (model.name) {
+                    modelId = model.name;
+                    modelName = model.name;
+                } else if (model.model) {
+                    modelId = modelName = model.model;
+                }
+
+                if (modelId) {
+                    models.push({
+                        id: modelId,
+                        name: modelName,
+                        type: 'third_party',
+                        status: 'available',
+                        source: endpoint,
+                        provider: `第三方API (${serviceType})`,
+                        details: model
+                    });
+                }
+            });
+        }
+
+        // Ollama格式: {models: [{name: "model:tag", ...}, ...]}
+        else if (data.models && serviceType === 'local_api') {
+            console.log(`📋 检测到Ollama格式，${data.models.length} 个模型`);
+            data.models.forEach(model => {
+                if (model.name) {
+                    models.push({
+                        id: model.name,
+                        name: model.name,
+                        type: 'local_model',
+                        status: 'available',
+                        source: endpoint,
+                        provider: 'Ollama (本地)',
+                        details: model
+                    });
+                }
+            });
+        }
+
+        // 直接数组格式: ["model1", "model2", ...]
+        else if (Array.isArray(data)) {
+            console.log(`📋 检测到直接数组格式，${data.length} 个模型`);
+            data.forEach(model => {
+                if (typeof model === 'string') {
+                    models.push({
+                        id: model,
+                        name: model,
+                        type: 'third_party',
+                        status: 'available',
+                        source: endpoint,
+                        provider: `第三方API (${serviceType})`
+                    });
+                }
+            });
+        }
+
+        // 其他可能的格式
+        else if (data.result && Array.isArray(data.result)) {
+            console.log(`📋 检测到result数组格式，${data.result.length} 个模型`);
+            data.result.forEach(model => {
+                const modelId = typeof model === 'string' ? model : (model.id || model.name);
+                if (modelId) {
+                    models.push({
+                        id: modelId,
+                        name: modelId,
+                        type: 'third_party',
+                        status: 'available',
+                        source: endpoint,
+                        provider: `第三方API (${serviceType})`
+                    });
+                }
+            });
+        }
+
+        console.log(`✅ 解析完成，获得 ${models.length} 个模型`);
+        return models;
+    }
+
+    /**
+     * 根据服务类型获取推荐模型
+     */
+    function getRecommendedModels(serviceType, apiUrl) {
+        console.log(`🎯 为服务类型 ${serviceType} 生成推荐模型`);
+
+        let recommendedModels = [];
+
+        // 根据服务类型推荐不同的模型
+        switch (serviceType) {
+            case 'openai_official':
+            case 'openai_proxy':
+            case 'nyabit':
+            case 'api2d':
+            case 'generic_third_party':
+                recommendedModels = [
+                    { id: "gpt-4", name: "GPT-4" },
+                    { id: "gpt-4-turbo", name: "GPT-4 Turbo" },
+                    { id: "gpt-4-turbo-preview", name: "GPT-4 Turbo Preview" },
+                    { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo" },
+                    { id: "gpt-3.5-turbo-16k", name: "GPT-3.5 Turbo 16K" }
+                ];
+                break;
+
+            case 'anthropic_official':
+            case 'claude_proxy':
+                recommendedModels = [
+                    { id: "claude-3-opus-20240229", name: "Claude 3 Opus" },
+                    { id: "claude-3-sonnet-20240229", name: "Claude 3 Sonnet" },
+                    { id: "claude-3-haiku-20240307", name: "Claude 3 Haiku" },
+                    { id: "claude-2.1", name: "Claude 2.1" },
+                    { id: "claude-2.0", name: "Claude 2.0" }
+                ];
+                break;
+
+            case 'google_official':
+            case 'google_proxy':
+                recommendedModels = [
+                    { id: "gemini-pro", name: "Gemini Pro" },
+                    { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro" },
+                    { id: "gemini-pro-vision", name: "Gemini Pro Vision" }
+                ];
+                break;
+
+            case 'local_api':
+                recommendedModels = [
+                    { id: "llama2", name: "Llama 2" },
+                    { id: "codellama", name: "Code Llama" },
+                    { id: "mistral", name: "Mistral" },
+                    { id: "vicuna", name: "Vicuna" },
+                    { id: "alpaca", name: "Alpaca" }
+                ];
+                break;
+
+            default:
+                // 通用推荐
+                recommendedModels = [
+                    { id: "gpt-4", name: "GPT-4" },
+                    { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo" },
+                    { id: "claude-3-sonnet-20240229", name: "Claude 3 Sonnet" },
+                    { id: "gemini-pro", name: "Gemini Pro" }
+                ];
+        }
+
+        return recommendedModels.map(model => ({
+            id: model.id,
+            name: model.name,
+            type: 'recommended',
+            status: 'suggested',
+            source: 'recommendation',
+            provider: `推荐模型 (${serviceType})`,
+            note: '基于API类型的智能推荐'
+        }));
+    }
 
     /**
      * 测试AI回复功能

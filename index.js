@@ -1301,33 +1301,37 @@ jQuery(async () => {
     async function callCustomAPI(prompt, settings, timeout = 30000) {
         console.log(`[${extensionName}] 调用自定义API: ${settings.apiType}，超时时间: ${timeout}ms`);
 
-        // 智能构建请求URL - 修复移动端404问题
+        // 智能构建请求URL - 用户只需填写到/v1，自动添加端点
         let apiUrl = settings.apiUrl;
 
         // 移除末尾斜杠
         apiUrl = apiUrl.replace(/\/+$/, '');
 
-        // 智能添加正确的端点路径
-        if (settings.apiType === 'openai' || settings.apiType === 'custom') {
+        // 自动添加聊天端点 - 用户只需要填写到/v1
+        if (settings.apiType === 'openai' || settings.apiType === 'custom' || !settings.apiType) {
             if (!apiUrl.includes('/chat/completions')) {
-                // 检查是否已经包含v1路径
-                if (apiUrl.includes('/v1')) {
+                // 如果URL以/v1结尾，直接添加/chat/completions
+                if (apiUrl.endsWith('/v1')) {
                     apiUrl = apiUrl + '/chat/completions';
-                } else {
-                    // 智能判断是否需要添加/v1
-                    if (apiUrl.includes('api.openai.com') ||
-                        apiUrl.includes('localhost') ||
-                        apiUrl.includes('127.0.0.1') ||
-                        apiUrl.includes('/api/')) {
-                        apiUrl = apiUrl + '/v1/chat/completions';
-                    } else {
-                        apiUrl = apiUrl + '/chat/completions';
-                    }
+                }
+                // 如果URL不包含/v1，先添加/v1再添加/chat/completions
+                else if (!apiUrl.includes('/v1')) {
+                    apiUrl = apiUrl + '/v1/chat/completions';
+                }
+                // 如果URL包含/v1但不在末尾，直接添加/chat/completions
+                else {
+                    apiUrl = apiUrl + '/chat/completions';
                 }
             }
         } else if (settings.apiType === 'claude') {
             if (!apiUrl.includes('/messages')) {
-                apiUrl = apiUrl.includes('/v1') ? apiUrl + '/messages' : apiUrl + '/v1/messages';
+                if (apiUrl.endsWith('/v1')) {
+                    apiUrl = apiUrl + '/messages';
+                } else if (!apiUrl.includes('/v1')) {
+                    apiUrl = apiUrl + '/v1/messages';
+                } else {
+                    apiUrl = apiUrl + '/messages';
+                }
             }
         }
 
@@ -4073,8 +4077,11 @@ ${currentPersonality}
                                 <label for="ai-url-input" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
                                     API URL:
                                 </label>
-                                <input id="ai-url-input" type="text" placeholder="例如: https://api.openai.com/v1"
+                                <input id="ai-url-input" type="text" placeholder="例如: https://api.openai.com/v1 (只需填写到/v1，会自动添加端点)"
                                        style="width: 100%; padding: 6px; border-radius: 4px;">
+                                <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
+                                    💡 提示：只需填写到 /v1，插件会自动添加 /chat/completions 端点
+                                </div>
                             </div>
                             <div style="margin-bottom: 10px;">
                                 <label for="ai-key-input" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
@@ -10337,6 +10344,41 @@ ${currentPersonality}
     console.log("📱 移动端专用命令:");
     console.log("  - diagnoseMobileAPI() - 移动端API诊断");
     console.log("  - testMobileAPIConnection() - 测试移动端API连接");
+    console.log("  - testURLBuilder('your-url') - 测试URL自动构建功能");
+
+    /**
+     * 测试URL自动构建功能
+     */
+    window.testURLBuilder = function(inputUrl) {
+        console.log('🔧 测试URL自动构建功能...');
+        console.log('输入URL:', inputUrl);
+
+        // 模拟URL构建逻辑
+        let apiUrl = inputUrl;
+        apiUrl = apiUrl.replace(/\/+$/, '');
+
+        console.log('清理后URL:', apiUrl);
+
+        // OpenAI/Custom API类型的URL构建
+        if (!apiUrl.includes('/chat/completions')) {
+            let finalUrl;
+            if (apiUrl.endsWith('/v1')) {
+                finalUrl = apiUrl + '/chat/completions';
+                console.log('✅ 检测到/v1结尾，添加/chat/completions');
+            } else if (!apiUrl.includes('/v1')) {
+                finalUrl = apiUrl + '/v1/chat/completions';
+                console.log('✅ 未检测到/v1，添加/v1/chat/completions');
+            } else {
+                finalUrl = apiUrl + '/chat/completions';
+                console.log('✅ 检测到/v1但不在末尾，添加/chat/completions');
+            }
+            console.log('最终URL:', finalUrl);
+            return finalUrl;
+        } else {
+            console.log('✅ URL已包含/chat/completions，无需修改');
+            return apiUrl;
+        }
+    };
 
     /**
      * 测试新的提示词系统

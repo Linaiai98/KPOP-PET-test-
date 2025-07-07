@@ -62,31 +62,119 @@ jQuery(async () => {
         $(`#${styleId}`).remove();
 
         const isolatedCSS = `
-            /* 虚拟宠物插件样式隔离 */
-            .${STYLE_PREFIX}container * {
-                box-sizing: border-box !important;
-            }
+            /* 虚拟宠物插件样式隔离 - 安全版本 */
 
-            /* 确保只影响虚拟宠物相关元素 */
+            /* 只影响虚拟宠物相关元素 */
             #${BUTTON_ID} {
                 font-family: inherit !important;
                 line-height: normal !important;
+                box-sizing: border-box !important;
             }
 
             #${POPUP_ID}, #${OVERLAY_ID} {
                 font-family: inherit !important;
                 line-height: normal !important;
+                box-sizing: border-box !important;
             }
 
-            /* 防止影响其他悬浮元素 */
-            body > div:not([id*="virtual-pet"]):not([class*="virtual-pet"]) {
-                position: relative !important;
+            /* 虚拟宠物容器样式隔离 */
+            .${STYLE_PREFIX}container,
+            .${STYLE_PREFIX}container * {
+                box-sizing: border-box !important;
+            }
+
+            /* 确保虚拟宠物元素不被其他样式影响 */
+            [id*="virtual-pet"],
+            [class*="virtual-pet"] {
+                font-family: inherit !important;
             }
         `;
 
         $('head').append(`<style id="${styleId}">${isolatedCSS}</style>`);
-        console.log(`[${extensionName}] 样式隔离已应用`);
+        console.log(`[${extensionName}] 安全样式隔离已应用`);
     }
+
+    /**
+     * 紧急清除可能影响SillyTavern的样式
+     */
+    function emergencyStyleCleanup() {
+        console.log(`[${extensionName}] 🚨 执行紧急样式清理...`);
+
+        // 移除可能有问题的样式
+        $(`#${STYLE_PREFIX}isolated-styles`).remove();
+
+        // 清除任何可能影响body或全局的样式
+        $('style').each(function() {
+            const content = $(this).text();
+            if (content.includes('body >') ||
+                content.includes('position: relative !important') ||
+                content.includes('virtual-pet')) {
+                console.log(`[${extensionName}] 移除可疑样式:`, content.substring(0, 100));
+                $(this).remove();
+            }
+        });
+
+        // 重新应用安全的样式隔离
+        createIsolatedStyles();
+
+        console.log(`[${extensionName}] ✅ 紧急样式清理完成`);
+    }
+
+    // 全局紧急修复函数
+    window.emergencyFixSillyTavernUI = function() {
+        console.log('🚨 紧急修复SillyTavern UI...');
+
+        // 1. 移除所有虚拟宠物相关样式
+        $('style').each(function() {
+            const content = $(this).text();
+            if (content.includes('virtual-pet') ||
+                content.includes('body >') ||
+                content.includes('position: relative !important')) {
+                console.log('移除样式:', $(this).attr('id') || '匿名样式');
+                $(this).remove();
+            }
+        });
+
+        // 2. 重置body样式
+        $('body').removeAttr('style');
+        $('body').css({
+            'position': '',
+            'overflow': '',
+            'display': '',
+            'visibility': ''
+        });
+
+        // 3. 重置html样式
+        $('html').removeAttr('style');
+        $('html').css({
+            'position': '',
+            'overflow': '',
+            'display': '',
+            'visibility': ''
+        });
+
+        // 4. 移除虚拟宠物元素
+        $('[id*="virtual-pet"]').remove();
+        $('[class*="virtual-pet"]').remove();
+
+        // 5. 强制刷新页面布局
+        $('body').hide().show();
+
+        console.log('✅ 紧急修复完成！请刷新页面以完全恢复。');
+        alert('🚨 紧急修复完成！\n\n请按 Ctrl+F5 强制刷新页面以完全恢复SillyTavern界面。\n\n如果问题持续，请禁用虚拟宠物插件。');
+
+        return true;
+    };
+
+    // 立即执行紧急清理（如果检测到问题）
+    setTimeout(() => {
+        if ($('body').children().length === 0 ||
+            $('body').css('display') === 'none' ||
+            $('#send_textarea').length === 0) {
+            console.log(`[${extensionName}] 🚨 检测到SillyTavern UI问题，执行紧急修复...`);
+            window.emergencyFixSillyTavernUI();
+        }
+    }, 1000);
 
     /**
      * 安全的SillyTavern设置保存函数

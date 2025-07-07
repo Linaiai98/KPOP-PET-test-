@@ -41,6 +41,53 @@ jQuery(async () => {
     let lastSyncSaveTime = 0;
     const SYNC_SAVE_COOLDOWN = 2000; // 2秒冷却时间，避免频繁保存
 
+    // 安全的z-index值，避免影响其他插件
+    const SAFE_Z_INDEX = {
+        button: 10000,      // 悬浮按钮 - 低于其他悬浮插件
+        popup: 10001,       // 弹窗
+        overlay: 10000,     // 遮罩层
+        notification: 10002 // 通知
+    };
+
+    // 样式隔离前缀，确保不影响其他插件
+    const STYLE_PREFIX = 'virtual-pet-';
+
+    /**
+     * 创建样式隔离的CSS规则
+     */
+    function createIsolatedStyles() {
+        const styleId = `${STYLE_PREFIX}isolated-styles`;
+
+        // 如果已经存在，先移除
+        $(`#${styleId}`).remove();
+
+        const isolatedCSS = `
+            /* 虚拟宠物插件样式隔离 */
+            .${STYLE_PREFIX}container * {
+                box-sizing: border-box !important;
+            }
+
+            /* 确保只影响虚拟宠物相关元素 */
+            #${BUTTON_ID} {
+                font-family: inherit !important;
+                line-height: normal !important;
+            }
+
+            #${POPUP_ID}, #${OVERLAY_ID} {
+                font-family: inherit !important;
+                line-height: normal !important;
+            }
+
+            /* 防止影响其他悬浮元素 */
+            body > div:not([id*="virtual-pet"]):not([class*="virtual-pet"]) {
+                position: relative !important;
+            }
+        `;
+
+        $('head').append(`<style id="${styleId}">${isolatedCSS}</style>`);
+        console.log(`[${extensionName}] 样式隔离已应用`);
+    }
+
     /**
      * 安全的SillyTavern设置保存函数
      */
@@ -2234,7 +2281,7 @@ ${getCurrentPersonality()}
                 width: 100vw !important;
                 height: 100vh !important;
                 background-color: rgba(0, 0, 0, 0.8) !important;
-                z-index: 999999 !important;
+                z-index: ${SAFE_Z_INDEX.overlay} !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
@@ -2937,19 +2984,31 @@ ${getCurrentPersonality()}
 
             // 比较同步数据和本地数据，选择最新的
             if (syncAvatar && localAvatar) {
-                // 如果都存在，比较时间戳（如果有的话）或使用同步数据
+                // 如果都存在，优先使用同步数据
                 customAvatarData = syncAvatar;
-                console.log(`[${extensionName}] 使用同步的头像数据`);
+                // 同步到本地存储
+                localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, syncAvatar);
+                console.log(`[${extensionName}] 使用同步的头像数据并更新本地`);
             } else if (syncAvatar) {
                 customAvatarData = syncAvatar;
-                console.log(`[${extensionName}] 使用同步的头像数据（仅有同步）`);
+                // 同步到本地存储
+                localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, syncAvatar);
+                console.log(`[${extensionName}] 使用同步的头像数据（仅有同步）并保存到本地`);
             } else if (localAvatar) {
                 customAvatarData = localAvatar;
                 console.log(`[${extensionName}] 使用本地头像数据（仅有本地）`);
             }
 
             if (customAvatarData) {
-                console.log(`[${extensionName}] Custom avatar loaded`);
+                console.log(`[${extensionName}] Custom avatar loaded, size: ${Math.round(customAvatarData.length/1024)}KB`);
+
+                // 确保头像显示更新
+                setTimeout(() => {
+                    updateAvatarDisplay();
+                    updateFloatingButtonAvatar();
+                }, 100);
+            } else {
+                console.log(`[${extensionName}] No custom avatar found`);
             }
         } catch (error) {
             console.warn(`[${extensionName}] Failed to load custom avatar:`, error);
@@ -3415,7 +3474,7 @@ ${getCurrentPersonality()}
         const buttonHtml = `
             <div id="${BUTTON_ID}" style="
                 position: fixed !important;
-                z-index: 2147483647 !important;
+                z-index: ${SAFE_Z_INDEX.button} !important;
                 cursor: grab !important;
                 width: 48px !important;
                 height: 48px !important;
@@ -3457,7 +3516,7 @@ ${getCurrentPersonality()}
             'display': 'flex',
             'opacity': '1',
             'visibility': 'visible',
-            'z-index': '2147483647',
+            'z-index': SAFE_Z_INDEX.button,
             'transform': 'none',
             'margin': '0',
             'pointer-events': 'auto'
@@ -3558,7 +3617,7 @@ ${getCurrentPersonality()}
                         'top': '200px',
                         'left': '20px',
                         'transform': 'none',
-                        'z-index': '2147483647'
+                        'z-index': SAFE_Z_INDEX.button
                     });
                 }
             } else {
@@ -3694,7 +3753,10 @@ ${getCurrentPersonality()}
     async function initializeExtension() {
         console.log(`[${extensionName}] Initializing extension...`);
 
-        // 1. 动态加载CSS
+        // 1. 创建样式隔离
+        createIsolatedStyles();
+
+        // 2. 动态加载CSS
         console.log(`[${extensionName}] Loading CSS from: ${extensionFolderPath}/style.css`);
         $("head").append(`<link rel="stylesheet" type="text/css" href="${extensionFolderPath}/style.css">`);
 
@@ -3741,9 +3803,9 @@ ${getCurrentPersonality()}
                             <textarea id="virtual-pet-custom-personality"
                                       placeholder="描述你的宠物性格、喜好和特点..."
                                       rows="3"
-                                      maxlength="1000"
+                                      maxlength="5000"
                                       style="width: 100%; padding: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px; resize: vertical; font-family: inherit;"></textarea>
-                            <small style="color: #888; font-size: 0.8em;">最多1000字符，这将影响宠物与你互动时的回复风格</small>
+                            <small style="color: #888; font-size: 0.8em;">最多5000字符，这将影响宠物与你互动时的回复风格</small>
                         </div>
 
                         <small class="notes" style="margin-top: 10px; display: block;">
@@ -4079,7 +4141,7 @@ ${getCurrentPersonality()}
         const buttonHtml = `
             <div id="${BUTTON_ID}" style="
                 position: fixed !important;
-                z-index: 2147483647 !important;
+                z-index: ${SAFE_Z_INDEX.button} !important;
                 cursor: grab !important;
                 width: 48px !important;
                 height: 48px !important;
@@ -4168,7 +4230,7 @@ ${getCurrentPersonality()}
                 'left': '20px !important',
                 'width': '48px !important',
                 'height': '48px !important',
-                'z-index': '2147483647 !important',
+                'z-index': `${SAFE_Z_INDEX.button} !important`,
                 'display': 'flex !important',
                 'visibility': 'visible !important',
                 'opacity': '1 !important',
@@ -4269,7 +4331,7 @@ ${getCurrentPersonality()}
                 element.style.setProperty('top', newY + 'px', 'important');
                 element.style.setProperty('left', newX + 'px', 'important');
                 element.style.setProperty('transform', 'none', 'important');
-                element.style.setProperty('z-index', '2147483647', 'important');
+                element.style.setProperty('z-index', SAFE_Z_INDEX.button, 'important');
 
                 console.log(`🎯 移动到: ${newX}, ${newY}`);
             }
@@ -5389,6 +5451,51 @@ ${getCurrentPersonality()}
         }
 
         return syncResults;
+    };
+
+    // 专门测试头像同步
+    window.testAvatarSync = function() {
+        console.log('🎨 测试头像同步功能...');
+
+        // 检查本地头像
+        const localAvatar = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
+        console.log('本地头像:', localAvatar ? `存在 (${Math.round(localAvatar.length/1024)}KB)` : '不存在');
+
+        // 检查同步头像
+        const syncAvatar = loadAvatarFromSync();
+        console.log('同步头像:', syncAvatar ? `存在 (${Math.round(syncAvatar.length/1024)}KB)` : '不存在');
+
+        // 检查当前使用的头像
+        console.log('当前头像:', customAvatarData ? `已加载 (${Math.round(customAvatarData.length/1024)}KB)` : '未加载');
+
+        // 如果有同步头像但本地没有，尝试同步
+        if (syncAvatar && !localAvatar) {
+            console.log('🔄 发现同步头像，正在同步到本地...');
+            localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, syncAvatar);
+            customAvatarData = syncAvatar;
+            updateAvatarDisplay();
+            updateFloatingButtonAvatar();
+            console.log('✅ 头像同步完成');
+            toastr.success('头像已从云端同步！', '🎨 头像同步', { timeOut: 3000 });
+        } else if (localAvatar && !syncAvatar) {
+            console.log('🔄 发现本地头像，正在同步到云端...');
+            saveAvatarToSync(localAvatar);
+            console.log('✅ 头像已同步到云端');
+            toastr.success('头像已同步到云端！', '🎨 头像同步', { timeOut: 3000 });
+        } else if (syncAvatar && localAvatar) {
+            console.log('✅ 头像已在本地和云端同步');
+            toastr.info('头像已同步', '🎨 头像状态', { timeOut: 2000 });
+        } else {
+            console.log('ℹ️ 未发现自定义头像');
+            toastr.info('未发现自定义头像', '🎨 头像状态', { timeOut: 2000 });
+        }
+
+        return {
+            hasLocal: !!localAvatar,
+            hasSync: !!syncAvatar,
+            hasCurrent: !!customAvatarData,
+            timestamp: new Date().toISOString()
+        };
     };
 
     // 导出宠物数据
@@ -7730,7 +7837,7 @@ ${getCurrentPersonality()}
                 position: fixed;
                 top: 10px;
                 right: 10px;
-                z-index: 999999;
+                z-index: ${SAFE_Z_INDEX.popup};
                 background: #7289da;
                 color: white;
                 border: none;
@@ -7777,7 +7884,7 @@ ${getCurrentPersonality()}
                 width: 100vw !important;
                 height: 100vh !important;
                 background-color: rgba(0, 0, 0, 0.85) !important;
-                z-index: 999999 !important;
+                z-index: ${SAFE_Z_INDEX.popup} !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
@@ -8592,7 +8699,7 @@ ${getCurrentPersonality()}
                 padding: 12px 20px;
                 border-radius: 8px;
                 box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-                z-index: 999999;
+                z-index: ${SAFE_Z_INDEX.notification};
                 font-size: 14px;
                 max-width: 300px;
                 animation: slideIn 0.3s ease-out;
@@ -8620,7 +8727,7 @@ ${getCurrentPersonality()}
                 position: fixed;
                 bottom: 20px;
                 right: 20px;
-                z-index: 999999;
+                z-index: ${SAFE_Z_INDEX.popup};
                 background: #43b581;
                 color: white;
                 border: none;
@@ -8795,7 +8902,7 @@ ${getCurrentPersonality()}
             'display': 'flex',
             'opacity': '1',
             'visibility': 'visible',
-            'z-index': '2147483647'
+            'z-index': SAFE_Z_INDEX.button
         });
 
         // 清除可能有问题的保存位置

@@ -637,7 +637,7 @@ jQuery(async () => {
     }
 
     /**
-     * 保存AI配置设置
+     * 保存AI配置设置 - 支持多端同步
      */
     function saveAISettings() {
         // 获取当前选择的模型
@@ -661,21 +661,59 @@ jQuery(async () => {
             apiKey: $('#ai-key-input').val(),
             apiModel: currentModel,
             lastTestTime: Date.now(),
-            lastTestResult: $('#ai-connection-status').text().includes('✅')
+            lastTestResult: $('#ai-connection-status').text().includes('✅'),
+            lastSyncTime: Date.now() // 添加同步时间戳
         };
 
+        // 保存到本地存储
         localStorage.setItem(`${extensionName}-ai-settings`, JSON.stringify(settings));
-        console.log(`[${extensionName}] AI设置已保存:`, settings);
+
+        // 保存到同步存储
+        saveAISettingsToSync(settings);
+
+        console.log(`[${extensionName}] AI设置已保存并同步:`, settings);
     }
 
     /**
-     * 加载AI配置设置
+     * 加载AI配置设置 - 支持多端同步
      */
     function loadAISettings() {
         try {
-            const saved = localStorage.getItem(`${extensionName}-ai-settings`);
-            if (saved) {
-                const settings = JSON.parse(saved);
+            // 首先尝试从同步存储加载
+            const syncSettings = loadAISettingsFromSync();
+            const localSettings = localStorage.getItem(`${extensionName}-ai-settings`);
+
+            let settings = null;
+
+            // 比较同步数据和本地数据，选择最新的
+            if (syncSettings && localSettings) {
+                try {
+                    const syncParsed = typeof syncSettings === 'object' ? syncSettings : JSON.parse(syncSettings);
+                    const localParsed = JSON.parse(localSettings);
+
+                    const syncTime = syncParsed.lastSyncTime || 0;
+                    const localTime = localParsed.lastSyncTime || 0;
+
+                    if (syncTime > localTime) {
+                        settings = syncParsed;
+                        console.log(`[${extensionName}] 使用同步的AI设置（更新）`);
+                    } else {
+                        settings = localParsed;
+                        console.log(`[${extensionName}] 使用本地AI设置（更新）`);
+                    }
+                } catch (error) {
+                    console.warn(`[${extensionName}] AI设置比较失败，使用本地设置:`, error);
+                    settings = JSON.parse(localSettings);
+                }
+            } else if (syncSettings) {
+                settings = typeof syncSettings === 'object' ? syncSettings : JSON.parse(syncSettings);
+                console.log(`[${extensionName}] 使用同步的AI设置（仅有同步）`);
+            } else if (localSettings) {
+                settings = JSON.parse(localSettings);
+                console.log(`[${extensionName}] 使用本地AI设置（仅有本地）`);
+            }
+
+            if (settings) {
                 $('#ai-api-select').val(settings.apiType || '');
                 $('#ai-url-input').val(settings.apiUrl || '');
                 $('#ai-key-input').val(settings.apiKey || '');
@@ -1717,6 +1755,142 @@ ${getCurrentPersonality()}
             return null;
         }
     }
+
+    /**
+     * 保存AI设置到同步存储
+     */
+    function saveAISettingsToSync(settings) {
+        try {
+            // 使用专门的AI设置同步键
+            const syncKey = `${extensionName}-ai-settings-sync`;
+            localStorage.setItem(syncKey, JSON.stringify(settings));
+
+            // 如果在SillyTavern环境中，也保存到其设置中
+            if (typeof window.saveSettingsDebounced === 'function') {
+                if (typeof window.extension_settings === 'object') {
+                    if (!window.extension_settings[extensionName]) {
+                        window.extension_settings[extensionName] = {};
+                    }
+                    window.extension_settings[extensionName][`${extensionName}_ai_settings`] = settings;
+                    window.saveSettingsDebounced();
+                }
+            }
+
+            console.log(`[${extensionName}] AI设置已保存到同步存储`);
+        } catch (error) {
+            console.warn(`[${extensionName}] AI设置同步存储保存失败:`, error);
+        }
+    }
+
+    /**
+     * 从同步存储加载AI设置
+     */
+    function loadAISettingsFromSync() {
+        try {
+            // 首先尝试从SillyTavern设置加载
+            if (typeof window.extension_settings === 'object' &&
+                window.extension_settings[extensionName] &&
+                window.extension_settings[extensionName][`${extensionName}_ai_settings`]) {
+
+                const syncSettings = window.extension_settings[extensionName][`${extensionName}_ai_settings`];
+                console.log(`[${extensionName}] 从SillyTavern设置加载AI同步设置`);
+                return syncSettings;
+            }
+
+            // 其次尝试从同步键加载
+            const syncKey = `${extensionName}-ai-settings-sync`;
+            const syncSettings = localStorage.getItem(syncKey);
+            if (syncSettings) {
+                console.log(`[${extensionName}] 从同步存储加载AI设置`);
+                return JSON.parse(syncSettings);
+            }
+
+            return null;
+        } catch (error) {
+            console.warn(`[${extensionName}] AI设置同步存储加载失败:`, error);
+            return null;
+        }
+    }
+
+    /**
+     * 保存头像到同步存储
+     */
+    function saveAvatarToSync(avatarData) {
+        try {
+            // 使用专门的头像同步键
+            const syncKey = `${extensionName}-avatar-sync`;
+            localStorage.setItem(syncKey, avatarData);
+
+            // 如果在SillyTavern环境中，也保存到其设置中
+            if (typeof window.saveSettingsDebounced === 'function') {
+                if (typeof window.extension_settings === 'object') {
+                    if (!window.extension_settings[extensionName]) {
+                        window.extension_settings[extensionName] = {};
+                    }
+                    window.extension_settings[extensionName][`${extensionName}_avatar`] = avatarData;
+                    window.saveSettingsDebounced();
+                }
+            }
+
+            console.log(`[${extensionName}] 头像已保存到同步存储`);
+        } catch (error) {
+            console.warn(`[${extensionName}] 头像同步存储保存失败:`, error);
+        }
+    }
+
+    /**
+     * 从同步存储加载头像
+     */
+    function loadAvatarFromSync() {
+        try {
+            // 首先尝试从SillyTavern设置加载
+            if (typeof window.extension_settings === 'object' &&
+                window.extension_settings[extensionName] &&
+                window.extension_settings[extensionName][`${extensionName}_avatar`]) {
+
+                const syncAvatar = window.extension_settings[extensionName][`${extensionName}_avatar`];
+                console.log(`[${extensionName}] 从SillyTavern设置加载头像同步数据`);
+                return syncAvatar;
+            }
+
+            // 其次尝试从同步键加载
+            const syncKey = `${extensionName}-avatar-sync`;
+            const syncAvatar = localStorage.getItem(syncKey);
+            if (syncAvatar) {
+                console.log(`[${extensionName}] 从同步存储加载头像`);
+                return syncAvatar;
+            }
+
+            return null;
+        } catch (error) {
+            console.warn(`[${extensionName}] 头像同步存储加载失败:`, error);
+            return null;
+        }
+    }
+
+    /**
+     * 从同步存储清除头像
+     */
+    function clearAvatarFromSync() {
+        try {
+            // 清除同步键
+            const syncKey = `${extensionName}-avatar-sync`;
+            localStorage.removeItem(syncKey);
+
+            // 如果在SillyTavern环境中，也从其设置中清除
+            if (typeof window.saveSettingsDebounced === 'function') {
+                if (typeof window.extension_settings === 'object' &&
+                    window.extension_settings[extensionName]) {
+                    delete window.extension_settings[extensionName][`${extensionName}_avatar`];
+                    window.saveSettingsDebounced();
+                }
+            }
+
+            console.log(`[${extensionName}] 头像已从同步存储清除`);
+        } catch (error) {
+            console.warn(`[${extensionName}] 头像同步存储清除失败:`, error);
+        }
+    }
     
     /**
      * 验证并修复数值范围
@@ -2677,13 +2851,28 @@ ${getCurrentPersonality()}
     }
 
     /**
-     * 加载自定义头像数据
+     * 加载自定义头像数据 - 支持多端同步
      */
     function loadCustomAvatar() {
         try {
-            const saved = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
-            if (saved) {
-                customAvatarData = saved;
+            // 首先尝试从同步存储加载
+            const syncAvatar = loadAvatarFromSync();
+            const localAvatar = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
+
+            // 比较同步数据和本地数据，选择最新的
+            if (syncAvatar && localAvatar) {
+                // 如果都存在，比较时间戳（如果有的话）或使用同步数据
+                customAvatarData = syncAvatar;
+                console.log(`[${extensionName}] 使用同步的头像数据`);
+            } else if (syncAvatar) {
+                customAvatarData = syncAvatar;
+                console.log(`[${extensionName}] 使用同步的头像数据（仅有同步）`);
+            } else if (localAvatar) {
+                customAvatarData = localAvatar;
+                console.log(`[${extensionName}] 使用本地头像数据（仅有本地）`);
+            }
+
+            if (customAvatarData) {
                 console.log(`[${extensionName}] Custom avatar loaded`);
             }
         } catch (error) {
@@ -2692,13 +2881,18 @@ ${getCurrentPersonality()}
     }
 
     /**
-     * 保存自定义头像数据
+     * 保存自定义头像数据 - 支持多端同步
      */
     function saveCustomAvatar(imageData) {
         try {
+            // 保存到本地存储
             localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, imageData);
             customAvatarData = imageData;
-            console.log(`[${extensionName}] Custom avatar saved`);
+
+            // 保存到同步存储
+            saveAvatarToSync(imageData);
+
+            console.log(`[${extensionName}] Custom avatar saved and synced`);
             return true;
         } catch (error) {
             console.error(`[${extensionName}] Failed to save custom avatar:`, error);
@@ -2707,13 +2901,18 @@ ${getCurrentPersonality()}
     }
 
     /**
-     * 清除自定义头像
+     * 清除自定义头像 - 支持多端同步
      */
     function clearCustomAvatar() {
         try {
+            // 清除本地存储
             localStorage.removeItem(STORAGE_KEY_CUSTOM_AVATAR);
             customAvatarData = null;
-            console.log(`[${extensionName}] Custom avatar cleared`);
+
+            // 清除同步存储
+            clearAvatarFromSync();
+
+            console.log(`[${extensionName}] Custom avatar cleared and synced`);
             return true;
         } catch (error) {
             console.error(`[${extensionName}] Failed to clear custom avatar:`, error);
@@ -5037,7 +5236,7 @@ ${getCurrentPersonality()}
         };
     };
 
-    // 手动同步数据
+    // 手动同步宠物数据
     window.syncPetData = function() {
         console.log('🔄 手动同步宠物数据...');
 
@@ -5050,7 +5249,7 @@ ${getCurrentPersonality()}
         saveToSyncStorage(dataWithTimestamp);
         localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(dataWithTimestamp));
 
-        console.log('✅ 数据同步完成！');
+        console.log('✅ 宠物数据同步完成！');
         toastr.success('宠物数据已同步到所有设备！');
 
         return {
@@ -5058,6 +5257,62 @@ ${getCurrentPersonality()}
             timestamp: new Date().toISOString(),
             data: dataWithTimestamp
         };
+    };
+
+    // 同步所有数据（宠物数据、AI设置、头像）
+    window.syncAllData = function() {
+        console.log('🔄 同步所有数据到云端...');
+
+        let syncResults = {
+            pet: false,
+            ai: false,
+            avatar: false,
+            timestamp: new Date().toISOString()
+        };
+
+        try {
+            // 1. 同步宠物数据
+            const dataWithTimestamp = {
+                ...petData,
+                lastSyncTime: Date.now()
+            };
+            saveToSyncStorage(dataWithTimestamp);
+            localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(dataWithTimestamp));
+            syncResults.pet = true;
+            console.log('✅ 宠物数据同步完成');
+
+            // 2. 同步AI设置
+            const aiSettings = localStorage.getItem(`${extensionName}-ai-settings`);
+            if (aiSettings) {
+                const settings = JSON.parse(aiSettings);
+                settings.lastSyncTime = Date.now();
+                localStorage.setItem(`${extensionName}-ai-settings`, JSON.stringify(settings));
+                saveAISettingsToSync(settings);
+                syncResults.ai = true;
+                console.log('✅ AI设置同步完成');
+            } else {
+                console.log('⚠️ 无AI设置需要同步');
+            }
+
+            // 3. 同步头像
+            const avatar = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
+            if (avatar) {
+                saveAvatarToSync(avatar);
+                syncResults.avatar = true;
+                console.log('✅ 头像同步完成');
+            } else {
+                console.log('⚠️ 无自定义头像需要同步');
+            }
+
+            console.log('🎉 所有数据同步完成！');
+            toastr.success('所有数据已同步到云端！现在可以在其他设备上访问了。', '🎉 同步成功', { timeOut: 5000 });
+
+        } catch (error) {
+            console.error('❌ 同步过程中出现错误:', error);
+            toastr.error('同步过程中出现错误: ' + error.message, '❌ 同步失败', { timeOut: 5000 });
+        }
+
+        return syncResults;
     };
 
     // 导出宠物数据
@@ -5151,14 +5406,15 @@ ${getCurrentPersonality()}
         input.click();
     };
 
-    // 检查同步状态
+    // 检查同步状态 - 包含宠物数据、AI设置和头像
     window.checkSyncStatus = function() {
-        console.log('🔍 检查数据同步状态...');
+        console.log('🔍 检查完整同步状态...');
 
+        // 检查宠物数据
         const localData = localStorage.getItem(STORAGE_KEY_PET_DATA);
         const syncData = loadFromSyncStorage();
 
-        console.log('\n📱 本地数据:');
+        console.log('\n📱 宠物数据 - 本地:');
         if (localData) {
             try {
                 const local = JSON.parse(localData);
@@ -5173,7 +5429,7 @@ ${getCurrentPersonality()}
             console.log('- 无本地数据');
         }
 
-        console.log('\n☁️ 同步数据:');
+        console.log('\n☁️ 宠物数据 - 同步:');
         if (syncData) {
             try {
                 const sync = typeof syncData === 'object' ? syncData : JSON.parse(syncData);
@@ -5188,11 +5444,63 @@ ${getCurrentPersonality()}
             console.log('- 无同步数据');
         }
 
+        // 检查AI设置
+        const localAISettings = localStorage.getItem(`${extensionName}-ai-settings`);
+        const syncAISettings = loadAISettingsFromSync();
+
+        console.log('\n🤖 AI设置 - 本地:');
+        if (localAISettings) {
+            try {
+                const local = JSON.parse(localAISettings);
+                console.log(`- API类型: ${local.apiType || '未设置'}`);
+                console.log(`- API URL: ${local.apiUrl ? '已设置' : '未设置'}`);
+                console.log(`- API密钥: ${local.apiKey ? '已设置' : '未设置'}`);
+                console.log(`- 模型: ${local.apiModel || '未设置'}`);
+                console.log(`- 最后同步时间: ${local.lastSyncTime ? new Date(local.lastSyncTime).toLocaleString() : '未设置'}`);
+            } catch (e) {
+                console.log('- AI设置解析失败');
+            }
+        } else {
+            console.log('- 无本地AI设置');
+        }
+
+        console.log('\n☁️ AI设置 - 同步:');
+        if (syncAISettings) {
+            try {
+                const sync = typeof syncAISettings === 'object' ? syncAISettings : JSON.parse(syncAISettings);
+                console.log(`- API类型: ${sync.apiType || '未设置'}`);
+                console.log(`- API URL: ${sync.apiUrl ? '已设置' : '未设置'}`);
+                console.log(`- API密钥: ${sync.apiKey ? '已设置' : '未设置'}`);
+                console.log(`- 模型: ${sync.apiModel || '未设置'}`);
+                console.log(`- 最后同步时间: ${sync.lastSyncTime ? new Date(sync.lastSyncTime).toLocaleString() : '未设置'}`);
+            } catch (e) {
+                console.log('- 同步AI设置解析失败');
+            }
+        } else {
+            console.log('- 无同步AI设置');
+        }
+
+        // 检查头像
+        const localAvatar = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
+        const syncAvatar = loadAvatarFromSync();
+
+        console.log('\n🎨 头像 - 本地:');
+        console.log(`- 自定义头像: ${localAvatar ? '已设置' : '未设置'}`);
+        if (localAvatar) {
+            console.log(`- 头像大小: ${Math.round(localAvatar.length / 1024)}KB`);
+        }
+
+        console.log('\n☁️ 头像 - 同步:');
+        console.log(`- 自定义头像: ${syncAvatar ? '已设置' : '未设置'}`);
+        if (syncAvatar) {
+            console.log(`- 头像大小: ${Math.round(syncAvatar.length / 1024)}KB`);
+        }
+
         console.log('\n🔄 同步建议:');
         if (!localData && !syncData) {
             console.log('- 这是新设备，数据将自动同步');
         } else if (localData && !syncData) {
-            console.log('- 建议运行 syncPetData() 将本地数据同步到云端');
+            console.log('- 建议运行 syncAllData() 将所有数据同步到云端');
         } else if (!localData && syncData) {
             console.log('- 将自动从云端恢复数据');
         } else {
@@ -5203,20 +5511,32 @@ ${getCurrentPersonality()}
                 const syncTime = sync.lastSyncTime || 0;
 
                 if (localTime > syncTime) {
-                    console.log('- 本地数据较新，建议运行 syncPetData() 同步到云端');
+                    console.log('- 本地数据较新，建议运行 syncAllData() 同步到云端');
                 } else if (syncTime > localTime) {
                     console.log('- 云端数据较新，将自动使用云端数据');
                 } else {
-                    console.log('- 数据已同步');
+                    console.log('- 宠物数据已同步');
                 }
             } catch (e) {
                 console.log('- 数据比较失败，建议手动同步');
             }
         }
 
+        // AI设置和头像同步建议
+        if (!syncAISettings && localAISettings) {
+            console.log('- AI设置需要同步到云端');
+        }
+        if (!syncAvatar && localAvatar) {
+            console.log('- 头像需要同步到云端');
+        }
+
         return {
             hasLocal: !!localData,
             hasSync: !!syncData,
+            hasLocalAI: !!localAISettings,
+            hasSyncAI: !!syncAISettings,
+            hasLocalAvatar: !!localAvatar,
+            hasSyncAvatar: !!syncAvatar,
             timestamp: new Date().toISOString()
         };
     };

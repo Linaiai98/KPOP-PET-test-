@@ -198,130 +198,216 @@ jQuery(async () => {
 
 
     /**
-     * 获取SillyTavern当前可用的API列表 - 重新设计版本
+     * 直接从后端API获取可用模型列表 - 全新方法
      */
     async function getAvailableAPIs() {
         try {
-            console.log(`[${extensionName}] 🔍 开始获取SillyTavern可用API列表...`);
+            console.log(`[${extensionName}] 🎯 直接从后端API获取可用模型列表...`);
             const availableAPIs = [];
 
-            // 方法1: 通过SillyTavern的标准API端点获取模型列表
-            console.log(`[${extensionName}] 🌐 尝试SillyTavern标准API端点...`);
-            const standardEndpoints = [
-                // OpenAI兼容端点
-                { url: '/api/openai/models', type: 'openai', name: 'OpenAI模型' },
-                { url: '/api/openai/status', type: 'openai', name: 'OpenAI状态' },
+            // 方法1: 直接调用各大API提供商的模型列表端点
+            console.log(`[${extensionName}] 🌐 尝试直接调用后端API...`);
 
-                // Claude端点
-                { url: '/api/claude/models', type: 'claude', name: 'Claude模型' },
-                { url: '/api/claude/status', type: 'claude', name: 'Claude状态' },
-
-                // Google AI端点
-                { url: '/api/google/models', type: 'google', name: 'Google AI模型' },
-                { url: '/api/google/status', type: 'google', name: 'Google AI状态' },
-
-                // Ollama端点
-                { url: '/api/ollama/models', type: 'ollama', name: 'Ollama模型' },
-                { url: '/api/ollama/status', type: 'ollama', name: 'Ollama状态' },
-
-                // 通用端点
-                { url: '/api/models', type: 'general', name: '通用模型列表' },
-                { url: '/api/backends', type: 'general', name: '后端列表' },
-                { url: '/api/status', type: 'general', name: '系统状态' }
+            const apiProviders = [
+                {
+                    name: 'OpenAI',
+                    type: 'openai',
+                    endpoints: [
+                        'https://api.openai.com/v1/models',
+                        'https://api.openai.com/v1/engines'  // 备用端点
+                    ],
+                    requiresAuth: true,
+                    authHeader: 'Authorization',
+                    authPrefix: 'Bearer '
+                },
+                {
+                    name: 'Anthropic Claude',
+                    type: 'claude',
+                    endpoints: [
+                        'https://api.anthropic.com/v1/models'
+                    ],
+                    requiresAuth: true,
+                    authHeader: 'x-api-key',
+                    authPrefix: ''
+                },
+                {
+                    name: 'Google AI',
+                    type: 'google',
+                    endpoints: [
+                        'https://generativelanguage.googleapis.com/v1beta/models'
+                    ],
+                    requiresAuth: true,
+                    authHeader: 'Authorization',
+                    authPrefix: 'Bearer '
+                },
+                {
+                    name: 'Ollama (本地)',
+                    type: 'ollama',
+                    endpoints: [
+                        'http://localhost:11434/api/tags',
+                        'http://127.0.0.1:11434/api/tags'
+                    ],
+                    requiresAuth: false
+                },
+                {
+                    name: 'LM Studio (本地)',
+                    type: 'lmstudio',
+                    endpoints: [
+                        'http://localhost:1234/v1/models',
+                        'http://127.0.0.1:1234/v1/models'
+                    ],
+                    requiresAuth: false
+                },
+                {
+                    name: 'Text Generation WebUI',
+                    type: 'textgen',
+                    endpoints: [
+                        'http://localhost:5000/v1/models',
+                        'http://127.0.0.1:5000/v1/models'
+                    ],
+                    requiresAuth: false
+                }
             ];
 
-            for (const endpoint of standardEndpoints) {
-                try {
-                    console.log(`[${extensionName}] 🔗 测试端点: ${endpoint.url}`);
-                    const response = await fetch(endpoint.url, {
-                        method: 'GET',
-                        headers: {
-                            'Content-Type': 'application/json',
+            // 尝试从用户配置中获取API密钥
+            const userApiKeys = {
+                openai: $('#ai-key-input').val() || localStorage.getItem('openai_api_key'),
+                claude: localStorage.getItem('claude_api_key'),
+                google: localStorage.getItem('google_api_key')
+            };
+
+            for (const provider of apiProviders) {
+                console.log(`[${extensionName}] 🔍 检查 ${provider.name}...`);
+
+                for (const endpoint of provider.endpoints) {
+                    try {
+                        const headers = {
+                            'Content-Type': 'application/json'
+                        };
+
+                        // 添加认证头（如果需要且有密钥）
+                        if (provider.requiresAuth && userApiKeys[provider.type]) {
+                            headers[provider.authHeader] = provider.authPrefix + userApiKeys[provider.type];
+                            console.log(`[${extensionName}] 🔑 使用API密钥进行认证`);
                         }
-                    });
 
-                    if (response.ok) {
-                        const data = await response.json();
-                        console.log(`[${extensionName}] ✅ ${endpoint.url} 成功:`, data);
+                        console.log(`[${extensionName}] 🔗 尝试: ${endpoint}`);
 
-                        // 解析模型数据
-                        if (data.models && Array.isArray(data.models)) {
-                            data.models.forEach(model => {
-                                const modelName = typeof model === 'string' ? model : (model.id || model.name);
+                        const response = await fetch(endpoint, {
+                            method: 'GET',
+                            headers: headers,
+                            // 添加超时和错误处理
+                            signal: AbortSignal.timeout(10000) // 10秒超时
+                        });
+
+                        if (response.ok) {
+                            const data = await response.json();
+                            console.log(`[${extensionName}] ✅ ${provider.name} 成功:`, data);
+
+                            // 解析不同API的响应格式
+                            let models = [];
+
+                            if (provider.type === 'openai') {
+                                // OpenAI格式: {data: [{id: "gpt-4", ...}, ...]}
+                                models = data.data || data.models || [];
+                            } else if (provider.type === 'claude') {
+                                // Claude格式可能不同
+                                models = data.models || data.data || [];
+                            } else if (provider.type === 'google') {
+                                // Google AI格式: {models: [{name: "models/gemini-pro", ...}, ...]}
+                                models = data.models || [];
+                            } else if (provider.type === 'ollama') {
+                                // Ollama格式: {models: [{name: "llama2", ...}, ...]}
+                                models = data.models || [];
+                            } else {
+                                // 通用格式处理
+                                models = data.models || data.data || data.engines || [];
+                            }
+
+                            // 添加检测到的模型
+                            models.forEach(model => {
+                                let modelName = '';
+                                let modelId = '';
+
+                                if (typeof model === 'string') {
+                                    modelName = modelId = model;
+                                } else if (model.id) {
+                                    modelId = model.id;
+                                    modelName = model.id;
+                                } else if (model.name) {
+                                    modelId = model.name;
+                                    modelName = model.name.replace('models/', ''); // 处理Google AI的格式
+                                }
+
                                 if (modelName) {
                                     availableAPIs.push({
-                                        type: endpoint.type,
+                                        type: provider.type,
                                         name: modelName,
+                                        id: modelId,
                                         status: 'available',
-                                        source: endpoint.url,
-                                        provider: endpoint.name
+                                        source: endpoint,
+                                        provider: provider.name,
+                                        requiresAuth: provider.requiresAuth,
+                                        hasAuth: provider.requiresAuth ? !!userApiKeys[provider.type] : true
                                     });
                                 }
                             });
-                        }
 
-                        // 解析状态数据
-                        if (data.status || data.online || data.connected) {
+                            // 找到可用的API后，不再尝试该提供商的其他端点
+                            break;
+
+                        } else if (response.status === 401) {
+                            console.log(`[${extensionName}] 🔐 ${provider.name} 需要API密钥认证`);
                             availableAPIs.push({
-                                type: endpoint.type,
-                                name: `${endpoint.name} (已连接)`,
-                                status: 'connected',
-                                source: endpoint.url,
-                                provider: endpoint.name
+                                type: provider.type,
+                                name: `${provider.name} (需要API密钥)`,
+                                status: 'auth_required',
+                                source: endpoint,
+                                provider: provider.name,
+                                requiresAuth: true,
+                                hasAuth: false
                             });
+                        } else {
+                            console.log(`[${extensionName}] ❌ ${endpoint}: HTTP ${response.status}`);
                         }
 
-                        // 解析其他格式的数据
-                        if (data.data && Array.isArray(data.data)) {
-                            data.data.forEach(item => {
-                                const itemName = item.id || item.name || item.model;
-                                if (itemName) {
-                                    availableAPIs.push({
-                                        type: endpoint.type,
-                                        name: itemName,
-                                        status: 'available',
-                                        source: endpoint.url,
-                                        provider: endpoint.name
-                                    });
-                                }
-                            });
+                    } catch (error) {
+                        if (error.name === 'TimeoutError') {
+                            console.log(`[${extensionName}] ⏰ ${endpoint} 超时`);
+                        } else if (error.message.includes('CORS')) {
+                            console.log(`[${extensionName}] 🚫 ${endpoint} CORS限制`);
+                        } else {
+                            console.log(`[${extensionName}] ❌ ${endpoint} 失败: ${error.message}`);
                         }
-                    } else {
-                        console.log(`[${extensionName}] ❌ ${endpoint.url}: HTTP ${response.status}`);
                     }
-                } catch (error) {
-                    console.log(`[${extensionName}] ❌ ${endpoint.url} 失败: ${error.message}`);
                 }
             }
 
-            // 方法2: 通过SillyTavern的getContext获取当前配置
-            console.log(`[${extensionName}] 📋 检查SillyTavern上下文...`);
+            // 方法2: 从SillyTavern上下文获取当前配置作为补充
+            console.log(`[${extensionName}] 📋 获取SillyTavern当前配置作为补充...`);
             if (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) {
                 try {
                     const context = SillyTavern.getContext();
-                    console.log(`[${extensionName}] 📊 获取到SillyTavern上下文`);
 
-                    // 检查当前API配置
                     if (context.main_api) {
-                        console.log(`[${extensionName}] 🎯 当前主要API: ${context.main_api}`);
+                        console.log(`[${extensionName}] 🎯 SillyTavern当前API: ${context.main_api}`);
                         availableAPIs.push({
                             type: context.main_api,
-                            name: `${getAPIDisplayName(context.main_api)} (当前使用)`,
+                            name: `${getAPIDisplayName(context.main_api)} (SillyTavern当前)`,
                             status: context.online_status ? 'connected' : 'configured',
-                            source: 'SillyTavern上下文',
-                            provider: 'SillyTavern'
+                            source: 'SillyTavern',
+                            provider: 'SillyTavern配置'
                         });
                     }
 
-                    // 检查模型配置
                     if (context.model) {
-                        console.log(`[${extensionName}] 🤖 当前模型: ${context.model}`);
+                        console.log(`[${extensionName}] 🤖 SillyTavern当前模型: ${context.model}`);
                         availableAPIs.push({
-                            type: 'model',
+                            type: 'current_model',
                             name: context.model,
                             status: 'current',
-                            source: 'SillyTavern上下文',
-                            provider: 'SillyTavern'
+                            source: 'SillyTavern',
+                            provider: 'SillyTavern当前模型'
                         });
                     }
 
@@ -330,75 +416,55 @@ jQuery(async () => {
                 }
             }
 
-            // 方法3: 检查SillyTavern的设置存储
-            console.log(`[${extensionName}] 💾 检查SillyTavern设置存储...`);
-            try {
-                // 检查localStorage中的SillyTavern设置
-                const settingsKeys = Object.keys(localStorage).filter(key =>
-                    key.includes('api') || key.includes('model') || key.includes('backend')
-                );
-
-                settingsKeys.forEach(key => {
-                    try {
-                        const value = localStorage.getItem(key);
-                        if (value && value.length < 200) { // 避免过长的数据
-                            console.log(`[${extensionName}] 🔑 设置 ${key}: ${value}`);
-
-                            // 尝试解析JSON
-                            try {
-                                const parsed = JSON.parse(value);
-                                if (parsed.model || parsed.api_type || parsed.endpoint) {
-                                    availableAPIs.push({
-                                        type: 'setting',
-                                        name: `${key}: ${parsed.model || parsed.api_type || parsed.endpoint}`,
-                                        status: 'stored',
-                                        source: 'localStorage',
-                                        provider: 'SillyTavern设置'
-                                    });
-                                }
-                            } catch (e) {
-                                // 不是JSON，直接使用值
-                                if (value.includes('gpt') || value.includes('claude') || value.includes('gemini')) {
-                                    availableAPIs.push({
-                                        type: 'setting',
-                                        name: `${key}: ${value}`,
-                                        status: 'stored',
-                                        source: 'localStorage',
-                                        provider: 'SillyTavern设置'
-                                    });
-                                }
-                            }
-                        }
-                    } catch (error) {
-                        console.log(`[${extensionName}] ⚠️ 解析设置 ${key} 失败:`, error.message);
-                    }
-                });
-            } catch (error) {
-                console.log(`[${extensionName}] ⚠️ 检查设置存储失败:`, error.message);
-            }
-
             // 去重并排序
             const uniqueAPIs = availableAPIs.filter((api, index, self) =>
                 index === self.findIndex(a => a.name === api.name && a.type === api.type)
-            ).sort((a, b) => a.name.localeCompare(b.name));
+            ).sort((a, b) => {
+                // 优先显示有认证的API
+                if (a.hasAuth !== b.hasAuth) {
+                    return b.hasAuth ? 1 : -1;
+                }
+                // 然后按状态排序
+                const statusOrder = { 'current': 0, 'connected': 1, 'available': 2, 'auth_required': 3 };
+                const aOrder = statusOrder[a.status] || 4;
+                const bOrder = statusOrder[b.status] || 4;
+                if (aOrder !== bOrder) {
+                    return aOrder - bOrder;
+                }
+                // 最后按名称排序
+                return a.name.localeCompare(b.name);
+            });
 
             console.log(`[${extensionName}] 🎉 最终发现 ${uniqueAPIs.length} 个可用API:`, uniqueAPIs);
 
             if (uniqueAPIs.length === 0) {
                 console.log(`[${extensionName}] ⚠️ 未发现任何API，可能的原因:`);
-                console.log(`[${extensionName}] 1. SillyTavern尚未配置任何API`);
-                console.log(`[${extensionName}] 2. API端点不可访问或结构变化`);
-                console.log(`[${extensionName}] 3. 需要在SillyTavern中先连接一个API`);
-                console.log(`[${extensionName}] 4. 插件运行时机过早，SillyTavern尚未完全加载`);
+                console.log(`[${extensionName}] 1. 网络连接问题或CORS限制`);
+                console.log(`[${extensionName}] 2. 需要配置API密钥`);
+                console.log(`[${extensionName}] 3. 本地API服务未启动（如Ollama、LM Studio）`);
+                console.log(`[${extensionName}] 4. API端点地址发生变化`);
+                console.log(`[${extensionName}] 💡 建议: 先在AI配置中输入API密钥，然后重新刷新`);
             } else {
-                console.log(`[${extensionName}] 📋 发现的API类型分布:`);
-                const typeCount = {};
+                console.log(`[${extensionName}] 📋 发现的API分布:`);
+                const providerCount = {};
+                const statusCount = {};
                 uniqueAPIs.forEach(api => {
-                    typeCount[api.type] = (typeCount[api.type] || 0) + 1;
+                    providerCount[api.provider] = (providerCount[api.provider] || 0) + 1;
+                    statusCount[api.status] = (statusCount[api.status] || 0) + 1;
                 });
-                Object.entries(typeCount).forEach(([type, count]) => {
-                    console.log(`[${extensionName}] - ${type}: ${count}个`);
-                });
+                console.log(`[${extensionName}] 📊 按提供商:`, providerCount);
+                console.log(`[${extensionName}] 📊 按状态:`, statusCount);
+
+                // 提供使用建议
+                const authRequiredCount = uniqueAPIs.filter(api => api.status === 'auth_required').length;
+                if (authRequiredCount > 0) {
+                    console.log(`[${extensionName}] 💡 有 ${authRequiredCount} 个API需要密钥认证`);
+                }
+
+                const availableCount = uniqueAPIs.filter(api => api.status === 'available').length;
+                if (availableCount > 0) {
+                    console.log(`[${extensionName}] ✅ 有 ${availableCount} 个API可直接使用`);
+                }
             }
 
             return uniqueAPIs;
@@ -428,7 +494,7 @@ jQuery(async () => {
     }
 
     /**
-     * 更新API下拉列表 - 重新设计版本
+     * 更新API下拉列表 - 直接后端API版本
      */
     function updateAPIDropdown(apis) {
         const select = $('#ai-api-select');
@@ -447,10 +513,10 @@ jQuery(async () => {
             <option value="custom">自定义API</option>
         `;
 
-        // 按类型分组动态API
+        // 按提供商分组动态API
         const groupedAPIs = {};
         apis.forEach(api => {
-            const group = api.provider || api.type || 'other';
+            const group = api.provider || 'Other';
             if (!groupedAPIs[group]) {
                 groupedAPIs[group] = [];
             }
@@ -460,13 +526,37 @@ jQuery(async () => {
         // 生成动态选项
         let dynamicOptions = '';
         if (Object.keys(groupedAPIs).length > 0) {
-            Object.entries(groupedAPIs).forEach(([group, groupAPIs]) => {
+            // 按优先级排序组
+            const groupOrder = ['OpenAI', 'Anthropic Claude', 'Google AI', 'Ollama (本地)', 'LM Studio (本地)', 'SillyTavern配置', 'SillyTavern当前模型', 'Other'];
+            const sortedGroups = Object.keys(groupedAPIs).sort((a, b) => {
+                const aIndex = groupOrder.indexOf(a);
+                const bIndex = groupOrder.indexOf(b);
+                if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
+                if (aIndex === -1) return 1;
+                if (bIndex === -1) return -1;
+                return aIndex - bIndex;
+            });
+
+            sortedGroups.forEach(group => {
+                const groupAPIs = groupedAPIs[group];
                 dynamicOptions += `<optgroup label="━━━ ${group} ━━━">`;
+
                 groupAPIs.forEach(api => {
-                    const value = `detected:${api.type}:${api.name}`;
+                    const value = `backend:${api.type}:${api.id || api.name}`;
                     const statusIcon = getStatusIcon(api.status);
-                    const displayName = api.name.length > 40 ? api.name.substring(0, 37) + '...' : api.name;
-                    dynamicOptions += `<option value="${value}">${statusIcon} ${displayName}</option>`;
+                    let displayName = api.name;
+
+                    // 添加认证状态提示
+                    if (api.requiresAuth && !api.hasAuth) {
+                        displayName += ' (需要API密钥)';
+                    }
+
+                    // 限制显示长度
+                    if (displayName.length > 45) {
+                        displayName = displayName.substring(0, 42) + '...';
+                    }
+
+                    dynamicOptions += `<option value="${value}" data-requires-auth="${api.requiresAuth}" data-has-auth="${api.hasAuth}">${statusIcon} ${displayName}</option>`;
                 });
                 dynamicOptions += '</optgroup>';
             });
@@ -480,6 +570,16 @@ jQuery(async () => {
         }
 
         console.log(`[${extensionName}] ✅ API下拉列表更新完成`);
+
+        // 显示统计信息
+        const totalAPIs = apis.length;
+        const availableAPIs = apis.filter(api => api.status === 'available').length;
+        const authRequiredAPIs = apis.filter(api => api.status === 'auth_required').length;
+
+        if (totalAPIs > 0) {
+            const message = `发现 ${totalAPIs} 个API: ${availableAPIs} 个可用, ${authRequiredAPIs} 个需要密钥`;
+            toastr.success(message, '🎉 API发现成功', { timeOut: 5000 });
+        }
     }
 
     /**
@@ -546,38 +646,63 @@ jQuery(async () => {
     }
 
     /**
-     * 切换API配置输入框的显示状态 - 增强版本
+     * 切换API配置输入框的显示状态 - 后端API版本
      */
     function toggleApiConfigInputs(apiType) {
         const container = $('#ai-config-container');
 
         console.log(`[${extensionName}] 🔧 处理API类型: ${apiType}`);
 
-        // 处理从SillyTavern检测到的API类型
+        // 处理从后端API检测到的API类型
         let processedApiType = apiType;
-        let detectedInfo = null;
+        let backendInfo = null;
 
-        if (apiType && apiType.startsWith('detected:')) {
-            // 解析检测到的API信息: detected:type:name
+        if (apiType && apiType.startsWith('backend:')) {
+            // 解析后端API信息: backend:type:name
+            const parts = apiType.split(':');
+            if (parts.length >= 3) {
+                const backendType = parts[1];
+                const backendName = parts.slice(2).join(':'); // 处理名称中可能包含冒号的情况
+
+                processedApiType = backendType;
+                backendInfo = {
+                    type: backendType,
+                    name: backendName
+                };
+
+                console.log(`[${extensionName}] 🔍 后端API信息:`, backendInfo);
+
+                // 自动填充模型名称
+                $('#ai-model-input').val(backendName);
+
+                // 根据API类型提供配置建议
+                let configMessage = `已选择模型: ${backendName}`;
+                if (backendType === 'openai') {
+                    configMessage += '，请输入OpenAI API密钥';
+                } else if (backendType === 'claude') {
+                    configMessage += '，请输入Claude API密钥';
+                } else if (backendType === 'google') {
+                    configMessage += '，请输入Google AI API密钥';
+                } else if (backendType === 'ollama' || backendType === 'lmstudio') {
+                    configMessage += '，本地API无需密钥';
+                } else {
+                    configMessage += '，请配置相应的URL和密钥';
+                }
+
+                toastr.info(configMessage, '🤖 模型已选择', { timeOut: 6000 });
+            }
+        } else if (apiType && apiType.startsWith('detected:')) {
+            // 兼容旧格式
             const parts = apiType.split(':');
             if (parts.length >= 3) {
                 const detectedType = parts[1];
-                const detectedName = parts.slice(2).join(':'); // 处理名称中可能包含冒号的情况
-
+                const detectedName = parts.slice(2).join(':');
                 processedApiType = detectedType;
-                detectedInfo = {
-                    type: detectedType,
-                    name: detectedName
-                };
-
-                console.log(`[${extensionName}] 🔍 检测到的API信息:`, detectedInfo);
-
-                // 自动填充模型名称
                 $('#ai-model-input').val(detectedName);
                 toastr.info(`已选择检测到的API: ${detectedName}，请配置相应的URL和密钥`, '', { timeOut: 6000 });
             }
         } else if (apiType && apiType.startsWith('model:')) {
-            // 兼容旧格式
+            // 兼容更旧的格式
             const modelName = apiType.replace('model:', '');
             processedApiType = 'custom';
             $('#ai-model-input').val(modelName);
@@ -590,40 +715,59 @@ jQuery(async () => {
             // 根据API类型设置默认值
             const defaults = {
                 'openai': { url: 'https://api.openai.com/v1', model: 'gpt-4' },
-                'claude': { url: 'https://api.anthropic.com', model: 'claude-3-sonnet-20240229' },
+                'claude': { url: 'https://api.anthropic.com/v1', model: 'claude-3-sonnet-20240229' },
                 'google': { url: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-pro' },
                 'mistral': { url: 'https://api.mistral.ai/v1', model: 'mistral-medium' },
+                'ollama': { url: 'http://localhost:11434/v1', model: 'llama2' },
+                'lmstudio': { url: 'http://localhost:1234/v1', model: 'local-model' },
+                'textgen': { url: 'http://localhost:5000/v1', model: 'text-generation-webui' },
                 'kobold': { url: 'http://localhost:5001', model: 'kobold' },
-                'ollama': { url: 'http://localhost:11434', model: 'llama2' },
                 'tabby': { url: 'http://localhost:5000', model: 'tabby' },
                 'horde': { url: 'https://horde.koboldai.net', model: 'horde' },
-                'general': { url: '', model: '' },
-                'setting': { url: '', model: '' }
+                'custom': { url: '', model: '' }
             };
 
             // 设置默认值（如果当前输入框为空）
             if (defaults[processedApiType]) {
                 if (!$('#ai-url-input').val() && defaults[processedApiType].url) {
+                    $('#ai-url-input').val(defaults[processedApiType].url);
                     $('#ai-url-input').attr('placeholder', defaults[processedApiType].url);
                 }
-                if (!$('#ai-model-input').val() && defaults[processedApiType].model && !detectedInfo) {
+                if (!$('#ai-model-input').val() && defaults[processedApiType].model && !backendInfo) {
                     $('#ai-model-input').attr('placeholder', defaults[processedApiType].model);
                 }
             }
 
-            // 如果是检测到的API，提供额外的提示
-            if (detectedInfo) {
-                console.log(`[${extensionName}] 💡 为检测到的API提供配置提示`);
+            // 如果是从后端检测到的API，提供特定的配置建议
+            if (backendInfo) {
+                console.log(`[${extensionName}] 💡 为后端API提供配置建议`);
 
-                // 根据检测到的API类型提供特定的配置建议
-                if (detectedInfo.type === 'openai' || detectedInfo.name.includes('gpt')) {
-                    $('#ai-url-input').attr('placeholder', 'https://api.openai.com/v1');
-                } else if (detectedInfo.type === 'claude' || detectedInfo.name.includes('claude')) {
-                    $('#ai-url-input').attr('placeholder', 'https://api.anthropic.com');
-                } else if (detectedInfo.type === 'google' || detectedInfo.name.includes('gemini')) {
-                    $('#ai-url-input').attr('placeholder', 'https://generativelanguage.googleapis.com/v1beta');
-                } else if (detectedInfo.type === 'ollama') {
-                    $('#ai-url-input').attr('placeholder', 'http://localhost:11434');
+                // 根据API类型自动设置URL
+                if (backendInfo.type === 'openai') {
+                    if (!$('#ai-url-input').val()) {
+                        $('#ai-url-input').val('https://api.openai.com/v1');
+                    }
+                } else if (backendInfo.type === 'claude') {
+                    if (!$('#ai-url-input').val()) {
+                        $('#ai-url-input').val('https://api.anthropic.com/v1');
+                    }
+                } else if (backendInfo.type === 'google') {
+                    if (!$('#ai-url-input').val()) {
+                        $('#ai-url-input').val('https://generativelanguage.googleapis.com/v1beta');
+                    }
+                } else if (backendInfo.type === 'ollama') {
+                    if (!$('#ai-url-input').val()) {
+                        $('#ai-url-input').val('http://localhost:11434/v1');
+                    }
+                } else if (backendInfo.type === 'lmstudio') {
+                    if (!$('#ai-url-input').val()) {
+                        $('#ai-url-input').val('http://localhost:1234/v1');
+                    }
+                }
+
+                // 为本地API隐藏密钥输入框或提供提示
+                if (backendInfo.type === 'ollama' || backendInfo.type === 'lmstudio' || backendInfo.type === 'textgen') {
+                    $('#ai-key-input').attr('placeholder', '本地API通常不需要密钥');
                 }
             }
         } else {
@@ -8262,54 +8406,151 @@ ${getCurrentPersonality()}
     };
 
     /**
-     * 快速API测试 - 简化版本
+     * 快速API测试 - 直接后端API版本
      */
     window.quickAPITest = async function() {
-        console.log("⚡ 快速API测试开始...");
+        console.log("⚡ 快速后端API测试开始...");
 
         // 1. 基础检查
         console.log("\n1️⃣ 基础检查:");
         console.log(`SillyTavern: ${typeof SillyTavern !== 'undefined' ? '✅' : '❌'}`);
         console.log(`jQuery: ${typeof $ !== 'undefined' ? '✅' : '❌'}`);
+        console.log(`Fetch API: ${typeof fetch !== 'undefined' ? '✅' : '❌'}`);
 
-        // 2. 快速端点测试
-        console.log("\n2️⃣ 快速端点测试:");
-        const quickEndpoints = ['/api/status', '/api/config'];
-        for (const endpoint of quickEndpoints) {
+        // 2. 检查用户配置的API密钥
+        console.log("\n2️⃣ API密钥检查:");
+        const apiKeyInput = $('#ai-key-input').val();
+        console.log(`用户输入的API密钥: ${apiKeyInput ? '✅ 已设置' : '❌ 未设置'}`);
+
+        // 3. 快速测试本地API
+        console.log("\n3️⃣ 本地API快速测试:");
+        const localEndpoints = [
+            'http://localhost:11434/api/tags',  // Ollama
+            'http://localhost:1234/v1/models', // LM Studio
+            'http://localhost:5000/v1/models'  // Text Generation WebUI
+        ];
+
+        for (const endpoint of localEndpoints) {
             try {
-                const response = await fetch(endpoint, { method: 'GET' });
+                const response = await fetch(endpoint, {
+                    method: 'GET',
+                    signal: AbortSignal.timeout(3000) // 3秒超时
+                });
                 console.log(`${endpoint}: ${response.ok ? '✅' : '❌'} (${response.status})`);
                 if (response.ok) {
                     const data = await response.json();
-                    console.log(`  数据预览:`, JSON.stringify(data).substring(0, 100) + '...');
+                    const modelCount = data.models ? data.models.length : (data.data ? data.data.length : 0);
+                    console.log(`  发现 ${modelCount} 个模型`);
                 }
             } catch (error) {
-                console.log(`${endpoint}: ❌ (${error.message})`);
+                if (error.name === 'TimeoutError') {
+                    console.log(`${endpoint}: ⏰ 超时`);
+                } else {
+                    console.log(`${endpoint}: ❌ (${error.message})`);
+                }
             }
         }
 
-        // 3. DOM快速检查
-        console.log("\n3️⃣ DOM快速检查:");
-        const quickSelectors = ['#chat', '#send_textarea', 'select'];
-        quickSelectors.forEach(selector => {
-            const count = $(selector).length;
-            console.log(`${selector}: ${count > 0 ? '✅' : '❌'} (${count}个)`);
-        });
+        // 4. 测试在线API（如果有密钥）
+        if (apiKeyInput) {
+            console.log("\n4️⃣ 在线API测试:");
+            try {
+                const response = await fetch('https://api.openai.com/v1/models', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${apiKeyInput}`,
+                        'Content-Type': 'application/json'
+                    },
+                    signal: AbortSignal.timeout(5000)
+                });
 
-        // 4. 尝试获取API
-        console.log("\n4️⃣ 尝试获取API:");
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log(`OpenAI API: ✅ 发现 ${data.data.length} 个模型`);
+                } else if (response.status === 401) {
+                    console.log(`OpenAI API: 🔐 API密钥无效`);
+                } else {
+                    console.log(`OpenAI API: ❌ HTTP ${response.status}`);
+                }
+            } catch (error) {
+                console.log(`OpenAI API: ❌ ${error.message}`);
+            }
+        } else {
+            console.log("\n4️⃣ 跳过在线API测试 (未设置API密钥)");
+        }
+
+        // 5. 完整API发现测试
+        console.log("\n5️⃣ 完整API发现测试:");
         try {
             const apis = await getAvailableAPIs();
             console.log(`结果: ${apis.length > 0 ? '✅' : '❌'} 发现${apis.length}个API`);
             if (apis.length > 0) {
-                apis.forEach((api, index) => {
-                    console.log(`  ${index + 1}. ${api.name} (${api.type}) - ${api.source}`);
+                const grouped = {};
+                apis.forEach(api => {
+                    const provider = api.provider || 'Other';
+                    if (!grouped[provider]) grouped[provider] = 0;
+                    grouped[provider]++;
+                });
+                Object.entries(grouped).forEach(([provider, count]) => {
+                    console.log(`  📊 ${provider}: ${count}个`);
                 });
             }
             return apis;
         } catch (error) {
             console.log(`结果: ❌ 错误: ${error.message}`);
             return [];
+        }
+    };
+
+    /**
+     * 测试特定API端点
+     */
+    window.testSpecificAPI = async function(apiType, apiKey = null) {
+        console.log(`🔍 测试特定API: ${apiType}`);
+
+        const endpoints = {
+            'openai': 'https://api.openai.com/v1/models',
+            'claude': 'https://api.anthropic.com/v1/models',
+            'google': 'https://generativelanguage.googleapis.com/v1beta/models',
+            'ollama': 'http://localhost:11434/api/tags',
+            'lmstudio': 'http://localhost:1234/v1/models'
+        };
+
+        const endpoint = endpoints[apiType];
+        if (!endpoint) {
+            console.log(`❌ 不支持的API类型: ${apiType}`);
+            return null;
+        }
+
+        try {
+            const headers = { 'Content-Type': 'application/json' };
+
+            // 添加认证头
+            if (apiKey) {
+                if (apiType === 'openai' || apiType === 'google') {
+                    headers['Authorization'] = `Bearer ${apiKey}`;
+                } else if (apiType === 'claude') {
+                    headers['x-api-key'] = apiKey;
+                }
+            }
+
+            const response = await fetch(endpoint, {
+                method: 'GET',
+                headers: headers,
+                signal: AbortSignal.timeout(10000)
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log(`✅ ${apiType} API 成功:`, data);
+                return data;
+            } else {
+                console.log(`❌ ${apiType} API 失败: HTTP ${response.status}`);
+                return null;
+            }
+        } catch (error) {
+            console.log(`❌ ${apiType} API 错误: ${error.message}`);
+            return null;
         }
     };
 

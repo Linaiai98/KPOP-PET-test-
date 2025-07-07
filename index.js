@@ -53,7 +53,33 @@ jQuery(async () => {
     const STYLE_PREFIX = 'virtual-pet-';
 
     /**
-     * 创建样式隔离的CSS规则
+     * 获取安全的主题颜色
+     */
+    function getSafeThemeColors() {
+        // 尝试获取SillyTavern的主题颜色，如果失败则使用安全的默认值
+        const computedStyle = getComputedStyle(document.documentElement);
+
+        const bodyColor = computedStyle.getPropertyValue('--SmartThemeBodyColor') ||
+                         computedStyle.getPropertyValue('--body-color') ||
+                         '#2d2d2d'; // 安全的默认深色背景
+
+        const textColor = computedStyle.getPropertyValue('--SmartThemeEmColor') ||
+                         computedStyle.getPropertyValue('--text-color') ||
+                         '#ffffff'; // 安全的默认白色文字
+
+        const borderColor = computedStyle.getPropertyValue('--border-color') || '#444444';
+
+        console.log(`[${extensionName}] 主题颜色: 背景=${bodyColor}, 文字=${textColor}, 边框=${borderColor}`);
+
+        return {
+            background: bodyColor.trim(),
+            text: textColor.trim(),
+            border: borderColor.trim()
+        };
+    }
+
+    /**
+     * 创建样式隔离的CSS规则 - 不依赖主题变量
      */
     function createIsolatedStyles() {
         const styleId = `${STYLE_PREFIX}isolated-styles`;
@@ -61,10 +87,13 @@ jQuery(async () => {
         // 如果已经存在，先移除
         $(`#${styleId}`).remove();
 
-        const isolatedCSS = `
-            /* 虚拟宠物插件样式隔离 - 安全版本 */
+        // 获取安全的主题颜色
+        const colors = getSafeThemeColors();
 
-            /* 只影响虚拟宠物相关元素 */
+        const isolatedCSS = `
+            /* 虚拟宠物插件样式隔离 - 完全安全版本 */
+
+            /* 只影响虚拟宠物相关元素，不使用CSS变量 */
             #${BUTTON_ID} {
                 font-family: inherit !important;
                 line-height: normal !important;
@@ -88,10 +117,24 @@ jQuery(async () => {
             [class*="virtual-pet"] {
                 font-family: inherit !important;
             }
+
+            /* 虚拟宠物表单元素安全样式 */
+            #virtual-pet-personality-select,
+            #virtual-pet-custom-personality,
+            #ai-api-select,
+            #ai-url-input,
+            #ai-key-input,
+            #ai-model-select,
+            #ai-model-input {
+                background: ${colors.background} !important;
+                color: ${colors.text} !important;
+                border: 1px solid ${colors.border} !important;
+                font-family: inherit !important;
+            }
         `;
 
         $('head').append(`<style id="${styleId}">${isolatedCSS}</style>`);
-        console.log(`[${extensionName}] 安全样式隔离已应用`);
+        console.log(`[${extensionName}] 安全样式隔离已应用，使用颜色: ${JSON.stringify(colors)}`);
     }
 
     /**
@@ -120,22 +163,62 @@ jQuery(async () => {
         console.log(`[${extensionName}] ✅ 紧急样式清理完成`);
     }
 
+    /**
+     * 检查并修复CSS变量污染
+     */
+    function checkAndFixCSSVariables() {
+        console.log(`[${extensionName}] 🔍 检查CSS变量污染...`);
+
+        // 检查是否有插件修改了关键的CSS变量
+        const rootStyle = getComputedStyle(document.documentElement);
+        const criticalVars = [
+            '--SmartThemeBodyColor',
+            '--SmartThemeEmColor',
+            '--body-color',
+            '--text-color',
+            '--border-color'
+        ];
+
+        let hasIssues = false;
+        criticalVars.forEach(varName => {
+            const value = rootStyle.getPropertyValue(varName);
+            if (value && (value.includes('virtual-pet') || value.includes('undefined'))) {
+                console.log(`⚠️ 发现CSS变量污染: ${varName} = ${value}`);
+                hasIssues = true;
+                // 清除被污染的变量
+                document.documentElement.style.removeProperty(varName);
+            }
+        });
+
+        if (hasIssues) {
+            console.log(`[${extensionName}] 🧹 已清理CSS变量污染`);
+        } else {
+            console.log(`[${extensionName}] ✅ CSS变量检查正常`);
+        }
+
+        return !hasIssues;
+    }
+
     // 全局紧急修复函数
     window.emergencyFixSillyTavernUI = function() {
         console.log('🚨 紧急修复SillyTavern UI...');
 
-        // 1. 移除所有虚拟宠物相关样式
+        // 1. 检查并修复CSS变量污染
+        checkAndFixCSSVariables();
+
+        // 2. 移除所有虚拟宠物相关样式
         $('style').each(function() {
             const content = $(this).text();
             if (content.includes('virtual-pet') ||
                 content.includes('body >') ||
-                content.includes('position: relative !important')) {
+                content.includes('position: relative !important') ||
+                content.includes(':root')) {
                 console.log('移除样式:', $(this).attr('id') || '匿名样式');
                 $(this).remove();
             }
         });
 
-        // 2. 重置body样式
+        // 3. 重置body样式
         $('body').removeAttr('style');
         $('body').css({
             'position': '',
@@ -144,7 +227,7 @@ jQuery(async () => {
             'visibility': ''
         });
 
-        // 3. 重置html样式
+        // 4. 重置html样式
         $('html').removeAttr('style');
         $('html').css({
             'position': '',
@@ -153,11 +236,20 @@ jQuery(async () => {
             'visibility': ''
         });
 
-        // 4. 移除虚拟宠物元素
+        // 5. 清除document.documentElement上的样式
+        const docStyle = document.documentElement.style;
+        for (let i = docStyle.length - 1; i >= 0; i--) {
+            const prop = docStyle[i];
+            if (prop.includes('virtual-pet') || prop.startsWith('--')) {
+                docStyle.removeProperty(prop);
+            }
+        }
+
+        // 6. 移除虚拟宠物元素
         $('[id*="virtual-pet"]').remove();
         $('[class*="virtual-pet"]').remove();
 
-        // 5. 强制刷新页面布局
+        // 7. 强制刷新页面布局
         $('body').hide().show();
 
         console.log('✅ 紧急修复完成！请刷新页面以完全恢复。');
@@ -3895,10 +3987,13 @@ ${currentPersonality}
     async function initializeExtension() {
         console.log(`[${extensionName}] Initializing extension...`);
 
-        // 1. 创建样式隔离
+        // 1. 检查并修复CSS变量污染
+        checkAndFixCSSVariables();
+
+        // 2. 创建样式隔离
         createIsolatedStyles();
 
-        // 2. 动态加载CSS
+        // 3. 动态加载CSS
         console.log(`[${extensionName}] Loading CSS from: ${extensionFolderPath}/style.css`);
         $("head").append(`<link rel="stylesheet" type="text/css" href="${extensionFolderPath}/style.css">`);
 
@@ -3928,7 +4023,7 @@ ${currentPersonality}
                             <label for="virtual-pet-personality-select" style="display: block; margin-bottom: 8px; font-weight: bold;">
                                 🎭 宠物人设选择
                             </label>
-                            <select id="virtual-pet-personality-select" style="width: 100%; padding: 8px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+                            <select id="virtual-pet-personality-select" style="width: 100%; padding: 8px; margin-bottom: 8px; border-radius: 4px;">
                                 <option value="default">🐱 默认 - 高冷但温柔的猫</option>
                                 <option value="cheerful">🐶 活泼 - 热情洋溢的小狗</option>
                                 <option value="elegant">🐉 优雅 - 古典文雅的龙</option>
@@ -3946,7 +4041,7 @@ ${currentPersonality}
                                       placeholder="描述你的宠物性格、喜好和特点..."
                                       rows="3"
                                       maxlength="5000"
-                                      style="width: 100%; padding: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px; resize: vertical; font-family: inherit;"></textarea>
+                                      style="width: 100%; padding: 8px; border-radius: 4px; resize: vertical; font-family: inherit;"></textarea>
                             <small style="color: #888; font-size: 0.8em;">最多5000字符，这将影响宠物与你互动时的回复风格</small>
                         </div>
 
@@ -3961,7 +4056,7 @@ ${currentPersonality}
                             <label for="ai-api-select" style="display: block; margin-bottom: 8px; font-weight: bold;">
                                 🤖 AI API 配置
                             </label>
-                            <select id="ai-api-select" style="width: 100%; padding: 8px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+                            <select id="ai-api-select" style="width: 100%; padding: 8px; margin-bottom: 8px; border-radius: 4px;">
                                 <option value="">请选择API类型...</option>
                                 <option value="openai">OpenAI (ChatGPT)</option>
                                 <option value="claude">Claude (Anthropic)</option>
@@ -3979,21 +4074,21 @@ ${currentPersonality}
                                     API URL:
                                 </label>
                                 <input id="ai-url-input" type="text" placeholder="例如: https://api.openai.com/v1"
-                                       style="width: 100%; padding: 6px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+                                       style="width: 100%; padding: 6px; border-radius: 4px;">
                             </div>
                             <div style="margin-bottom: 10px;">
                                 <label for="ai-key-input" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
                                     API Key:
                                 </label>
                                 <input id="ai-key-input" type="password" placeholder="输入你的API密钥"
-                                       style="width: 100%; padding: 6px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+                                       style="width: 100%; padding: 6px; border-radius: 4px;">
                             </div>
                             <div style="margin-bottom: 10px;">
                                 <label for="ai-model-select" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
                                     模型名称:
                                 </label>
                                 <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
-                                    <select id="ai-model-select" style="flex: 1; padding: 6px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px; font-size: 0.9em;">
+                                    <select id="ai-model-select" style="flex: 1; padding: 6px; border-radius: 4px; font-size: 0.9em;">
                                         <option value="">请选择模型...</option>
                                         <option value="gpt-4">GPT-4</option>
                                         <option value="gpt-4-turbo">GPT-4 Turbo</option>
@@ -4019,7 +4114,7 @@ ${currentPersonality}
                                     </button>
                                 </div>
                                 <input id="ai-model-input" type="text" placeholder="自定义模型名称"
-                                       style="width: 100%; padding: 6px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px; display: none;">
+                                       style="width: 100%; padding: 6px; border-radius: 4px; display: none;">
                             </div>
                         </div>
 

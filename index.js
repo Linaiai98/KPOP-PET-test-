@@ -37,6 +37,35 @@ jQuery(async () => {
     // 自定义头像管理
     let customAvatarData = null;
 
+    // 同步保存限制机制
+    let lastSyncSaveTime = 0;
+    const SYNC_SAVE_COOLDOWN = 2000; // 2秒冷却时间，避免频繁保存
+
+    /**
+     * 安全的SillyTavern设置保存函数
+     */
+    function safeSillyTavernSave() {
+        const now = Date.now();
+        if (now - lastSyncSaveTime < SYNC_SAVE_COOLDOWN) {
+            console.log(`[${extensionName}] 同步保存冷却中，跳过此次保存`);
+            return false;
+        }
+
+        try {
+            if (typeof window.saveSettingsDebounced === 'function' &&
+                typeof window.extension_settings === 'object' &&
+                window.extension_settings !== null) {
+
+                window.saveSettingsDebounced();
+                lastSyncSaveTime = now;
+                return true;
+            }
+        } catch (error) {
+            console.warn(`[${extensionName}] SillyTavern保存失败:`, error);
+        }
+        return false;
+    }
+
     // 拓麻歌子风格配色方案
     const candyColors = {
         // 主色调 - 经典拓麻歌子风格
@@ -1698,7 +1727,7 @@ ${getCurrentPersonality()}
     }
 
     /**
-     * 保存到同步存储（跨设备）
+     * 保存到同步存储（跨设备）- 安全版本
      */
     function saveToSyncStorage(data) {
         try {
@@ -1706,17 +1735,26 @@ ${getCurrentPersonality()}
             const syncKey = `${extensionName}-sync-data`;
             localStorage.setItem(syncKey, JSON.stringify(data));
 
-            // 如果在SillyTavern环境中，尝试使用其他同步方法
-            if (typeof window.saveSettingsDebounced === 'function') {
-                // 利用SillyTavern的设置保存机制
-                const syncData = {
-                    [`${extensionName}_pet_data`]: data
-                };
+            // 安全地尝试使用SillyTavern的同步机制
+            if (typeof window.saveSettingsDebounced === 'function' &&
+                typeof window.extension_settings === 'object' &&
+                window.extension_settings !== null) {
 
-                // 尝试保存到SillyTavern的设置中
-                if (typeof window.extension_settings === 'object') {
-                    window.extension_settings[extensionName] = syncData;
-                    window.saveSettingsDebounced();
+                try {
+                    // 确保不覆盖现有的扩展设置
+                    if (!window.extension_settings[extensionName]) {
+                        window.extension_settings[extensionName] = {};
+                    }
+
+                    // 只保存宠物数据，不影响其他设置
+                    window.extension_settings[extensionName][`${extensionName}_pet_data`] = data;
+
+                    // 使用安全的保存机制
+                    if (safeSillyTavernSave()) {
+                        console.log(`[${extensionName}] 数据已保存到SillyTavern设置`);
+                    }
+                } catch (settingsError) {
+                    console.warn(`[${extensionName}] SillyTavern设置保存失败，使用本地存储:`, settingsError);
                 }
             }
 
@@ -1757,7 +1795,7 @@ ${getCurrentPersonality()}
     }
 
     /**
-     * 保存AI设置到同步存储
+     * 保存AI设置到同步存储 - 安全版本
      */
     function saveAISettingsToSync(settings) {
         try {
@@ -1765,14 +1803,26 @@ ${getCurrentPersonality()}
             const syncKey = `${extensionName}-ai-settings-sync`;
             localStorage.setItem(syncKey, JSON.stringify(settings));
 
-            // 如果在SillyTavern环境中，也保存到其设置中
-            if (typeof window.saveSettingsDebounced === 'function') {
-                if (typeof window.extension_settings === 'object') {
+            // 安全地尝试使用SillyTavern的同步机制
+            if (typeof window.saveSettingsDebounced === 'function' &&
+                typeof window.extension_settings === 'object' &&
+                window.extension_settings !== null) {
+
+                try {
+                    // 确保不覆盖现有的扩展设置
                     if (!window.extension_settings[extensionName]) {
                         window.extension_settings[extensionName] = {};
                     }
+
+                    // 只保存AI设置，不影响其他设置
                     window.extension_settings[extensionName][`${extensionName}_ai_settings`] = settings;
-                    window.saveSettingsDebounced();
+
+                    // 使用安全的保存机制
+                    if (safeSillyTavernSave()) {
+                        console.log(`[${extensionName}] AI设置已保存到SillyTavern设置`);
+                    }
+                } catch (settingsError) {
+                    console.warn(`[${extensionName}] SillyTavern AI设置保存失败，使用本地存储:`, settingsError);
                 }
             }
 
@@ -1813,7 +1863,7 @@ ${getCurrentPersonality()}
     }
 
     /**
-     * 保存头像到同步存储
+     * 保存头像到同步存储 - 安全版本
      */
     function saveAvatarToSync(avatarData) {
         try {
@@ -1821,15 +1871,31 @@ ${getCurrentPersonality()}
             const syncKey = `${extensionName}-avatar-sync`;
             localStorage.setItem(syncKey, avatarData);
 
-            // 如果在SillyTavern环境中，也保存到其设置中
-            if (typeof window.saveSettingsDebounced === 'function') {
-                if (typeof window.extension_settings === 'object') {
+            // 安全地尝试使用SillyTavern的同步机制
+            // 注意：头像数据可能很大，谨慎保存到SillyTavern设置
+            if (typeof window.saveSettingsDebounced === 'function' &&
+                typeof window.extension_settings === 'object' &&
+                window.extension_settings !== null &&
+                avatarData.length < 500000) { // 限制头像大小 < 500KB
+
+                try {
+                    // 确保不覆盖现有的扩展设置
                     if (!window.extension_settings[extensionName]) {
                         window.extension_settings[extensionName] = {};
                     }
+
+                    // 只保存头像，不影响其他设置
                     window.extension_settings[extensionName][`${extensionName}_avatar`] = avatarData;
-                    window.saveSettingsDebounced();
+
+                    // 使用安全的保存机制
+                    if (safeSillyTavernSave()) {
+                        console.log(`[${extensionName}] 头像已保存到SillyTavern设置`);
+                    }
+                } catch (settingsError) {
+                    console.warn(`[${extensionName}] SillyTavern头像保存失败，使用本地存储:`, settingsError);
                 }
+            } else if (avatarData.length >= 500000) {
+                console.log(`[${extensionName}] 头像过大(${Math.round(avatarData.length/1024)}KB)，仅保存到本地存储`);
             }
 
             console.log(`[${extensionName}] 头像已保存到同步存储`);
@@ -1869,7 +1935,7 @@ ${getCurrentPersonality()}
     }
 
     /**
-     * 从同步存储清除头像
+     * 从同步存储清除头像 - 安全版本
      */
     function clearAvatarFromSync() {
         try {
@@ -1877,12 +1943,22 @@ ${getCurrentPersonality()}
             const syncKey = `${extensionName}-avatar-sync`;
             localStorage.removeItem(syncKey);
 
-            // 如果在SillyTavern环境中，也从其设置中清除
-            if (typeof window.saveSettingsDebounced === 'function') {
-                if (typeof window.extension_settings === 'object' &&
-                    window.extension_settings[extensionName]) {
+            // 安全地尝试从SillyTavern设置中清除
+            if (typeof window.saveSettingsDebounced === 'function' &&
+                typeof window.extension_settings === 'object' &&
+                window.extension_settings !== null &&
+                window.extension_settings[extensionName]) {
+
+                try {
+                    // 只删除头像，不影响其他设置
                     delete window.extension_settings[extensionName][`${extensionName}_avatar`];
-                    window.saveSettingsDebounced();
+
+                    // 使用安全的保存机制
+                    if (safeSillyTavernSave()) {
+                        console.log(`[${extensionName}] 头像已从SillyTavern设置清除`);
+                    }
+                } catch (settingsError) {
+                    console.warn(`[${extensionName}] SillyTavern头像清除失败:`, settingsError);
                 }
             }
 

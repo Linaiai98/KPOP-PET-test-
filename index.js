@@ -512,41 +512,44 @@ jQuery(async () => {
     }
 
     /**
-     * 更新API下拉列表 - 直接后端API版本
+     * 更新模型下拉列表 - 新的主要功能
      */
-    function updateAPIDropdown(apis) {
-        const select = $('#ai-api-select');
+    function updateModelDropdown(models) {
+        const select = $('#ai-model-select');
         const currentValue = select.val();
 
-        console.log(`[${extensionName}] 🔄 更新API下拉列表，共 ${apis.length} 个API`);
+        console.log(`[${extensionName}] 🔄 更新模型下拉列表，共 ${models.length} 个模型`);
 
         // 保留原有的静态选项
         const staticOptions = `
-            <option value="">请选择API类型...</option>
-            <option value="openai">OpenAI (ChatGPT)</option>
-            <option value="claude">Claude (Anthropic)</option>
-            <option value="google">Google AI Studio</option>
-            <option value="mistral">Mistral AI</option>
-            <option value="ollama">Ollama (本地)</option>
-            <option value="custom">自定义API</option>
+            <option value="">请选择模型...</option>
+            <option value="gpt-4">GPT-4</option>
+            <option value="gpt-4-turbo">GPT-4 Turbo</option>
+            <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+            <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+            <option value="claude-3-sonnet-20240229">Claude 3 Sonnet</option>
+            <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+            <option value="gemini-pro">Gemini Pro</option>
+            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+            <option value="custom">🔧 自定义模型</option>
         `;
 
-        // 按提供商分组动态API
-        const groupedAPIs = {};
-        apis.forEach(api => {
-            const group = api.provider || 'Other';
-            if (!groupedAPIs[group]) {
-                groupedAPIs[group] = [];
+        // 按提供商分组动态模型
+        const groupedModels = {};
+        models.forEach(model => {
+            const group = model.provider || 'Other';
+            if (!groupedModels[group]) {
+                groupedModels[group] = [];
             }
-            groupedAPIs[group].push(api);
+            groupedModels[group].push(model);
         });
 
         // 生成动态选项
         let dynamicOptions = '';
-        if (Object.keys(groupedAPIs).length > 0) {
+        if (Object.keys(groupedModels).length > 0) {
             // 按优先级排序组
-            const groupOrder = ['OpenAI', 'Anthropic Claude', 'Google AI', 'Ollama (本地)', 'LM Studio (本地)', 'SillyTavern配置', 'SillyTavern当前模型', 'Other'];
-            const sortedGroups = Object.keys(groupedAPIs).sort((a, b) => {
+            const groupOrder = ['OpenAI', 'Anthropic Claude', 'Google AI', 'Ollama (本地)', 'LM Studio (本地)', '第三方API', '用户配置API', 'Other'];
+            const sortedGroups = Object.keys(groupedModels).sort((a, b) => {
                 const aIndex = groupOrder.indexOf(a);
                 const bIndex = groupOrder.indexOf(b);
                 if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
@@ -556,25 +559,27 @@ jQuery(async () => {
             });
 
             sortedGroups.forEach(group => {
-                const groupAPIs = groupedAPIs[group];
+                const groupModels = groupedModels[group];
                 dynamicOptions += `<optgroup label="━━━ ${group} ━━━">`;
 
-                groupAPIs.forEach(api => {
-                    const value = `backend:${api.type}:${api.id || api.name}`;
-                    const statusIcon = getStatusIcon(api.status);
-                    let displayName = api.name;
+                groupModels.forEach(model => {
+                    const value = `api_model:${model.id || model.name}`;
+                    const statusIcon = getStatusIcon(model.status);
+                    let displayName = model.name;
 
-                    // 添加认证状态提示
-                    if (api.requiresAuth && !api.hasAuth) {
-                        displayName += ' (需要API密钥)';
+                    // 添加状态提示
+                    if (model.status === 'suggested') {
+                        displayName += ' (推荐)';
+                    } else if (model.status === 'auth_required') {
+                        displayName += ' (需要密钥)';
                     }
 
                     // 限制显示长度
-                    if (displayName.length > 45) {
-                        displayName = displayName.substring(0, 42) + '...';
+                    if (displayName.length > 40) {
+                        displayName = displayName.substring(0, 37) + '...';
                     }
 
-                    dynamicOptions += `<option value="${value}" data-requires-auth="${api.requiresAuth}" data-has-auth="${api.hasAuth}">${statusIcon} ${displayName}</option>`;
+                    dynamicOptions += `<option value="${value}" data-model-id="${model.id}" data-status="${model.status}">${statusIcon} ${displayName}</option>`;
                 });
                 dynamicOptions += '</optgroup>';
             });
@@ -587,17 +592,32 @@ jQuery(async () => {
             select.val(currentValue);
         }
 
-        console.log(`[${extensionName}] ✅ API下拉列表更新完成`);
+        console.log(`[${extensionName}] ✅ 模型下拉列表更新完成`);
 
         // 显示统计信息
-        const totalAPIs = apis.length;
-        const availableAPIs = apis.filter(api => api.status === 'available').length;
-        const authRequiredAPIs = apis.filter(api => api.status === 'auth_required').length;
+        const totalModels = models.length;
+        const availableModels = models.filter(model => model.status === 'available').length;
+        const suggestedModels = models.filter(model => model.status === 'suggested').length;
 
-        if (totalAPIs > 0) {
-            const message = `发现 ${totalAPIs} 个API: ${availableAPIs} 个可用, ${authRequiredAPIs} 个需要密钥`;
-            toastr.success(message, '🎉 API发现成功', { timeOut: 5000 });
+        if (totalModels > 0) {
+            console.log(`[${extensionName}] 📊 模型统计: 总计${totalModels}个, 可用${availableModels}个, 推荐${suggestedModels}个`);
         }
+    }
+
+    /**
+     * 更新API下拉列表 - 保留兼容性
+     */
+    function updateAPIDropdown(apis) {
+        // 为了兼容性，将API列表转换为模型列表格式
+        const models = apis.map(api => ({
+            id: api.name,
+            name: api.name,
+            status: api.status,
+            provider: api.provider,
+            type: api.type
+        }));
+
+        updateModelDropdown(models);
     }
 
     /**
@@ -620,11 +640,26 @@ jQuery(async () => {
      * 保存AI配置设置
      */
     function saveAISettings() {
+        // 获取当前选择的模型
+        let currentModel = '';
+        const modelSelect = $('#ai-model-select').val();
+        const modelInput = $('#ai-model-input').val();
+
+        if (modelSelect === 'custom') {
+            currentModel = modelInput;
+        } else if (modelSelect && modelSelect.startsWith('api_model:')) {
+            currentModel = modelSelect.replace('api_model:', '');
+        } else if (modelSelect) {
+            currentModel = modelSelect;
+        } else {
+            currentModel = modelInput;
+        }
+
         const settings = {
             apiType: $('#ai-api-select').val(),
             apiUrl: $('#ai-url-input').val(),
             apiKey: $('#ai-key-input').val(),
-            apiModel: $('#ai-model-input').val(),
+            apiModel: currentModel,
             lastTestTime: Date.now(),
             lastTestResult: $('#ai-connection-status').text().includes('✅')
         };
@@ -644,7 +679,26 @@ jQuery(async () => {
                 $('#ai-api-select').val(settings.apiType || '');
                 $('#ai-url-input').val(settings.apiUrl || '');
                 $('#ai-key-input').val(settings.apiKey || '');
-                $('#ai-model-input').val(settings.apiModel || '');
+
+                // 处理模型设置
+                const savedModel = settings.apiModel || '';
+                if (savedModel) {
+                    // 尝试在模型选择框中找到匹配的选项
+                    const modelSelect = $('#ai-model-select');
+                    const matchingOption = modelSelect.find(`option[value="${savedModel}"]`);
+
+                    if (matchingOption.length > 0) {
+                        // 在下拉列表中找到了匹配的模型
+                        modelSelect.val(savedModel);
+                        $('#ai-model-input').hide().val(savedModel);
+                    } else {
+                        // 没有找到匹配的模型，使用自定义模式
+                        modelSelect.val('custom');
+                        $('#ai-model-input').show().val(savedModel);
+                    }
+                } else {
+                    $('#ai-model-input').val('');
+                }
 
                 // 根据API类型显示/隐藏配置输入框
                 toggleApiConfigInputs(settings.apiType);
@@ -655,6 +709,7 @@ jQuery(async () => {
                     $('#ai-connection-status').text(`✅ 上次测试成功 (${timeAgo}分钟前)`).css('color', '#48bb78');
                 }
 
+                console.log(`[${extensionName}] AI设置已加载:`, settings);
                 return settings;
             }
         } catch (error) {
@@ -1265,8 +1320,37 @@ ${getCurrentPersonality()}
             testAIConnection();
         });
 
-        // 绑定刷新API列表按钮事件
-        $('#refresh-api-list-btn').on('click', async function(e) {
+        // 绑定模型选择框事件
+        $('#ai-model-select').on('change', function() {
+            const selectedValue = $(this).val();
+            console.log(`[${extensionName}] 模型选择变化: ${selectedValue}`);
+
+            if (selectedValue === 'custom') {
+                // 显示自定义输入框
+                $('#ai-model-input').show().focus();
+                $('#ai-model-input').attr('placeholder', '请输入自定义模型名称');
+                toastr.info('请在下方输入框中输入自定义模型名称', '🔧 自定义模型', { timeOut: 3000 });
+            } else if (selectedValue && selectedValue.startsWith('api_model:')) {
+                // 处理从API获取的模型
+                const modelId = selectedValue.replace('api_model:', '');
+                $('#ai-model-input').hide().val(modelId);
+                toastr.success(`已选择API模型: ${modelId}`, '🤖 模型已选择', { timeOut: 2000 });
+                console.log(`[${extensionName}] 选择了API模型: ${modelId}`);
+            } else if (selectedValue) {
+                // 隐藏自定义输入框，使用选择的模型
+                $('#ai-model-input').hide().val(selectedValue);
+                toastr.success(`已选择模型: ${selectedValue}`, '🤖 模型已选择', { timeOut: 2000 });
+            } else {
+                // 未选择，隐藏自定义输入框
+                $('#ai-model-input').hide().val('');
+            }
+
+            // 保存设置
+            saveAISettings();
+        });
+
+        // 绑定刷新模型列表按钮事件
+        $('#refresh-models-btn').on('click', async function(e) {
             e.preventDefault();
             const button = $(this);
             const originalText = button.text();
@@ -1274,54 +1358,46 @@ ${getCurrentPersonality()}
             button.prop('disabled', true).text('🔄 获取中...');
 
             try {
-                console.log(`[${extensionName}] 开始刷新API列表...`);
+                console.log(`[${extensionName}] 开始刷新模型列表...`);
 
-                // 优先尝试获取用户配置的API模型
+                // 检查API配置
                 const userApiUrl = $('#ai-url-input').val();
                 const userApiKey = $('#ai-key-input').val();
 
-                let apis = [];
+                if (!userApiUrl) {
+                    toastr.warning('请先配置API URL', '⚠️ 配置不完整', { timeOut: 3000 });
+                    return;
+                }
 
-                if (userApiUrl) {
-                    console.log(`[${extensionName}] 检测到用户配置的API，优先获取其模型列表...`);
+                let models = [];
 
-                    // 先尝试第三方API专用方法
-                    const thirdPartyModels = await getThirdPartyModels();
-                    if (thirdPartyModels.length > 0) {
-                        apis = thirdPartyModels;
-                        console.log(`[${extensionName}] 从第三方API获取到 ${thirdPartyModels.length} 个模型`);
-                    } else {
-                        // 备选：使用通用方法
-                        const userModels = await getUserConfiguredModels();
-                        if (userModels.length > 0) {
-                            apis = userModels;
-                            console.log(`[${extensionName}] 从用户配置API获取到 ${userModels.length} 个模型`);
-                        }
+                console.log(`[${extensionName}] 从配置的API获取模型列表...`);
+
+                // 使用第三方API专用方法获取模型
+                const thirdPartyModels = await getThirdPartyModels();
+                if (thirdPartyModels.length > 0) {
+                    models = thirdPartyModels;
+                    console.log(`[${extensionName}] 从第三方API获取到 ${thirdPartyModels.length} 个模型`);
+                } else {
+                    // 备选：使用通用方法
+                    const userModels = await getUserConfiguredModels();
+                    if (userModels.length > 0) {
+                        models = userModels;
+                        console.log(`[${extensionName}] 从用户配置API获取到 ${userModels.length} 个模型`);
                     }
                 }
 
-                // 如果用户配置的API没有返回模型，则尝试通用方法
-                if (apis.length === 0) {
-                    console.log(`[${extensionName}] 用户配置API未返回模型，尝试通用方法...`);
-                    apis = await getAvailableAPIs();
-                }
+                // 更新模型下拉列表
+                updateModelDropdown(models);
 
-                updateAPIDropdown(apis);
-
-                if (apis.length > 0) {
-                    const message = userApiUrl ?
-                        `🎉 从您的API获取到 ${apis.length} 个模型！` :
-                        `🎉 发现 ${apis.length} 个可用API！`;
-                    toastr.success(message, '', { timeOut: 4000 });
+                if (models.length > 0) {
+                    toastr.success(`🎉 从您的API获取到 ${models.length} 个模型！`, '模型获取成功', { timeOut: 4000 });
                 } else {
-                    const message = userApiUrl ?
-                        '未能从您的API获取到模型，请检查URL和密钥配置' :
-                        '未检测到额外的API，显示默认选项';
-                    toastr.info(message, '', { timeOut: 4000 });
+                    toastr.warning('未能从您的API获取到模型，请检查URL和密钥配置', '⚠️ 模型获取失败', { timeOut: 4000 });
                 }
             } catch (error) {
-                console.error(`[${extensionName}] 刷新API列表失败:`, error);
-                toastr.error('获取API列表失败: ' + error.message, '', { timeOut: 5000 });
+                console.error(`[${extensionName}] 刷新模型列表失败:`, error);
+                toastr.error('获取模型列表失败: ' + error.message, '❌ 获取失败', { timeOut: 5000 });
             } finally {
                 button.prop('disabled', false).text(originalText);
             }
@@ -3406,29 +3482,15 @@ ${getCurrentPersonality()}
                             <label for="ai-api-select" style="display: block; margin-bottom: 8px; font-weight: bold;">
                                 🤖 AI API 配置
                             </label>
-                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                                <select id="ai-api-select" style="flex: 1; padding: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
-                                    <option value="">请选择API类型...</option>
-                                    <option value="openai">OpenAI (ChatGPT)</option>
-                                    <option value="claude">Claude (Anthropic)</option>
-                                    <option value="google">Google AI Studio</option>
-                                    <option value="mistral">Mistral AI</option>
-                                    <option value="ollama">Ollama (本地)</option>
-                                    <option value="custom">自定义API</option>
-                                </select>
-                                <button id="refresh-api-list-btn" style="
-                                    padding: 8px 12px;
-                                    background: #4a90e2;
-                                    color: white;
-                                    border: none;
-                                    border-radius: 4px;
-                                    cursor: pointer;
-                                    font-size: 0.9em;
-                                    white-space: nowrap;
-                                " title="从SillyTavern获取可用的API列表">
-                                    🔄 刷新
-                                </button>
-                            </div>
+                            <select id="ai-api-select" style="width: 100%; padding: 8px; margin-bottom: 8px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+                                <option value="">请选择API类型...</option>
+                                <option value="openai">OpenAI (ChatGPT)</option>
+                                <option value="claude">Claude (Anthropic)</option>
+                                <option value="google">Google AI Studio</option>
+                                <option value="mistral">Mistral AI</option>
+                                <option value="ollama">Ollama (本地)</option>
+                                <option value="custom">自定义API</option>
+                            </select>
                         </div>
 
                         <!-- API配置输入框 -->
@@ -3448,11 +3510,37 @@ ${getCurrentPersonality()}
                                        style="width: 100%; padding: 6px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
                             </div>
                             <div style="margin-bottom: 10px;">
-                                <label for="ai-model-input" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
+                                <label for="ai-model-select" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
                                     模型名称:
                                 </label>
-                                <input id="ai-model-input" type="text" placeholder="例如: gpt-4, claude-3-sonnet"
-                                       style="width: 100%; padding: 6px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
+                                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                                    <select id="ai-model-select" style="flex: 1; padding: 6px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px; font-size: 0.9em;">
+                                        <option value="">请选择模型...</option>
+                                        <option value="gpt-4">GPT-4</option>
+                                        <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                                        <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                                        <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+                                        <option value="claude-3-sonnet-20240229">Claude 3 Sonnet</option>
+                                        <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+                                        <option value="gemini-pro">Gemini Pro</option>
+                                        <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                                        <option value="custom">🔧 自定义模型</option>
+                                    </select>
+                                    <button id="refresh-models-btn" style="
+                                        padding: 6px 10px;
+                                        background: #4a90e2;
+                                        color: white;
+                                        border: none;
+                                        border-radius: 4px;
+                                        cursor: pointer;
+                                        font-size: 0.8em;
+                                        white-space: nowrap;
+                                    " title="从配置的API获取可用模型列表">
+                                        🔄 获取
+                                    </button>
+                                </div>
+                                <input id="ai-model-input" type="text" placeholder="自定义模型名称"
+                                       style="width: 100%; padding: 6px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px; display: none;">
                             </div>
                         </div>
 

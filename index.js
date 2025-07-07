@@ -198,50 +198,42 @@ jQuery(async () => {
 
 
     /**
-     * 获取SillyTavern当前可用的API列表
+     * 获取SillyTavern当前可用的API列表 - 重新设计版本
      */
     async function getAvailableAPIs() {
         try {
-            console.log(`[${extensionName}] 开始获取可用API列表...`);
+            console.log(`[${extensionName}] 🔍 开始获取SillyTavern可用API列表...`);
             const availableAPIs = [];
 
-            // 方法1: 通过SillyTavern的getContext获取
-            if (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) {
-                try {
-                    const context = SillyTavern.getContext();
-                    console.log(`[${extensionName}] SillyTavern Context:`, context);
+            // 方法1: 通过SillyTavern的标准API端点获取模型列表
+            console.log(`[${extensionName}] 🌐 尝试SillyTavern标准API端点...`);
+            const standardEndpoints = [
+                // OpenAI兼容端点
+                { url: '/api/openai/models', type: 'openai', name: 'OpenAI模型' },
+                { url: '/api/openai/status', type: 'openai', name: 'OpenAI状态' },
 
-                    // 检查主要API类型
-                    if (context.main_api) {
-                        availableAPIs.push({
-                            type: context.main_api,
-                            name: getAPIDisplayName(context.main_api),
-                            status: context.online_status || 'unknown',
-                            source: 'context'
-                        });
-                    }
+                // Claude端点
+                { url: '/api/claude/models', type: 'claude', name: 'Claude模型' },
+                { url: '/api/claude/status', type: 'claude', name: 'Claude状态' },
 
-                    // 检查其他可能的API配置
-                    if (context.api_server) {
-                        console.log(`[${extensionName}] API服务器配置:`, context.api_server);
-                    }
-                } catch (error) {
-                    console.warn(`[${extensionName}] 通过getContext获取API失败:`, error);
-                }
-            }
+                // Google AI端点
+                { url: '/api/google/models', type: 'google', name: 'Google AI模型' },
+                { url: '/api/google/status', type: 'google', name: 'Google AI状态' },
 
-            // 方法2: 通过API端点获取
-            const endpoints = [
-                '/api/v1/models',
-                '/api/models',
-                '/api/backends',
-                '/api/status',
-                '/api/config'
+                // Ollama端点
+                { url: '/api/ollama/models', type: 'ollama', name: 'Ollama模型' },
+                { url: '/api/ollama/status', type: 'ollama', name: 'Ollama状态' },
+
+                // 通用端点
+                { url: '/api/models', type: 'general', name: '通用模型列表' },
+                { url: '/api/backends', type: 'general', name: '后端列表' },
+                { url: '/api/status', type: 'general', name: '系统状态' }
             ];
 
-            for (const endpoint of endpoints) {
+            for (const endpoint of standardEndpoints) {
                 try {
-                    const response = await fetch(endpoint, {
+                    console.log(`[${extensionName}] 🔗 测试端点: ${endpoint.url}`);
+                    const response = await fetch(endpoint.url, {
                         method: 'GET',
                         headers: {
                             'Content-Type': 'application/json',
@@ -250,43 +242,139 @@ jQuery(async () => {
 
                     if (response.ok) {
                         const data = await response.json();
-                        console.log(`[${extensionName}] 从 ${endpoint} 获取到数据:`, data);
+                        console.log(`[${extensionName}] ✅ ${endpoint.url} 成功:`, data);
 
-                        // 解析不同端点的数据
-                        if (endpoint.includes('models') && data.models) {
+                        // 解析模型数据
+                        if (data.models && Array.isArray(data.models)) {
                             data.models.forEach(model => {
-                                if (typeof model === 'string') {
+                                const modelName = typeof model === 'string' ? model : (model.id || model.name);
+                                if (modelName) {
                                     availableAPIs.push({
-                                        type: 'model',
-                                        name: model,
+                                        type: endpoint.type,
+                                        name: modelName,
                                         status: 'available',
-                                        source: endpoint
-                                    });
-                                } else if (model.id || model.name) {
-                                    availableAPIs.push({
-                                        type: 'model',
-                                        name: model.id || model.name,
-                                        status: 'available',
-                                        source: endpoint
+                                        source: endpoint.url,
+                                        provider: endpoint.name
                                     });
                                 }
                             });
                         }
 
-                        if (endpoint.includes('backends') && data.backends) {
-                            data.backends.forEach(backend => {
-                                availableAPIs.push({
-                                    type: backend.type || 'backend',
-                                    name: backend.name || backend.id,
-                                    status: backend.status || 'available',
-                                    source: endpoint
-                                });
+                        // 解析状态数据
+                        if (data.status || data.online || data.connected) {
+                            availableAPIs.push({
+                                type: endpoint.type,
+                                name: `${endpoint.name} (已连接)`,
+                                status: 'connected',
+                                source: endpoint.url,
+                                provider: endpoint.name
                             });
                         }
+
+                        // 解析其他格式的数据
+                        if (data.data && Array.isArray(data.data)) {
+                            data.data.forEach(item => {
+                                const itemName = item.id || item.name || item.model;
+                                if (itemName) {
+                                    availableAPIs.push({
+                                        type: endpoint.type,
+                                        name: itemName,
+                                        status: 'available',
+                                        source: endpoint.url,
+                                        provider: endpoint.name
+                                    });
+                                }
+                            });
+                        }
+                    } else {
+                        console.log(`[${extensionName}] ❌ ${endpoint.url}: HTTP ${response.status}`);
                     }
                 } catch (error) {
-                    console.log(`[${extensionName}] 端点 ${endpoint} 不可用:`, error.message);
+                    console.log(`[${extensionName}] ❌ ${endpoint.url} 失败: ${error.message}`);
                 }
+            }
+
+            // 方法2: 通过SillyTavern的getContext获取当前配置
+            console.log(`[${extensionName}] 📋 检查SillyTavern上下文...`);
+            if (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) {
+                try {
+                    const context = SillyTavern.getContext();
+                    console.log(`[${extensionName}] 📊 获取到SillyTavern上下文`);
+
+                    // 检查当前API配置
+                    if (context.main_api) {
+                        console.log(`[${extensionName}] 🎯 当前主要API: ${context.main_api}`);
+                        availableAPIs.push({
+                            type: context.main_api,
+                            name: `${getAPIDisplayName(context.main_api)} (当前使用)`,
+                            status: context.online_status ? 'connected' : 'configured',
+                            source: 'SillyTavern上下文',
+                            provider: 'SillyTavern'
+                        });
+                    }
+
+                    // 检查模型配置
+                    if (context.model) {
+                        console.log(`[${extensionName}] 🤖 当前模型: ${context.model}`);
+                        availableAPIs.push({
+                            type: 'model',
+                            name: context.model,
+                            status: 'current',
+                            source: 'SillyTavern上下文',
+                            provider: 'SillyTavern'
+                        });
+                    }
+
+                } catch (error) {
+                    console.warn(`[${extensionName}] ⚠️ 获取SillyTavern上下文失败:`, error);
+                }
+            }
+
+            // 方法3: 检查SillyTavern的设置存储
+            console.log(`[${extensionName}] 💾 检查SillyTavern设置存储...`);
+            try {
+                // 检查localStorage中的SillyTavern设置
+                const settingsKeys = Object.keys(localStorage).filter(key =>
+                    key.includes('api') || key.includes('model') || key.includes('backend')
+                );
+
+                settingsKeys.forEach(key => {
+                    try {
+                        const value = localStorage.getItem(key);
+                        if (value && value.length < 200) { // 避免过长的数据
+                            console.log(`[${extensionName}] 🔑 设置 ${key}: ${value}`);
+
+                            // 尝试解析JSON
+                            try {
+                                const parsed = JSON.parse(value);
+                                if (parsed.model || parsed.api_type || parsed.endpoint) {
+                                    availableAPIs.push({
+                                        type: 'setting',
+                                        name: `${key}: ${parsed.model || parsed.api_type || parsed.endpoint}`,
+                                        status: 'stored',
+                                        source: 'localStorage',
+                                        provider: 'SillyTavern设置'
+                                    });
+                                }
+                            } catch (e) {
+                                // 不是JSON，直接使用值
+                                if (value.includes('gpt') || value.includes('claude') || value.includes('gemini')) {
+                                    availableAPIs.push({
+                                        type: 'setting',
+                                        name: `${key}: ${value}`,
+                                        status: 'stored',
+                                        source: 'localStorage',
+                                        provider: 'SillyTavern设置'
+                                    });
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.log(`[${extensionName}] ⚠️ 解析设置 ${key} 失败:`, error.message);
+                    }
+                });
+            } catch (error) {
+                console.log(`[${extensionName}] ⚠️ 检查设置存储失败:`, error.message);
             }
 
             // 去重并排序
@@ -294,11 +382,29 @@ jQuery(async () => {
                 index === self.findIndex(a => a.name === api.name && a.type === api.type)
             ).sort((a, b) => a.name.localeCompare(b.name));
 
-            console.log(`[${extensionName}] 发现 ${uniqueAPIs.length} 个可用API:`, uniqueAPIs);
+            console.log(`[${extensionName}] 🎉 最终发现 ${uniqueAPIs.length} 个可用API:`, uniqueAPIs);
+
+            if (uniqueAPIs.length === 0) {
+                console.log(`[${extensionName}] ⚠️ 未发现任何API，可能的原因:`);
+                console.log(`[${extensionName}] 1. SillyTavern尚未配置任何API`);
+                console.log(`[${extensionName}] 2. API端点不可访问或结构变化`);
+                console.log(`[${extensionName}] 3. 需要在SillyTavern中先连接一个API`);
+                console.log(`[${extensionName}] 4. 插件运行时机过早，SillyTavern尚未完全加载`);
+            } else {
+                console.log(`[${extensionName}] 📋 发现的API类型分布:`);
+                const typeCount = {};
+                uniqueAPIs.forEach(api => {
+                    typeCount[api.type] = (typeCount[api.type] || 0) + 1;
+                });
+                Object.entries(typeCount).forEach(([type, count]) => {
+                    console.log(`[${extensionName}] - ${type}: ${count}个`);
+                });
+            }
+
             return uniqueAPIs;
 
         } catch (error) {
-            console.error(`[${extensionName}] 获取API列表失败:`, error);
+            console.error(`[${extensionName}] ❌ 获取API列表失败:`, error);
             return [];
         }
     }
@@ -322,11 +428,13 @@ jQuery(async () => {
     }
 
     /**
-     * 更新API下拉列表
+     * 更新API下拉列表 - 重新设计版本
      */
     function updateAPIDropdown(apis) {
         const select = $('#ai-api-select');
         const currentValue = select.val();
+
+        console.log(`[${extensionName}] 🔄 更新API下拉列表，共 ${apis.length} 个API`);
 
         // 保留原有的静态选项
         const staticOptions = `
@@ -339,16 +447,29 @@ jQuery(async () => {
             <option value="custom">自定义API</option>
         `;
 
-        // 添加动态获取的API选项
+        // 按类型分组动态API
+        const groupedAPIs = {};
+        apis.forEach(api => {
+            const group = api.provider || api.type || 'other';
+            if (!groupedAPIs[group]) {
+                groupedAPIs[group] = [];
+            }
+            groupedAPIs[group].push(api);
+        });
+
+        // 生成动态选项
         let dynamicOptions = '';
-        if (apis.length > 0) {
-            dynamicOptions += '<optgroup label="━━━ 检测到的API ━━━">';
-            apis.forEach(api => {
-                const value = api.type === 'model' ? `model:${api.name}` : api.type;
-                const status = api.status === 'available' ? '✅' : '❓';
-                dynamicOptions += `<option value="${value}">${status} ${api.name} (${api.source})</option>`;
+        if (Object.keys(groupedAPIs).length > 0) {
+            Object.entries(groupedAPIs).forEach(([group, groupAPIs]) => {
+                dynamicOptions += `<optgroup label="━━━ ${group} ━━━">`;
+                groupAPIs.forEach(api => {
+                    const value = `detected:${api.type}:${api.name}`;
+                    const statusIcon = getStatusIcon(api.status);
+                    const displayName = api.name.length > 40 ? api.name.substring(0, 37) + '...' : api.name;
+                    dynamicOptions += `<option value="${value}">${statusIcon} ${displayName}</option>`;
+                });
+                dynamicOptions += '</optgroup>';
             });
-            dynamicOptions += '</optgroup>';
         }
 
         select.html(staticOptions + dynamicOptions);
@@ -357,6 +478,24 @@ jQuery(async () => {
         if (currentValue) {
             select.val(currentValue);
         }
+
+        console.log(`[${extensionName}] ✅ API下拉列表更新完成`);
+    }
+
+    /**
+     * 获取状态图标
+     */
+    function getStatusIcon(status) {
+        const icons = {
+            'available': '✅',
+            'connected': '🟢',
+            'current': '⭐',
+            'configured': '🔧',
+            'stored': '💾',
+            'detected': '🔍',
+            'unknown': '❓'
+        };
+        return icons[status] || '❓';
     }
 
     /**
@@ -407,15 +546,38 @@ jQuery(async () => {
     }
 
     /**
-     * 切换API配置输入框的显示状态
+     * 切换API配置输入框的显示状态 - 增强版本
      */
     function toggleApiConfigInputs(apiType) {
         const container = $('#ai-config-container');
 
-        // 处理从SillyTavern获取的特殊API类型
+        console.log(`[${extensionName}] 🔧 处理API类型: ${apiType}`);
+
+        // 处理从SillyTavern检测到的API类型
         let processedApiType = apiType;
-        if (apiType && apiType.startsWith('model:')) {
-            // 如果是模型类型，提取模型名称并设置为自定义API
+        let detectedInfo = null;
+
+        if (apiType && apiType.startsWith('detected:')) {
+            // 解析检测到的API信息: detected:type:name
+            const parts = apiType.split(':');
+            if (parts.length >= 3) {
+                const detectedType = parts[1];
+                const detectedName = parts.slice(2).join(':'); // 处理名称中可能包含冒号的情况
+
+                processedApiType = detectedType;
+                detectedInfo = {
+                    type: detectedType,
+                    name: detectedName
+                };
+
+                console.log(`[${extensionName}] 🔍 检测到的API信息:`, detectedInfo);
+
+                // 自动填充模型名称
+                $('#ai-model-input').val(detectedName);
+                toastr.info(`已选择检测到的API: ${detectedName}，请配置相应的URL和密钥`, '', { timeOut: 6000 });
+            }
+        } else if (apiType && apiType.startsWith('model:')) {
+            // 兼容旧格式
             const modelName = apiType.replace('model:', '');
             processedApiType = 'custom';
             $('#ai-model-input').val(modelName);
@@ -434,13 +596,34 @@ jQuery(async () => {
                 'kobold': { url: 'http://localhost:5001', model: 'kobold' },
                 'ollama': { url: 'http://localhost:11434', model: 'llama2' },
                 'tabby': { url: 'http://localhost:5000', model: 'tabby' },
-                'horde': { url: 'https://horde.koboldai.net', model: 'horde' }
+                'horde': { url: 'https://horde.koboldai.net', model: 'horde' },
+                'general': { url: '', model: '' },
+                'setting': { url: '', model: '' }
             };
 
-            if (defaults[processedApiType] && !$('#ai-url-input').val()) {
-                $('#ai-url-input').attr('placeholder', defaults[processedApiType].url);
-                if (!$('#ai-model-input').val()) {
+            // 设置默认值（如果当前输入框为空）
+            if (defaults[processedApiType]) {
+                if (!$('#ai-url-input').val() && defaults[processedApiType].url) {
+                    $('#ai-url-input').attr('placeholder', defaults[processedApiType].url);
+                }
+                if (!$('#ai-model-input').val() && defaults[processedApiType].model && !detectedInfo) {
                     $('#ai-model-input').attr('placeholder', defaults[processedApiType].model);
+                }
+            }
+
+            // 如果是检测到的API，提供额外的提示
+            if (detectedInfo) {
+                console.log(`[${extensionName}] 💡 为检测到的API提供配置提示`);
+
+                // 根据检测到的API类型提供特定的配置建议
+                if (detectedInfo.type === 'openai' || detectedInfo.name.includes('gpt')) {
+                    $('#ai-url-input').attr('placeholder', 'https://api.openai.com/v1');
+                } else if (detectedInfo.type === 'claude' || detectedInfo.name.includes('claude')) {
+                    $('#ai-url-input').attr('placeholder', 'https://api.anthropic.com');
+                } else if (detectedInfo.type === 'google' || detectedInfo.name.includes('gemini')) {
+                    $('#ai-url-input').attr('placeholder', 'https://generativelanguage.googleapis.com/v1beta');
+                } else if (detectedInfo.type === 'ollama') {
+                    $('#ai-url-input').attr('placeholder', 'http://localhost:11434');
                 }
             }
         } else {
@@ -964,7 +1147,10 @@ ${getCurrentPersonality()}
         console.log(`[${extensionName}] 当前人设类型: ${currentPersonalityType}`);
         console.log(`[${extensionName}] 当前人设内容: ${getCurrentPersonality()}`);
         console.log(`[${extensionName}] 💡 提示: 点击"🔄 刷新"按钮可以从SillyTavern获取可用的API列表`);
-        console.log(`[${extensionName}] 💡 提示: 在控制台运行 testVirtualPetAPIDiscovery() 可以测试API发现功能`);
+        console.log(`[${extensionName}] 💡 提示: 在控制台运行以下命令进行测试:`);
+        console.log(`[${extensionName}] 💡   - diagnoseSillyTavernEnvironment() // 环境诊断`);
+        console.log(`[${extensionName}] 💡   - testVirtualPetAPIDiscovery() // API发现测试`);
+        console.log(`[${extensionName}] 💡   - quickAPITest() // 快速API测试`);
     }
 
     /**
@@ -7979,58 +8165,150 @@ ${getCurrentPersonality()}
     // -----------------------------------------------------------------
 
     /**
+     * 快速诊断SillyTavern环境
+     */
+    window.diagnoseSillyTavernEnvironment = function() {
+        console.log("🔍 SillyTavern环境诊断开始...");
+        console.log("=".repeat(50));
+
+        // 1. 检查基本对象
+        console.log("\n1️⃣ 基本对象检查:");
+        console.log(`- window对象: ${typeof window !== 'undefined' ? '✅' : '❌'}`);
+        console.log(`- jQuery对象: ${typeof $ !== 'undefined' ? '✅' : '❌'}`);
+        console.log(`- SillyTavern对象: ${typeof SillyTavern !== 'undefined' ? '✅' : '❌'}`);
+
+        // 2. 检查SillyTavern相关函数
+        console.log("\n2️⃣ SillyTavern函数检查:");
+        const stFunctions = ['getContext', 'generateReply', 'Generate'];
+        stFunctions.forEach(func => {
+            if (typeof SillyTavern !== 'undefined' && SillyTavern[func]) {
+                console.log(`- SillyTavern.${func}: ✅`);
+            } else if (typeof window[func] !== 'undefined') {
+                console.log(`- window.${func}: ✅`);
+            } else {
+                console.log(`- ${func}: ❌`);
+            }
+        });
+
+        // 3. 检查全局变量
+        console.log("\n3️⃣ 全局变量检查:");
+        const globalVars = ['main_api', 'api_server', 'online_status', 'models', 'backends', 'extension_settings'];
+        globalVars.forEach(varName => {
+            const exists = typeof window[varName] !== 'undefined';
+            console.log(`- ${varName}: ${exists ? '✅' : '❌'} ${exists ? typeof window[varName] : ''}`);
+            if (exists && window[varName]) {
+                console.log(`  值: ${JSON.stringify(window[varName]).substring(0, 100)}...`);
+            }
+        });
+
+        // 4. 检查当前页面URL和路径
+        console.log("\n4️⃣ 页面信息:");
+        console.log(`- URL: ${window.location.href}`);
+        console.log(`- 路径: ${window.location.pathname}`);
+        console.log(`- 主机: ${window.location.host}`);
+
+        // 5. 检查DOM中的SillyTavern特征元素
+        console.log("\n5️⃣ DOM元素检查:");
+        const stSelectors = ['#chat', '#send_textarea', '#api_button', '.mes', '#extensions_settings'];
+        stSelectors.forEach(selector => {
+            const element = $(selector);
+            console.log(`- ${selector}: ${element.length > 0 ? '✅' : '❌'} (${element.length}个)`);
+        });
+
+        console.log("\n=".repeat(50));
+        console.log("🔍 环境诊断完成");
+
+        return {
+            hasSillyTavern: typeof SillyTavern !== 'undefined',
+            hasGetContext: typeof SillyTavern !== 'undefined' && typeof SillyTavern.getContext === 'function',
+            hasJQuery: typeof $ !== 'undefined',
+            url: window.location.href,
+            globalVarsFound: globalVars.filter(v => typeof window[v] !== 'undefined')
+        };
+    };
+
+    /**
      * 测试API获取功能
      */
     window.testVirtualPetAPIDiscovery = async function() {
         console.log("🔍 测试虚拟宠物API发现功能...");
 
+        // 先进行环境诊断
+        const envInfo = window.diagnoseSillyTavernEnvironment();
+
+        if (!envInfo.hasSillyTavern) {
+            console.log("⚠️ 警告: 未检测到SillyTavern环境，这可能是原因之一");
+        }
+
         try {
-            // 测试SillyTavern上下文获取
-            console.log("\n📋 测试SillyTavern上下文:");
-            if (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) {
-                const context = SillyTavern.getContext();
-                console.log("✅ SillyTavern上下文可用");
-                console.log("主要API:", context.main_api);
-                console.log("在线状态:", context.online_status);
-                console.log("API服务器:", context.api_server);
-
-                // 显示更多上下文信息
-                const contextKeys = Object.keys(context).filter(key =>
-                    key.toLowerCase().includes('api') ||
-                    key.toLowerCase().includes('model') ||
-                    key.toLowerCase().includes('backend')
-                );
-                console.log("API相关的上下文键:", contextKeys);
-            } else {
-                console.log("❌ SillyTavern上下文不可用");
-            }
-
-            // 测试API端点
-            console.log("\n🌐 测试API端点:");
-            const endpoints = ['/api/v1/models', '/api/models', '/api/backends', '/api/status', '/api/config'];
-
-            for (const endpoint of endpoints) {
-                try {
-                    const response = await fetch(endpoint);
-                    if (response.ok) {
-                        const data = await response.json();
-                        console.log(`✅ ${endpoint}: 可用`, data);
-                    } else {
-                        console.log(`❌ ${endpoint}: HTTP ${response.status}`);
-                    }
-                } catch (error) {
-                    console.log(`❌ ${endpoint}: ${error.message}`);
-                }
-            }
-
             // 测试完整的API获取功能
-            console.log("\n🔄 测试完整API获取:");
+            console.log("\n🔄 开始API发现测试:");
             const apis = await getAvailableAPIs();
-            console.log(`发现 ${apis.length} 个API:`, apis);
+            console.log(`\n🎉 测试完成，发现 ${apis.length} 个API:`, apis);
+
+            if (apis.length === 0) {
+                console.log("\n💡 建议:");
+                console.log("1. 确认你在SillyTavern页面中运行此测试");
+                console.log("2. 确认SillyTavern已经配置了至少一个API");
+                console.log("3. 尝试刷新页面后重新测试");
+                console.log("4. 检查浏览器控制台是否有其他错误");
+            }
 
             return apis;
         } catch (error) {
-            console.error("测试失败:", error);
+            console.error("❌ 测试失败:", error);
+            return [];
+        }
+    };
+
+    /**
+     * 快速API测试 - 简化版本
+     */
+    window.quickAPITest = async function() {
+        console.log("⚡ 快速API测试开始...");
+
+        // 1. 基础检查
+        console.log("\n1️⃣ 基础检查:");
+        console.log(`SillyTavern: ${typeof SillyTavern !== 'undefined' ? '✅' : '❌'}`);
+        console.log(`jQuery: ${typeof $ !== 'undefined' ? '✅' : '❌'}`);
+
+        // 2. 快速端点测试
+        console.log("\n2️⃣ 快速端点测试:");
+        const quickEndpoints = ['/api/status', '/api/config'];
+        for (const endpoint of quickEndpoints) {
+            try {
+                const response = await fetch(endpoint, { method: 'GET' });
+                console.log(`${endpoint}: ${response.ok ? '✅' : '❌'} (${response.status})`);
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log(`  数据预览:`, JSON.stringify(data).substring(0, 100) + '...');
+                }
+            } catch (error) {
+                console.log(`${endpoint}: ❌ (${error.message})`);
+            }
+        }
+
+        // 3. DOM快速检查
+        console.log("\n3️⃣ DOM快速检查:");
+        const quickSelectors = ['#chat', '#send_textarea', 'select'];
+        quickSelectors.forEach(selector => {
+            const count = $(selector).length;
+            console.log(`${selector}: ${count > 0 ? '✅' : '❌'} (${count}个)`);
+        });
+
+        // 4. 尝试获取API
+        console.log("\n4️⃣ 尝试获取API:");
+        try {
+            const apis = await getAvailableAPIs();
+            console.log(`结果: ${apis.length > 0 ? '✅' : '❌'} 发现${apis.length}个API`);
+            if (apis.length > 0) {
+                apis.forEach((api, index) => {
+                    console.log(`  ${index + 1}. ${api.name} (${api.type}) - ${api.source}`);
+                });
+            }
+            return apis;
+        } catch (error) {
+            console.log(`结果: ❌ 错误: ${error.message}`);
             return [];
         }
     };

@@ -1,34 +1,6 @@
 // 虚拟宠物系统 - SillyTavern插件
 console.log("🐾 虚拟宠物系统脚本开始加载...");
 
-// 加载冲突修复模块
-if (typeof window.VirtualPetSystem === 'undefined') {
-    // 如果冲突修复模块未加载，创建基础命名空间
-    window.VirtualPetSystem = {
-        version: '1.0.1',
-        namespace: 'virtual-pet-system',
-        initialized: false,
-        safeSaveSettings: function(data) {
-            // 基础的安全保存函数
-            try {
-                const extensionName = 'virtual-pet-system';
-                if (typeof window.saveSettingsDebounced === 'function' &&
-                    typeof window.extension_settings === 'object') {
-
-                    if (!window.extension_settings[extensionName]) {
-                        window.extension_settings[extensionName] = {};
-                    }
-
-                    window.extension_settings[extensionName].pet_data = JSON.parse(JSON.stringify(data));
-                    window.saveSettingsDebounced();
-                }
-            } catch (error) {
-                console.warn('[virtual-pet-system] 设置保存失败:', error);
-            }
-        }
-    };
-}
-
 // 使用 jQuery 确保在 DOM 加载完毕后执行我们的代码
 jQuery(async () => {
     console.log("🐾 jQuery ready, 开始初始化...");
@@ -47,11 +19,6 @@ jQuery(async () => {
     const STORAGE_KEY_ENABLED = "virtual-pet-enabled";
     const STORAGE_KEY_PET_DATA = "virtual-pet-data";
     const STORAGE_KEY_CUSTOM_AVATAR = "virtual-pet-custom-avatar";
-
-    // 降低z-index值以避免与其他插件冲突
-    const Z_INDEX_BUTTON = 10000;  // 降低按钮z-index
-    const Z_INDEX_POPUP = 10001;   // 降低弹窗z-index
-    const Z_INDEX_MODAL = 10002;   // 降低模态框z-index
     
     // DOM IDs and Selectors
     const BUTTON_ID = "virtual-pet-button";
@@ -231,197 +198,42 @@ jQuery(async () => {
 
 
     /**
-     * 保存AI配置设置（支持跨平台同步）
+     * 保存AI配置设置
      */
     function saveAISettings() {
-        const selectedModel = $('#ai-model-select').val() || $('#ai-model-input').val();
         const settings = {
             apiType: $('#ai-api-select').val(),
             apiUrl: $('#ai-url-input').val(),
             apiKey: $('#ai-key-input').val(),
-            apiModel: selectedModel,
+            apiModel: $('#ai-model-input').val(),
             lastTestTime: Date.now(),
             lastTestResult: $('#ai-connection-status').text().includes('✅')
         };
 
-        // 保存到本地存储
         localStorage.setItem(`${extensionName}-ai-settings`, JSON.stringify(settings));
-
-        // 同步到SillyTavern设置（跨平台同步）
-        syncAISettingsToSillyTavern(settings);
-
-        // 显示同步状态
-        showSyncStatus('AI配置已同步到所有设备', 'success');
-
-        console.log(`[${extensionName}] AI设置已保存并同步，模型: ${selectedModel}`);
+        console.log(`[${extensionName}] AI设置已保存:`, settings);
     }
 
     /**
-     * 同步AI设置到SillyTavern（跨平台数据同步）
-     */
-    function syncAISettingsToSillyTavern(settings) {
-        try {
-            if (typeof window.extension_settings === 'object' &&
-                typeof window.saveSettingsDebounced === 'function') {
-
-                // 确保扩展设置对象存在
-                if (!window.extension_settings[extensionName]) {
-                    window.extension_settings[extensionName] = {};
-                }
-
-                // 保存AI设置到SillyTavern的扩展设置中
-                window.extension_settings[extensionName].ai_settings = {
-                    ...settings,
-                    syncTime: Date.now(),
-                    platform: navigator.userAgent.includes('Mobile') ? 'mobile' : 'desktop'
-                };
-
-                // 同时同步头像数据
-                syncAvatarToSillyTavern();
-
-                // 触发SillyTavern保存设置
-                window.saveSettingsDebounced();
-
-                console.log(`[${extensionName}] AI设置已同步到SillyTavern设置系统`);
-            }
-        } catch (error) {
-            console.error(`[${extensionName}] 同步AI设置到SillyTavern失败:`, error);
-            showSyncStatus('同步失败，请检查网络连接', 'error');
-        }
-    }
-
-    /**
-     * 显示同步状态
-     */
-    function showSyncStatus(message, type = 'success') {
-        const statusDiv = $('#ai-sync-status');
-        const statusText = $('#ai-sync-status-text');
-
-        statusText.text(message);
-        statusDiv.show();
-
-        // 根据类型设置样式
-        if (type === 'success') {
-            statusDiv.css({
-                'background': 'rgba(72, 187, 120, 0.1)',
-                'border-color': 'rgba(72, 187, 120, 0.3)',
-                'color': '#48bb78'
-            });
-        } else if (type === 'error') {
-            statusDiv.css({
-                'background': 'rgba(245, 101, 101, 0.1)',
-                'border-color': 'rgba(245, 101, 101, 0.3)',
-                'color': '#f56565'
-            });
-        }
-
-        // 3秒后自动隐藏
-        setTimeout(() => {
-            statusDiv.fadeOut();
-        }, 3000);
-    }
-
-    /**
-     * 强制同步AI设置
-     */
-    function forceSyncAISettings() {
-        const settings = loadAISettingsFromLocal();
-        if (settings) {
-            syncAISettingsToSillyTavern(settings);
-            syncAvatarToSillyTavern();
-            showSyncStatus('AI配置和头像已强制同步到所有设备', 'success');
-            toastr.success('AI配置和头像已强制同步');
-        } else {
-            showSyncStatus('没有找到本地AI配置', 'error');
-            toastr.warning('没有找到本地AI配置');
-        }
-    }
-
-    /**
-     * 同步头像到SillyTavern设置
-     */
-    function syncAvatarToSillyTavern() {
-        try {
-            if (typeof window.extension_settings === 'object' &&
-                typeof window.saveSettingsDebounced === 'function') {
-
-                // 确保扩展设置对象存在
-                if (!window.extension_settings[extensionName]) {
-                    window.extension_settings[extensionName] = {};
-                }
-
-                // 获取当前头像数据
-                const avatarData = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
-
-                // 保存头像数据到SillyTavern设置
-                window.extension_settings[extensionName].custom_avatar = {
-                    data: avatarData,
-                    syncTime: Date.now(),
-                    platform: navigator.userAgent.includes('Mobile') ? 'mobile' : 'desktop'
-                };
-
-                // 触发SillyTavern保存设置
-                window.saveSettingsDebounced();
-
-                console.log(`[${extensionName}] 头像已同步到SillyTavern设置系统`);
-            }
-        } catch (error) {
-            console.error(`[${extensionName}] 同步头像到SillyTavern失败:`, error);
-        }
-    }
-
-    /**
-     * 从SillyTavern设置加载头像
-     */
-    function loadAvatarFromSillyTavern() {
-        try {
-            if (typeof window.extension_settings === 'object' &&
-                window.extension_settings[extensionName] &&
-                window.extension_settings[extensionName].custom_avatar) {
-
-                const avatarInfo = window.extension_settings[extensionName].custom_avatar;
-                console.log(`[${extensionName}] 从SillyTavern设置加载头像配置:`, avatarInfo);
-                return avatarInfo;
-            }
-        } catch (error) {
-            console.error(`[${extensionName}] 从SillyTavern设置加载头像配置失败:`, error);
-        }
-        return null;
-    }
-
-    /**
-     * 加载AI配置设置（支持跨平台同步）
+     * 加载AI配置设置
      */
     function loadAISettings() {
         try {
-            // 首先尝试从SillyTavern设置加载（跨平台同步数据）
-            const syncedSettings = loadAISettingsFromSillyTavern();
-            const localSettings = loadAISettingsFromLocal();
+            const saved = localStorage.getItem(`${extensionName}-ai-settings`);
+            if (saved) {
+                const settings = JSON.parse(saved);
+                $('#ai-api-select').val(settings.apiType || '');
+                $('#ai-url-input').val(settings.apiUrl || '');
+                $('#ai-key-input').val(settings.apiKey || '');
+                $('#ai-model-input').val(settings.apiModel || '');
 
-            // 选择最新的设置数据
-            let settings = null;
-            if (syncedSettings && localSettings) {
-                // 比较时间戳，选择最新的
-                const syncTime = syncedSettings.syncTime || 0;
-                const localTime = localSettings.lastTestTime || 0;
-                settings = syncTime > localTime ? syncedSettings : localSettings;
-                console.log(`[${extensionName}] 使用${syncTime > localTime ? '同步' : '本地'}AI设置数据`);
-            } else {
-                settings = syncedSettings || localSettings;
-                if (syncedSettings) {
-                    console.log(`[${extensionName}] 使用同步AI设置数据`);
-                } else if (localSettings) {
-                    console.log(`[${extensionName}] 使用本地AI设置数据`);
-                }
-            }
+                // 根据API类型显示/隐藏配置输入框
+                toggleApiConfigInputs(settings.apiType);
 
-            if (settings) {
-                // 应用设置到UI
-                applyAISettingsToUI(settings);
-
-                // 如果使用的是同步数据，也保存到本地以备用
-                if (syncedSettings && (!localSettings || syncedSettings.syncTime > (localSettings.lastTestTime || 0))) {
-                    localStorage.setItem(`${extensionName}-ai-settings`, JSON.stringify(settings));
+                // 显示上次测试结果
+                if (settings.lastTestResult && settings.lastTestTime) {
+                    const timeAgo = Math.floor((Date.now() - settings.lastTestTime) / (1000 * 60));
+                    $('#ai-connection-status').text(`✅ 上次测试成功 (${timeAgo}分钟前)`).css('color', '#48bb78');
                 }
 
                 return settings;
@@ -429,73 +241,7 @@ jQuery(async () => {
         } catch (error) {
             console.error(`[${extensionName}] 加载AI设置失败:`, error);
         }
-
-        return null;
-    }
-
-    /**
-     * 从SillyTavern设置加载AI配置
-     */
-    function loadAISettingsFromSillyTavern() {
-        try {
-            if (typeof window.extension_settings === 'object' &&
-                window.extension_settings[extensionName] &&
-                window.extension_settings[extensionName].ai_settings) {
-
-                const settings = window.extension_settings[extensionName].ai_settings;
-                console.log(`[${extensionName}] 从SillyTavern设置加载AI配置:`, settings);
-                return settings;
-            }
-        } catch (error) {
-            console.error(`[${extensionName}] 从SillyTavern设置加载AI配置失败:`, error);
-        }
-        return null;
-    }
-
-    /**
-     * 从本地存储加载AI配置
-     */
-    function loadAISettingsFromLocal() {
-        try {
-            const saved = localStorage.getItem(`${extensionName}-ai-settings`);
-            if (saved) {
-                return JSON.parse(saved);
-            }
-        } catch (error) {
-            console.error(`[${extensionName}] 从本地存储加载AI配置失败:`, error);
-        }
-        return null;
-    }
-
-    /**
-     * 将AI设置应用到UI
-     */
-    function applyAISettingsToUI(settings) {
-        $('#ai-api-select').val(settings.apiType || '');
-        $('#ai-url-input').val(settings.apiUrl || '');
-        $('#ai-key-input').val(settings.apiKey || '');
-        $('#ai-model-input').val(settings.apiModel || '');
-
-        // 如果有保存的模型，也设置到下拉选择中
-        if (settings.apiModel) {
-            const modelSelect = $('#ai-model-select');
-            // 检查下拉中是否已有该选项
-            if (modelSelect.find(`option[value="${settings.apiModel}"]`).length === 0) {
-                // 如果没有，添加一个选项
-                modelSelect.append(`<option value="${settings.apiModel}">${settings.apiModel}</option>`);
-            }
-            modelSelect.val(settings.apiModel);
-        }
-
-        // 根据API类型显示/隐藏配置输入框
-        toggleApiConfigInputs(settings.apiType);
-
-        // 显示上次测试结果
-        if (settings.lastTestResult && settings.lastTestTime) {
-            const timeAgo = Math.floor((Date.now() - settings.lastTestTime) / (1000 * 60));
-            $('#ai-connection-status').text(`✅ 上次测试成功 (${timeAgo}分钟前)`).css('color', '#48bb78');
-        }
-    }
+        return {};
     }
 
     /**
@@ -524,260 +270,6 @@ jQuery(async () => {
             }
         } else {
             container.hide();
-        }
-    }
-
-    /**
-     * 从SillyTavern获取当前模型信息
-     */
-    function getSillyTavernModelInfo() {
-        try {
-            // 方法1: 使用SillyTavern的getContext API
-            if (window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
-                const context = window.SillyTavern.getContext();
-                console.log(`[${extensionName}] SillyTavern上下文:`, context);
-                return {
-                    api: context.mainApi || context.main_api,
-                    model: context.currentModel || context.model,
-                    context: context
-                };
-            }
-
-            // 方法2: 检查DOM元素
-            const apiElement = document.querySelector('#main_api');
-            const modelElement = document.querySelector('#model_select, #models_select, #model_openai_select, #model_claude_select');
-
-            if (apiElement && modelElement) {
-                return {
-                    api: apiElement.value,
-                    model: modelElement.value,
-                    context: null
-                };
-            }
-
-            // 方法3: 尝试从window对象获取
-            if (window.main_api && window.main_api.value) {
-                const modelSelect = document.querySelector(`#model_${window.main_api.value}_select`) ||
-                                 document.querySelector('#model_select');
-                return {
-                    api: window.main_api.value,
-                    model: modelSelect ? modelSelect.value : null,
-                    context: null
-                };
-            }
-
-            return { api: null, model: null, context: null };
-        } catch (error) {
-            console.error(`[${extensionName}] 获取SillyTavern模型信息失败:`, error);
-            return { api: null, model: null, context: null };
-        }
-    }
-
-    /**
-     * 获取可用模型列表
-     */
-    async function getAvailableModels(apiType, apiUrl, apiKey) {
-        console.log(`[${extensionName}] 获取${apiType}模型列表...`);
-
-        try {
-            let modelsEndpoint = '';
-            let headers = {
-                'Content-Type': 'application/json'
-            };
-
-            // 根据API类型构建请求
-            switch(apiType) {
-                case 'openai':
-                case 'custom':
-                    modelsEndpoint = apiUrl.replace(/\/$/, '') + '/models';
-                    if (!modelsEndpoint.includes('/v1/models')) {
-                        modelsEndpoint = apiUrl.replace(/\/$/, '') + '/v1/models';
-                    }
-                    headers['Authorization'] = `Bearer ${apiKey}`;
-                    break;
-
-                case 'anthropic':
-                    // Anthropic没有公开的模型列表API，返回预定义列表
-                    return [
-                        { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet (Latest)' },
-                        { id: 'claude-3-5-sonnet-20240620', name: 'Claude 3.5 Sonnet' },
-                        { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus' },
-                        { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet' },
-                        { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku' }
-                    ];
-
-                case 'google':
-                    modelsEndpoint = 'https://generativelanguage.googleapis.com/v1beta/models';
-                    headers['x-goog-api-key'] = apiKey;
-                    break;
-
-                default:
-                    // 尝试通用的/models端点
-                    modelsEndpoint = apiUrl.replace(/\/$/, '') + '/models';
-                    headers['Authorization'] = `Bearer ${apiKey}`;
-            }
-
-            console.log(`[${extensionName}] 请求模型列表: ${modelsEndpoint}`);
-
-            const response = await fetch(modelsEndpoint, {
-                method: 'GET',
-                headers: headers,
-                timeout: 10000
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            console.log(`[${extensionName}] 模型列表响应:`, data);
-
-            // 解析不同API的响应格式
-            let models = [];
-            if (data.data && Array.isArray(data.data)) {
-                // OpenAI格式
-                models = data.data.map(model => ({
-                    id: model.id,
-                    name: model.id,
-                    type: model.object || 'model'
-                }));
-            } else if (data.models && Array.isArray(data.models)) {
-                // Google AI格式
-                models = data.models.map(model => ({
-                    id: model.name.split('/').pop(),
-                    name: model.displayName || model.name.split('/').pop(),
-                    type: 'model'
-                }));
-            } else if (Array.isArray(data)) {
-                // 直接数组格式
-                models = data.map(model => ({
-                    id: typeof model === 'string' ? model : model.id,
-                    name: typeof model === 'string' ? model : (model.name || model.id),
-                    type: 'model'
-                }));
-            }
-
-            // 过滤出聊天模型
-            const chatModels = models.filter(model => {
-                const id = model.id.toLowerCase();
-                return !id.includes('embedding') &&
-                       !id.includes('whisper') &&
-                       !id.includes('tts') &&
-                       !id.includes('dall-e') &&
-                       !id.includes('vision') &&
-                       (id.includes('gpt') || id.includes('claude') || id.includes('gemini') ||
-                        id.includes('chat') || id.includes('text') || id.includes('instruct'));
-            });
-
-            console.log(`[${extensionName}] 找到${chatModels.length}个聊天模型`);
-            return chatModels;
-
-        } catch (error) {
-            console.error(`[${extensionName}] 获取模型列表失败:`, error);
-            throw error;
-        }
-    }
-
-    /**
-     * 获取SillyTavern当前模型并设置到配置中
-     */
-    function getSillyTavernCurrentModel() {
-        const modelInfo = getSillyTavernModelInfo();
-        const statusElement = $('#ai-connection-status');
-
-        if (modelInfo.api && modelInfo.model) {
-            // 设置API类型
-            $('#ai-api-select').val(modelInfo.api);
-
-            // 设置模型
-            const modelSelect = $('#ai-model-select');
-            const modelInput = $('#ai-model-input');
-
-            // 检查下拉中是否已有该模型
-            if (modelSelect.find(`option[value="${modelInfo.model}"]`).length === 0) {
-                // 如果没有，添加一个选项
-                modelSelect.append(`<option value="${modelInfo.model}">${modelInfo.model} (来自SillyTavern)</option>`);
-            }
-
-            modelSelect.val(modelInfo.model);
-            modelInput.val(modelInfo.model);
-
-            // 触发API类型变化事件
-            toggleApiConfigInputs(modelInfo.api);
-
-            // 保存设置
-            saveAISettings();
-
-            statusElement.text(`✅ 已获取SillyTavern模型: ${modelInfo.api}/${modelInfo.model}`).css('color', '#48bb78');
-            toastr.success(`成功获取SillyTavern当前模型: ${modelInfo.api}/${modelInfo.model}`);
-
-            console.log(`[${extensionName}] 获取到SillyTavern模型信息:`, modelInfo);
-        } else {
-            statusElement.text('⚠️ 无法获取SillyTavern模型信息').css('color', '#f6ad55');
-            toastr.warning('无法获取SillyTavern当前模型信息，请确保SillyTavern已正确配置');
-            console.log(`[${extensionName}] 未能获取SillyTavern模型信息:`, modelInfo);
-        }
-    }
-
-    /**
-     * 刷新模型下拉列表
-     */
-    async function refreshModelList() {
-        const refreshBtn = $('#refresh-models-btn');
-        const modelSelect = $('#ai-model-select');
-        const statusElement = $('#ai-connection-status');
-
-        // 获取当前API配置
-        const apiType = $('#ai-api-select').val();
-        const apiUrl = $('#ai-url-input').val();
-        const apiKey = $('#ai-key-input').val();
-
-        if (!apiType || !apiUrl || !apiKey) {
-            toastr.warning('请先完整填写API配置信息');
-            return;
-        }
-
-        // 显示加载状态
-        refreshBtn.prop('disabled', true).text('🔄 获取中...');
-        modelSelect.html('<option value="">🔄 正在获取模型列表...</option>');
-        statusElement.text('获取模型列表中...').css('color', '#4a9eff');
-
-        try {
-            const models = await getAvailableModels(apiType, apiUrl, apiKey);
-
-            // 清空并重新填充下拉列表
-            modelSelect.empty();
-
-            if (models.length === 0) {
-                modelSelect.append('<option value="">未找到可用模型</option>');
-                statusElement.text('⚠️ 未找到可用模型').css('color', '#f6ad55');
-            } else {
-                modelSelect.append('<option value="">请选择模型</option>');
-
-                models.forEach(model => {
-                    const option = $('<option></option>')
-                        .attr('value', model.id)
-                        .text(`${model.name}${model.type ? ` (${model.type})` : ''}`);
-                    modelSelect.append(option);
-                });
-
-                statusElement.text(`✅ 找到${models.length}个可用模型`).css('color', '#48bb78');
-                toastr.success(`成功获取${models.length}个可用模型`);
-
-                // 如果之前有选择的模型，尝试恢复选择
-                const savedModel = $('#ai-model-input').val();
-                if (savedModel && modelSelect.find(`option[value="${savedModel}"]`).length > 0) {
-                    modelSelect.val(savedModel);
-                }
-            }
-
-        } catch (error) {
-            console.error('获取模型列表失败:', error);
-            modelSelect.html('<option value="">获取模型失败</option>');
-            statusElement.text('❌ 获取模型失败').css('color', '#f56565');
-            toastr.error(`获取模型列表失败: ${error.message}`);
-        } finally {
-            refreshBtn.prop('disabled', false).text('🔄 刷新模型');
         }
     }
 
@@ -1248,33 +740,6 @@ ${getCurrentPersonality()}
             saveAISettings();
         });
 
-        // 绑定模型选择下拉框事件
-        $('#ai-model-select').on('change', function() {
-            const selectedModel = $(this).val();
-            if (selectedModel) {
-                $('#ai-model-input').val(selectedModel);
-            }
-            saveAISettings();
-        });
-
-        // 绑定刷新模型按钮事件
-        $('#refresh-models-btn').on('click', function(e) {
-            e.preventDefault();
-            refreshModelList();
-        });
-
-        // 绑定获取SillyTavern当前模型按钮事件
-        $('#get-sillytavern-model-btn').on('click', function(e) {
-            e.preventDefault();
-            getSillyTavernCurrentModel();
-        });
-
-        // 绑定强制同步按钮事件
-        $('#force-sync-btn').on('click', function(e) {
-            e.preventDefault();
-            forceSyncAISettings();
-        });
-
         $('#test-ai-connection-btn').on('click', function(e) {
             e.preventDefault();
             testAIConnection();
@@ -1528,33 +993,15 @@ ${getCurrentPersonality()}
 
             // 如果在SillyTavern环境中，尝试使用其他同步方法
             if (typeof window.saveSettingsDebounced === 'function') {
-                // 利用SillyTavern的设置保存机制，使用命名空间避免冲突
+                // 利用SillyTavern的设置保存机制
                 const syncData = {
                     [`${extensionName}_pet_data`]: data
                 };
 
-                // 尝试保存到SillyTavern的设置中，使用安全的方式避免与其他插件冲突
+                // 尝试保存到SillyTavern的设置中
                 if (typeof window.extension_settings === 'object') {
-                    // 确保不覆盖其他插件的设置
-                    if (!window.extension_settings[extensionName]) {
-                        window.extension_settings[extensionName] = {};
-                    }
-                    // 只更新我们自己的数据
-                    Object.assign(window.extension_settings[extensionName], syncData);
-
-                    // 使用VirtualPetSystem的安全保存方法
-                    if (window.VirtualPetSystem && window.VirtualPetSystem.safeSaveSettings) {
-                        window.VirtualPetSystem.safeSaveSettings(data);
-                    } else {
-                        // 使用防抖保存，避免频繁调用
-                        if (window.virtualPetSaveTimeout) {
-                            clearTimeout(window.virtualPetSaveTimeout);
-                        }
-                        window.virtualPetSaveTimeout = setTimeout(() => {
-                            window.saveSettingsDebounced();
-                            delete window.virtualPetSaveTimeout;
-                        }, 1000);
-                    }
+                    window.extension_settings[extensionName] = syncData;
+                    window.saveSettingsDebounced();
                 }
             }
 
@@ -1569,15 +1016,7 @@ ${getCurrentPersonality()}
      */
     function loadFromSyncStorage() {
         try {
-            // 使用VirtualPetSystem的安全加载方法
-            if (window.VirtualPetSystem && window.VirtualPetSystem.safeLoadSettings) {
-                const syncData = window.VirtualPetSystem.safeLoadSettings();
-                if (syncData) {
-                    return syncData;
-                }
-            }
-
-            // 备用方法：直接从SillyTavern设置加载
+            // 首先尝试从SillyTavern设置加载
             if (typeof window.extension_settings === 'object' &&
                 window.extension_settings[extensionName] &&
                 window.extension_settings[extensionName][`${extensionName}_pet_data`]) {
@@ -1868,7 +1307,7 @@ ${getCurrentPersonality()}
                 width: 100vw !important;
                 height: 100vh !important;
                 background-color: rgba(0, 0, 0, 0.8) !important;
-                z-index: ${Z_INDEX_POPUP} !important;
+                z-index: 999999 !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
@@ -2561,48 +2000,14 @@ ${getCurrentPersonality()}
     }
 
     /**
-     * 加载自定义头像数据（支持跨平台同步）
+     * 加载自定义头像数据
      */
     function loadCustomAvatar() {
         try {
-            // 首先尝试从SillyTavern设置加载（跨平台同步数据）
-            const syncedAvatar = loadAvatarFromSillyTavern();
-            const localAvatar = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
-
-            // 选择最新的头像数据
-            let avatarData = null;
-            if (syncedAvatar && localAvatar) {
-                // 比较时间戳，选择最新的
-                const syncTime = syncedAvatar.syncTime || 0;
-                const localTime = parseInt(localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR + '_time')) || 0;
-                avatarData = syncTime > localTime ? syncedAvatar.data : localAvatar;
-                console.log(`[${extensionName}] 使用${syncTime > localTime ? '同步' : '本地'}头像数据`);
-            } else {
-                avatarData = syncedAvatar?.data || localAvatar;
-                if (syncedAvatar) {
-                    console.log(`[${extensionName}] 使用同步头像数据`);
-                } else if (localAvatar) {
-                    console.log(`[${extensionName}] 使用本地头像数据`);
-                }
-            }
-
-            if (avatarData) {
-                customAvatarData = avatarData;
-
-                // 如果使用的是同步数据，也保存到本地以备用
-                if (syncedAvatar && (!localAvatar || syncedAvatar.syncTime > (parseInt(localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR + '_time')) || 0))) {
-                    localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, avatarData);
-                    localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR + '_time', syncedAvatar.syncTime.toString());
-                }
-
-                console.log(`[${extensionName}] Custom avatar loaded and synced`);
-
-                // 显示头像同步状态（如果是从云端加载的）
-                if (syncedAvatar && syncedAvatar.data) {
-                    setTimeout(() => {
-                        showSyncStatus('头像已从云端同步', 'success');
-                    }, 1000); // 延迟显示，避免与其他同步状态冲突
-                }
+            const saved = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
+            if (saved) {
+                customAvatarData = saved;
+                console.log(`[${extensionName}] Custom avatar loaded`);
             }
         } catch (error) {
             console.warn(`[${extensionName}] Failed to load custom avatar:`, error);
@@ -2610,66 +2015,31 @@ ${getCurrentPersonality()}
     }
 
     /**
-     * 保存自定义头像数据（支持跨平台同步）
+     * 保存自定义头像数据
      */
     function saveCustomAvatar(imageData) {
         try {
-            // 保存到本地存储
             localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, imageData);
-            localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR + '_time', Date.now().toString());
             customAvatarData = imageData;
-
-            // 同步到SillyTavern设置（跨平台同步）
-            syncAvatarToSillyTavern();
-
-            // 显示同步状态
-            showSyncStatus('头像已同步到所有设备', 'success');
-
-            console.log(`[${extensionName}] Custom avatar saved and synced`);
+            console.log(`[${extensionName}] Custom avatar saved`);
             return true;
         } catch (error) {
             console.error(`[${extensionName}] Failed to save custom avatar:`, error);
-            showSyncStatus('头像保存失败', 'error');
             return false;
         }
     }
 
     /**
-     * 清除自定义头像（支持跨平台同步）
+     * 清除自定义头像
      */
     function clearCustomAvatar() {
         try {
-            // 清除本地存储
             localStorage.removeItem(STORAGE_KEY_CUSTOM_AVATAR);
-            localStorage.removeItem(STORAGE_KEY_CUSTOM_AVATAR + '_time');
             customAvatarData = null;
-
-            // 同步清除操作到SillyTavern设置
-            if (typeof window.extension_settings === 'object' &&
-                typeof window.saveSettingsDebounced === 'function') {
-
-                if (!window.extension_settings[extensionName]) {
-                    window.extension_settings[extensionName] = {};
-                }
-
-                // 清除头像数据
-                window.extension_settings[extensionName].custom_avatar = {
-                    data: null,
-                    syncTime: Date.now(),
-                    platform: navigator.userAgent.includes('Mobile') ? 'mobile' : 'desktop'
-                };
-
-                window.saveSettingsDebounced();
-            }
-
-            // 显示同步状态
-            showSyncStatus('头像已重置并同步到所有设备', 'success');
-
-            console.log(`[${extensionName}] Custom avatar cleared and synced`);
+            console.log(`[${extensionName}] Custom avatar cleared`);
             return true;
         } catch (error) {
             console.error(`[${extensionName}] Failed to clear custom avatar:`, error);
-            showSyncStatus('头像重置失败', 'error');
             return false;
         }
     }
@@ -3093,7 +2463,7 @@ ${getCurrentPersonality()}
         const buttonHtml = `
             <div id="${BUTTON_ID}" style="
                 position: fixed !important;
-                z-index: ${Z_INDEX_BUTTON} !important;
+                z-index: 2147483647 !important;
                 cursor: grab !important;
                 width: 48px !important;
                 height: 48px !important;
@@ -3463,33 +2833,11 @@ ${getCurrentPersonality()}
                                        style="width: 100%; padding: 6px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
                             </div>
                             <div style="margin-bottom: 10px;">
-                                <label for="ai-model-select" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
+                                <label for="ai-model-input" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
                                     模型名称:
-                                    <button id="refresh-models-btn" type="button" style="margin-left: 10px; padding: 2px 8px; font-size: 0.8em; background: #4a9eff; color: white; border: none; border-radius: 3px; cursor: pointer;" title="从API获取可用模型列表">
-                                        🔄 刷新模型
-                                    </button>
-                                    <button id="get-sillytavern-model-btn" type="button" style="margin-left: 5px; padding: 2px 8px; font-size: 0.8em; background: #48bb78; color: white; border: none; border-radius: 3px; cursor: pointer;" title="获取SillyTavern当前模型">
-                                        📥 获取当前
-                                    </button>
                                 </label>
-                                <select id="ai-model-select" style="width: 100%; padding: 6px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
-                                    <option value="">请先配置API并点击刷新模型</option>
-                                </select>
-                                <input id="ai-model-input" type="text" placeholder="或手动输入模型名称"
-                                       style="width: 100%; padding: 6px; margin-top: 5px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px; font-size: 0.85em;">
-                                <small style="color: #888; font-size: 0.8em; display: block; margin-top: 3px;">
-                                    优先使用下拉选择，如果下拉中没有所需模型可手动输入
-                                </small>
-                            </div>
-
-                            <div style="margin-bottom: 10px;">
-                                <div id="ai-sync-status" style="padding: 8px; background: rgba(72, 187, 120, 0.1); border: 1px solid rgba(72, 187, 120, 0.3); border-radius: 4px; font-size: 0.85em; color: #48bb78; display: none;">
-                                    <span style="margin-right: 8px;">🔄</span>
-                                    <span id="ai-sync-status-text">AI配置和头像已同步到所有设备</span>
-                                    <button id="force-sync-btn" type="button" style="float: right; padding: 2px 6px; font-size: 0.75em; background: #48bb78; color: white; border: none; border-radius: 2px; cursor: pointer;" title="强制同步AI配置和头像">
-                                        强制同步
-                                    </button>
-                                </div>
+                                <input id="ai-model-input" type="text" placeholder="例如: gpt-4, claude-3-sonnet"
+                                       style="width: 100%; padding: 6px; background: var(--SmartThemeBodyColor); color: var(--SmartThemeEmColor); border: 1px solid #444; border-radius: 4px;">
                             </div>
                         </div>
 
@@ -7056,113 +6404,6 @@ ${getCurrentPersonality()}
         } else {
             console.log("❌ 测试头像设置失败");
         }
-    };
-
-    // 测试头像同步功能
-    window.testAvatarSync = function() {
-        console.log("🔄 测试头像同步功能...");
-
-        // 检查本地头像
-        const localAvatar = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
-        console.log(`本地头像: ${localAvatar ? '存在' : '不存在'}`);
-
-        // 检查同步头像
-        const syncedAvatar = loadAvatarFromSillyTavern();
-        console.log(`同步头像: ${syncedAvatar ? '存在' : '不存在'}`);
-
-        if (syncedAvatar) {
-            console.log(`同步时间: ${new Date(syncedAvatar.syncTime).toLocaleString()}`);
-            console.log(`同步平台: ${syncedAvatar.platform}`);
-        }
-
-        // 检查当前显示的头像
-        console.log(`当前头像: ${customAvatarData ? '自定义' : '默认'}`);
-
-        // 强制重新加载头像
-        loadCustomAvatar();
-        updateAvatarDisplay();
-        updateFloatingButtonAvatar();
-
-        console.log("✅ 头像同步测试完成");
-    };
-
-    // 检查CSS样式冲突
-    window.checkStyleConflicts = function() {
-        console.log("🎨 检查CSS样式冲突...");
-
-        // 检查是否有全局样式污染
-        const globalStyles = document.querySelectorAll('style[data-virtual-pet]');
-        console.log(`虚拟宠物全局样式: ${globalStyles.length}个`);
-
-        // 检查SillyTavern的图标元素
-        const sillyTavernIcons = document.querySelectorAll('i[class*="fa"], .fa, [class*="icon"]');
-        console.log(`SillyTavern图标元素: ${sillyTavernIcons.length}个`);
-
-        // 检查是否有样式被覆盖
-        let conflictCount = 0;
-        sillyTavernIcons.forEach((icon, index) => {
-            if (index < 5) { // 只检查前5个
-                const computedStyle = window.getComputedStyle(icon);
-                const hasConflict = computedStyle.fontFamily.includes('Courier New') ||
-                                  computedStyle.imageRendering === 'pixelated';
-                if (hasConflict) {
-                    conflictCount++;
-                    console.log(`图标冲突 #${index}:`, icon, computedStyle.fontFamily);
-                }
-            }
-        });
-
-        console.log(`发现样式冲突: ${conflictCount}个`);
-
-        if (conflictCount > 0) {
-            console.log("⚠️ 检测到样式冲突，建议运行修复函数");
-        } else {
-            console.log("✅ 未发现明显的样式冲突");
-        }
-    };
-
-    // 修复样式冲突
-    window.fixStyleConflicts = function() {
-        console.log("🔧 修复样式冲突...");
-
-        // 移除可能影响全局的样式
-        const globalStyles = document.querySelectorAll('style[data-virtual-pet]');
-        globalStyles.forEach(style => {
-            style.remove();
-            console.log("移除了虚拟宠物全局样式");
-        });
-
-        // 确保虚拟宠物的样式只影响自己的元素
-        const scopedCSS = `
-            /* 虚拟宠物专用样式 - 限制作用域 */
-            #virtual-pet-button,
-            #virtual-pet-popup-overlay,
-            #virtual-pet-popup,
-            .virtual-pet-popup-overlay,
-            .pet-popup-container,
-            .pet-avatar-circle,
-            .pet-main-content,
-            .action-btn {
-                font-family: 'Courier New', monospace !important;
-                image-rendering: pixelated !important;
-                image-rendering: -moz-crisp-edges !important;
-            }
-
-            /* 确保不影响SillyTavern的图标 */
-            body:not(#virtual-pet-button):not(#virtual-pet-popup-overlay) i[class*="fa"],
-            body:not(#virtual-pet-button):not(#virtual-pet-popup-overlay) .fa,
-            body:not(#virtual-pet-button):not(#virtual-pet-popup-overlay) [class*="icon"] {
-                font-family: inherit !important;
-                image-rendering: auto !important;
-            }
-        `;
-
-        const styleElement = document.createElement('style');
-        styleElement.setAttribute('data-virtual-pet-scoped', 'true');
-        styleElement.textContent = scopedCSS;
-        document.head.appendChild(styleElement);
-
-        console.log("✅ 样式冲突修复完成");
     };
 
     // 全面的拖动功能验证测试

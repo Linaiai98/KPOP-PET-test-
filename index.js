@@ -1226,10 +1226,20 @@ jQuery(async () => {
             console.log(`[${extensionName}] 使用自定义API: ${settings.apiType}`);
             const result = await callCustomAPI(prompt, settings, timeout);
 
+            console.log(`[${extensionName}] API原始返回结果:`, result);
+            console.log(`[${extensionName}] 结果类型:`, typeof result);
+            console.log(`[${extensionName}] 结果长度:`, result ? result.length : 'null/undefined');
+
             if (result && result.trim()) {
-                console.log(`[${extensionName}] 自定义API调用成功`);
+                console.log(`[${extensionName}] 自定义API调用成功，返回内容: "${result.trim()}"`);
                 return result.trim();
             } else {
+                console.log(`[${extensionName}] API返回内容无效:`, {
+                    result: result,
+                    isString: typeof result === 'string',
+                    isEmpty: !result,
+                    trimmed: result ? result.trim() : 'cannot trim'
+                });
                 throw new Error('API返回了空的或无效的回复');
             }
 
@@ -1438,22 +1448,60 @@ jQuery(async () => {
 
             // 根据API类型解析响应
             let result = '';
+            console.log(`[${extensionName}] 开始解析响应，API类型: ${settings.apiType}`);
+
             if (settings.apiType === 'openai' || settings.apiType === 'custom') {
+                console.log(`[${extensionName}] 使用OpenAI格式解析`);
                 result = data.choices?.[0]?.message?.content || data.choices?.[0]?.text || '';
+                console.log(`[${extensionName}] OpenAI解析路径:`, {
+                    'choices[0].message.content': data.choices?.[0]?.message?.content,
+                    'choices[0].text': data.choices?.[0]?.text,
+                    'final_result': result
+                });
             } else if (settings.apiType === 'claude') {
+                console.log(`[${extensionName}] 使用Claude格式解析`);
                 result = data.content?.[0]?.text || '';
+                console.log(`[${extensionName}] Claude解析路径:`, {
+                    'content[0].text': data.content?.[0]?.text,
+                    'final_result': result
+                });
             } else if (settings.apiType === 'google') {
+                console.log(`[${extensionName}] 使用Google Gemini格式解析`);
                 // Google Gemini API 响应格式
                 result = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                console.log(`[${extensionName}] Gemini解析路径:`, {
+                    'candidates[0].content.parts[0].text': data.candidates?.[0]?.content?.parts?.[0]?.text,
+                    'primary_result': result
+                });
+
                 // 备用解析路径
                 if (!result) {
                     result = data.text || data.response || data.result || '';
+                    console.log(`[${extensionName}] Gemini备用解析路径:`, {
+                        'data.text': data.text,
+                        'data.response': data.response,
+                        'data.result': data.result,
+                        'backup_result': result
+                    });
                 }
             } else {
+                console.log(`[${extensionName}] 使用通用格式解析`);
                 result = data.text || data.response || data.result || '';
+                console.log(`[${extensionName}] 通用解析路径:`, {
+                    'data.text': data.text,
+                    'data.response': data.response,
+                    'data.result': data.result,
+                    'final_result': result
+                });
             }
 
-            console.log(`[${extensionName}] 解析出的结果:`, result);
+            console.log(`[${extensionName}] 最终解析结果:`, {
+                result: result,
+                type: typeof result,
+                length: result ? result.length : 'null/undefined',
+                trimmed: result ? result.trim() : 'cannot trim'
+            });
+
             return result.trim();
 
         } catch (error) {
@@ -10351,6 +10399,7 @@ ${currentPersonality}
     console.log("  - testGeminiAPI() - 测试Gemini API连接和格式");
     console.log("  - testThirdPartyAPI() - 测试当前配置的第三方API");
     console.log("  - debugAPICall() - 调试API调用流程");
+    console.log("  - debugAPIResponse() - 调试API响应解析");
 
     /**
      * 测试URL自动构建功能
@@ -10593,6 +10642,109 @@ ${currentPersonality}
             console.error('❌ API调用失败:', error);
             toastr.error(`API调用失败: ${error.message}`, '🔍 调试失败', { timeOut: 8000 });
         }
+    };
+
+    /**
+     * 调试API响应解析
+     */
+    window.debugAPIResponse = function(mockResponse = null) {
+        console.log('🔍 调试API响应解析...');
+
+        const settings = loadAISettings();
+        console.log('📋 当前API配置:', settings);
+
+        // 如果没有提供模拟响应，使用一些常见的响应格式示例
+        const mockResponses = {
+            openai: {
+                choices: [{
+                    message: { content: "这是OpenAI格式的回复" },
+                    text: "这是备用的text字段"
+                }]
+            },
+            claude: {
+                content: [{
+                    text: "这是Claude格式的回复"
+                }]
+            },
+            google: {
+                candidates: [{
+                    content: {
+                        parts: [{
+                            text: "这是Gemini格式的回复"
+                        }]
+                    }
+                }]
+            },
+            generic: {
+                text: "这是通用格式的text字段",
+                response: "这是通用格式的response字段",
+                result: "这是通用格式的result字段"
+            }
+        };
+
+        const testResponse = mockResponse || mockResponses[settings.apiType] || mockResponses.generic;
+        console.log('🧪 测试响应数据:', testResponse);
+
+        // 模拟解析逻辑
+        let result = '';
+        console.log(`🔧 使用API类型: ${settings.apiType}`);
+
+        if (settings.apiType === 'openai' || settings.apiType === 'custom') {
+            result = testResponse.choices?.[0]?.message?.content || testResponse.choices?.[0]?.text || '';
+            console.log('📊 OpenAI解析结果:', {
+                'choices[0].message.content': testResponse.choices?.[0]?.message?.content,
+                'choices[0].text': testResponse.choices?.[0]?.text,
+                'final_result': result
+            });
+        } else if (settings.apiType === 'claude') {
+            result = testResponse.content?.[0]?.text || '';
+            console.log('📊 Claude解析结果:', {
+                'content[0].text': testResponse.content?.[0]?.text,
+                'final_result': result
+            });
+        } else if (settings.apiType === 'google') {
+            result = testResponse.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            console.log('📊 Gemini解析结果:', {
+                'candidates[0].content.parts[0].text': testResponse.candidates?.[0]?.content?.parts?.[0]?.text,
+                'final_result': result
+            });
+
+            if (!result) {
+                result = testResponse.text || testResponse.response || testResponse.result || '';
+                console.log('📊 Gemini备用解析:', {
+                    'text': testResponse.text,
+                    'response': testResponse.response,
+                    'result': testResponse.result,
+                    'backup_result': result
+                });
+            }
+        } else {
+            result = testResponse.text || testResponse.response || testResponse.result || '';
+            console.log('📊 通用解析结果:', {
+                'text': testResponse.text,
+                'response': testResponse.response,
+                'result': testResponse.result,
+                'final_result': result
+            });
+        }
+
+        console.log('✅ 最终解析结果:', {
+            result: result,
+            type: typeof result,
+            length: result ? result.length : 'null/undefined',
+            isEmpty: !result || result.trim() === '',
+            trimmed: result ? result.trim() : 'cannot trim'
+        });
+
+        if (result && result.trim()) {
+            console.log('✅ 解析成功！');
+            toastr.success(`解析成功: ${result}`, '🔍 调试成功');
+        } else {
+            console.log('❌ 解析失败，返回空结果');
+            toastr.error('解析失败，返回空结果', '🔍 调试失败');
+        }
+
+        return result;
     };
 
     console.log("🐾 虚拟宠物系统脚本已加载完成");

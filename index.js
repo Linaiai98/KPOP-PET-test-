@@ -1343,13 +1343,13 @@ jQuery(async () => {
                         content: prompt
                     }
                 ],
-                max_tokens: 500,  // 增加token限制，避免被截断
+                max_tokens: 200,  // 适中的token限制
                 temperature: 0.8
             };
         } else if (settings.apiType === 'claude') {
             requestBody = {
                 model: settings.apiModel || 'claude-3-sonnet-20240229',
-                max_tokens: 500,  // 增加token限制，避免被截断
+                max_tokens: 200,  // 适中的token限制
                 messages: [
                     {
                         role: 'user',
@@ -1370,7 +1370,7 @@ jQuery(async () => {
                     }
                 ],
                 generationConfig: {
-                    maxOutputTokens: 500,  // 增加token限制，避免被截断
+                    maxOutputTokens: 200,  // 适中的token限制
                     temperature: 0.8
                 }
             };
@@ -1379,7 +1379,7 @@ jQuery(async () => {
             requestBody = {
                 model: settings.apiModel || 'default',
                 prompt: prompt,
-                max_tokens: 500,  // 增加token限制，避免被截断
+                max_tokens: 200,  // 适中的token限制
                 temperature: 0.8
             };
         }
@@ -1395,6 +1395,7 @@ jQuery(async () => {
         console.log(`[${extensionName}] 开始发送请求，时间戳: ${startTime}`);
         console.log(`[${extensionName}] 请求头:`, headers);
         console.log(`[${extensionName}] 请求体:`, requestBody);
+        console.log(`[${extensionName}] 请求体JSON:`, JSON.stringify(requestBody, null, 2));
 
         try {
             // 移动端API连接优化
@@ -1445,6 +1446,18 @@ jQuery(async () => {
 
             const data = await response.json();
             console.log(`[${extensionName}] API响应数据:`, data);
+
+            // 深度分析响应结构
+            console.log(`[${extensionName}] 🔍 深度响应分析:`);
+            console.log(`- 响应对象类型:`, typeof data);
+            console.log(`- 响应对象键:`, Object.keys(data));
+            if (data.choices && data.choices.length > 0) {
+                console.log(`- choices[0]完整内容:`, JSON.stringify(data.choices[0], null, 2));
+                if (data.choices[0].message) {
+                    console.log(`- message对象键:`, Object.keys(data.choices[0].message));
+                    console.log(`- message完整内容:`, JSON.stringify(data.choices[0].message, null, 2));
+                }
+            }
 
             // 详细分析响应结构
             console.log(`[${extensionName}] 响应结构分析:`, {
@@ -10444,6 +10457,7 @@ ${currentPersonality}
     console.log("  - debugAPICall() - 调试API调用流程");
     console.log("  - debugAPIResponse() - 调试API响应解析");
     console.log("  - quickFixAPI() - 快速修复API响应解析问题");
+    console.log("  - testSimpleRequest() - 测试简化的请求格式");
 
     /**
      * 测试URL自动构建功能
@@ -10849,6 +10863,59 @@ ${currentPersonality}
         toastr.info('请查看控制台的详细分析', '🔧 快速修复', { timeOut: 5000 });
 
         return true;
+    };
+
+    /**
+     * 测试简化的请求格式
+     */
+    window.testSimpleRequest = async function() {
+        console.log('🧪 测试简化的请求格式...');
+
+        const settings = loadAISettings();
+        if (!settings.apiType || !settings.apiUrl || !settings.apiKey) {
+            console.log('❌ 请先配置API信息');
+            return false;
+        }
+
+        console.log('📋 当前配置:', settings);
+
+        // 测试不同的模型名称
+        const testModels = [
+            'gemini-pro',
+            'gpt-3.5-turbo',
+            'gpt-4',
+            settings.apiModel // 原始模型名称
+        ];
+
+        for (const model of testModels) {
+            console.log(`\n🔍 测试模型: ${model}`);
+
+            const testSettings = {
+                ...settings,
+                apiModel: model
+            };
+
+            try {
+                const result = await callCustomAPI("测试", testSettings, 10000);
+                if (result && result.trim()) {
+                    console.log(`✅ 模型 ${model} 测试成功: ${result}`);
+                    toastr.success(`模型 ${model} 可用！`, '🧪 测试成功');
+                    return { success: true, model: model, response: result };
+                } else {
+                    console.log(`❌ 模型 ${model} 返回空内容`);
+                }
+            } catch (error) {
+                console.log(`❌ 模型 ${model} 测试失败: ${error.message}`);
+            }
+        }
+
+        console.log('\n💡 建议:');
+        console.log('1. 尝试使用标准模型名称 (gemini-pro, gpt-3.5-turbo)');
+        console.log('2. 检查API提供商支持的模型列表');
+        console.log('3. 确认模型名称格式是否正确');
+
+        toastr.warning('所有模型测试都失败了', '🧪 测试完成', { timeOut: 5000 });
+        return { success: false };
     };
 
     console.log("🐾 虚拟宠物系统脚本已加载完成");

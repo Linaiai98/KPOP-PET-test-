@@ -1333,16 +1333,46 @@ jQuery(async () => {
                     apiUrl = apiUrl + '/messages';
                 }
             }
+        } else if (settings.apiType === 'google') {
+            // Google Gemini API 特殊处理
+            if (!apiUrl.includes(':generateContent')) {
+                // 构建正确的Gemini API端点
+                const modelName = settings.apiModel || 'gemini-pro';
+                if (apiUrl.endsWith('/v1beta')) {
+                    apiUrl = apiUrl + `/models/${modelName}:generateContent`;
+                } else if (!apiUrl.includes('/v1beta')) {
+                    apiUrl = apiUrl + `/v1beta/models/${modelName}:generateContent`;
+                } else {
+                    apiUrl = apiUrl + `/models/${modelName}:generateContent`;
+                }
+            }
         }
 
         console.log(`[${extensionName}] 原始URL: ${settings.apiUrl}`);
         console.log(`[${extensionName}] 修正后URL: ${apiUrl}`);
+        console.log(`[${extensionName}] API类型: ${settings.apiType}`);
 
-        // 构建请求头
+        // 构建请求头（根据API类型）
         const headers = {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${settings.apiKey}`
+            'Content-Type': 'application/json'
         };
+
+        // 根据API类型设置认证头
+        if (settings.apiType === 'google') {
+            // Google API 使用 x-goog-api-key 头或者URL参数
+            headers['x-goog-api-key'] = settings.apiKey;
+            // 也可以通过URL参数传递，如果头部认证失败的话
+            if (!apiUrl.includes('?key=') && !apiUrl.includes('&key=')) {
+                apiUrl += `?key=${settings.apiKey}`;
+            }
+        } else if (settings.apiType === 'claude') {
+            // Claude API 使用 x-api-key
+            headers['x-api-key'] = settings.apiKey;
+            headers['anthropic-version'] = '2023-06-01';
+        } else {
+            // OpenAI 和其他 API 使用 Bearer token
+            headers['Authorization'] = `Bearer ${settings.apiKey}`;
+        }
 
         // 构建请求体（根据API类型）
         let requestBody;
@@ -1368,6 +1398,23 @@ jQuery(async () => {
                         content: prompt
                     }
                 ]
+            };
+        } else if (settings.apiType === 'google') {
+            // Google Gemini API 格式
+            requestBody = {
+                contents: [
+                    {
+                        parts: [
+                            {
+                                text: prompt
+                            }
+                        ]
+                    }
+                ],
+                generationConfig: {
+                    maxOutputTokens: 150,
+                    temperature: 0.8
+                }
             };
         } else {
             // 通用格式
@@ -1447,6 +1494,13 @@ jQuery(async () => {
                 result = data.choices?.[0]?.message?.content || data.choices?.[0]?.text || '';
             } else if (settings.apiType === 'claude') {
                 result = data.content?.[0]?.text || '';
+            } else if (settings.apiType === 'google') {
+                // Google Gemini API 响应格式
+                result = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                // 备用解析路径
+                if (!result) {
+                    result = data.text || data.response || data.result || '';
+                }
             } else {
                 result = data.text || data.response || data.result || '';
             }
@@ -10345,6 +10399,8 @@ ${currentPersonality}
     console.log("  - diagnoseMobileAPI() - 移动端API诊断");
     console.log("  - testMobileAPIConnection() - 测试移动端API连接");
     console.log("  - testURLBuilder('your-url') - 测试URL自动构建功能");
+    console.log("🤖 Gemini API专用命令:");
+    console.log("  - testGeminiAPI() - 测试Gemini API连接和格式");
 
     /**
      * 测试URL自动构建功能
@@ -10413,6 +10469,86 @@ ${currentPersonality}
         }
 
         return prompt;
+    };
+
+    /**
+     * 测试Gemini API连接和格式
+     */
+    window.testGeminiAPI = async function() {
+        console.log('🤖 测试Gemini API连接和格式...');
+
+        const apiUrl = $('#ai-url-input').val();
+        const apiKey = $('#ai-key-input').val();
+        const apiModel = $('#ai-model-input').val() || 'gemini-pro';
+
+        if (!apiUrl) {
+            console.log('❌ 请先配置API URL');
+            toastr.error('请先配置API URL');
+            return false;
+        }
+
+        if (!apiKey) {
+            console.log('❌ 请先配置API密钥');
+            toastr.error('请先配置API密钥');
+            return false;
+        }
+
+        console.log(`🔗 API URL: ${apiUrl}`);
+        console.log(`🔑 API Key: ${apiKey ? '已设置' : '未设置'}`);
+        console.log(`🤖 模型: ${apiModel}`);
+
+        // 构建测试设置
+        const testSettings = {
+            apiType: 'google',
+            apiUrl: apiUrl,
+            apiKey: apiKey,
+            apiModel: apiModel
+        };
+
+        try {
+            console.log('\n📡 开始测试Gemini API...');
+            const testPrompt = "请简单回复'测试成功'，不超过10个字。";
+
+            const response = await callCustomAPI(testPrompt, testSettings, 15000);
+
+            if (response && response.trim()) {
+                console.log('✅ Gemini API测试成功!');
+                console.log(`📝 AI回复: ${response}`);
+                toastr.success(`Gemini API测试成功！AI回复: ${response.substring(0, 50)}`, '🤖 测试成功');
+                return true;
+            } else {
+                console.log('❌ Gemini API返回空响应');
+                toastr.error('Gemini API返回空响应', '❌ 测试失败');
+                return false;
+            }
+
+        } catch (error) {
+            console.error('❌ Gemini API测试失败:', error);
+
+            // 提供详细的错误分析
+            if (error.message.includes('500')) {
+                console.log('💡 500错误可能原因:');
+                console.log('1. 请求格式不正确');
+                console.log('2. 模型名称错误');
+                console.log('3. API密钥权限不足');
+                toastr.error('500错误：请检查请求格式和模型名称', '❌ 服务器错误', { timeOut: 8000 });
+            } else if (error.message.includes('401') || error.message.includes('403')) {
+                console.log('💡 认证错误可能原因:');
+                console.log('1. API密钥无效');
+                console.log('2. API密钥权限不足');
+                console.log('3. 认证头格式错误');
+                toastr.error('认证失败：请检查API密钥', '❌ 认证错误', { timeOut: 8000 });
+            } else if (error.message.includes('404')) {
+                console.log('💡 404错误可能原因:');
+                console.log('1. API端点URL错误');
+                console.log('2. 模型名称不存在');
+                console.log('3. API版本不正确');
+                toastr.error('404错误：请检查API URL和模型名称', '❌ 端点错误', { timeOut: 8000 });
+            }
+
+            toastr.error(`Gemini API测试失败: ${error.message}`, '❌ 测试失败', { timeOut: 10000 });
+            return false;
+        }
     };
 
     console.log("🐾 虚拟宠物系统脚本已加载完成");

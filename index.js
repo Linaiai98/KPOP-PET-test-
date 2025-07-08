@@ -1446,18 +1446,52 @@ jQuery(async () => {
             const data = await response.json();
             console.log(`[${extensionName}] API响应数据:`, data);
 
+            // 详细分析响应结构
+            console.log(`[${extensionName}] 响应结构分析:`, {
+                'data.choices存在': !!data.choices,
+                'choices长度': data.choices?.length,
+                'choices[0]存在': !!data.choices?.[0],
+                'choices[0]的所有键': data.choices?.[0] ? Object.keys(data.choices[0]) : 'N/A'
+            });
+
             // 根据API类型解析响应
             let result = '';
             console.log(`[${extensionName}] 开始解析响应，API类型: ${settings.apiType}`);
 
             if (settings.apiType === 'openai' || settings.apiType === 'custom') {
                 console.log(`[${extensionName}] 使用OpenAI格式解析`);
-                result = data.choices?.[0]?.message?.content || data.choices?.[0]?.text || '';
+
+                // 尝试多种OpenAI兼容格式的解析路径
+                result = data.choices?.[0]?.message?.content ||
+                         data.choices?.[0]?.text ||
+                         data.choices?.[0]?.delta?.content ||
+                         data.choices?.[0]?.message?.text ||
+                         '';
+
                 console.log(`[${extensionName}] OpenAI解析路径:`, {
                     'choices[0].message.content': data.choices?.[0]?.message?.content,
                     'choices[0].text': data.choices?.[0]?.text,
+                    'choices[0].delta.content': data.choices?.[0]?.delta?.content,
+                    'choices[0].message.text': data.choices?.[0]?.message?.text,
+                    'choices_array': data.choices,
+                    'first_choice': data.choices?.[0],
                     'final_result': result
                 });
+
+                // 如果还是空的，尝试其他可能的字段
+                if (!result && data.choices?.[0]) {
+                    const choice = data.choices[0];
+                    console.log(`[${extensionName}] 第一个choice的完整结构:`, choice);
+
+                    // 尝试更多可能的字段
+                    result = choice.content || choice.response || choice.output || '';
+                    console.log(`[${extensionName}] 备用字段解析:`, {
+                        'choice.content': choice.content,
+                        'choice.response': choice.response,
+                        'choice.output': choice.output,
+                        'backup_result': result
+                    });
+                }
             } else if (settings.apiType === 'claude') {
                 console.log(`[${extensionName}] 使用Claude格式解析`);
                 result = data.content?.[0]?.text || '';
@@ -10400,6 +10434,7 @@ ${currentPersonality}
     console.log("  - testThirdPartyAPI() - 测试当前配置的第三方API");
     console.log("  - debugAPICall() - 调试API调用流程");
     console.log("  - debugAPIResponse() - 调试API响应解析");
+    console.log("  - quickFixAPI() - 快速修复API响应解析问题");
 
     /**
      * 测试URL自动构建功能
@@ -10745,6 +10780,66 @@ ${currentPersonality}
         }
 
         return result;
+    };
+
+    /**
+     * 快速修复API响应解析问题
+     */
+    window.quickFixAPI = async function() {
+        console.log('🔧 快速修复API响应解析问题...');
+
+        const settings = loadAISettings();
+        if (!settings.apiType || !settings.apiUrl || !settings.apiKey) {
+            console.log('❌ 请先配置API信息');
+            return false;
+        }
+
+        console.log('📡 发送测试请求以获取真实响应结构...');
+
+        try {
+            // 直接调用callCustomAPI来获取真实响应
+            const testPrompt = "测试";
+            await callCustomAPI(testPrompt, settings, 10000);
+        } catch (error) {
+            console.log('📊 从错误中获取响应信息...');
+        }
+
+        console.log('\n💡 基于你的日志，问题是choices[0].message.content为空字符串');
+        console.log('🔍 让我们检查choices[0]的完整结构...');
+
+        // 模拟你的响应数据进行分析
+        const mockResponse = {
+            id: 'chatcmpl-20250708132707348110513aE2tFtcY',
+            model: 'gemini-2.5-pro-preview-06-05',
+            object: 'chat.completion',
+            created: 1751952430,
+            choices: [{
+                // 这里可能有其他字段
+                message: {
+                    content: '', // 这个是空的
+                    // 可能还有其他字段
+                },
+                // 可能还有其他字段
+            }]
+        };
+
+        console.log('🧪 分析可能的响应结构...');
+        console.log('如果choices[0].message.content是空的，可能的原因：');
+        console.log('1. 内容在choices[0].message.text字段');
+        console.log('2. 内容在choices[0].text字段');
+        console.log('3. 内容在choices[0].content字段');
+        console.log('4. 内容在choices[0].delta.content字段');
+        console.log('5. API返回了空内容（可能是模型问题）');
+
+        console.log('\n🔧 建议的修复方案：');
+        console.log('1. 再次运行testThirdPartyAPI()查看详细日志');
+        console.log('2. 检查你的API提供商文档');
+        console.log('3. 尝试不同的模型名称');
+        console.log('4. 检查API配额和权限');
+
+        toastr.info('请查看控制台的详细分析', '🔧 快速修复', { timeOut: 5000 });
+
+        return true;
     };
 
     console.log("🐾 虚拟宠物系统脚本已加载完成");

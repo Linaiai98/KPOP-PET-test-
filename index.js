@@ -1343,13 +1343,13 @@ jQuery(async () => {
                         content: prompt
                     }
                 ],
-                max_tokens: 150,
+                max_tokens: 500,  // 增加token限制，避免被截断
                 temperature: 0.8
             };
         } else if (settings.apiType === 'claude') {
             requestBody = {
                 model: settings.apiModel || 'claude-3-sonnet-20240229',
-                max_tokens: 150,
+                max_tokens: 500,  // 增加token限制，避免被截断
                 messages: [
                     {
                         role: 'user',
@@ -1370,7 +1370,7 @@ jQuery(async () => {
                     }
                 ],
                 generationConfig: {
-                    maxOutputTokens: 150,
+                    maxOutputTokens: 500,  // 增加token限制，避免被截断
                     temperature: 0.8
                 }
             };
@@ -1379,7 +1379,7 @@ jQuery(async () => {
             requestBody = {
                 model: settings.apiModel || 'default',
                 prompt: prompt,
-                max_tokens: 150,
+                max_tokens: 500,  // 增加token限制，避免被截断
                 temperature: 0.8
             };
         }
@@ -1473,10 +1473,19 @@ jQuery(async () => {
                     'choices[0].text': data.choices?.[0]?.text,
                     'choices[0].delta.content': data.choices?.[0]?.delta?.content,
                     'choices[0].message.text': data.choices?.[0]?.message?.text,
+                    'choices[0].finish_reason': data.choices?.[0]?.finish_reason,
                     'choices_array': data.choices,
                     'first_choice': data.choices?.[0],
                     'final_result': result
                 });
+
+                // 检查finish_reason
+                const finishReason = data.choices?.[0]?.finish_reason;
+                if (finishReason === 'length') {
+                    console.log(`[${extensionName}] ⚠️ 响应被截断！finish_reason: length - 需要增加max_tokens`);
+                } else if (finishReason) {
+                    console.log(`[${extensionName}] finish_reason: ${finishReason}`);
+                }
 
                 // 如果还是空的，尝试其他可能的字段
                 if (!result && data.choices?.[0]) {

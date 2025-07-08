@@ -1426,38 +1426,25 @@ jQuery(async () => {
                 if (apiUrl.startsWith('http://')) {
                     console.log(`[${extensionName}] 检测到HTTP请求，应用移动端兼容性处理`);
 
-                    // 尝试使用代理或JSONP方式
-                    console.log(`[${extensionName}] 警告：移动端不支持HTTP请求，建议使用HTTPS`);
+                    // 使用SillyTavern的CORS代理
+                    const originalUrl = apiUrl;
+                    const proxyUrl = `/proxy/${encodeURIComponent(apiUrl)}`;
 
-                    // 添加移动端友好的请求头
+                    console.log(`[${extensionName}] 使用SillyTavern CORS代理:`);
+                    console.log(`[${extensionName}] 原始URL: ${originalUrl}`);
+                    console.log(`[${extensionName}] 代理URL: ${proxyUrl}`);
+
+                    // 更新API URL为代理URL
+                    apiUrl = proxyUrl;
+
+                    // 移动端友好的请求头
                     fetchOptions.headers = {
                         ...fetchOptions.headers,
                         'Cache-Control': 'no-cache',
                         'Pragma': 'no-cache'
                     };
 
-                    // 尝试修改为HTTPS（如果可能）
-                    const httpsUrl = apiUrl.replace('http://', 'https://');
-                    console.log(`[${extensionName}] 尝试HTTPS版本: ${httpsUrl}`);
-
-                    // 先尝试HTTPS版本
-                    try {
-                        const httpsResponse = await fetch(httpsUrl, {
-                            ...fetchOptions,
-                            signal: controller.signal
-                        });
-
-                        if (httpsResponse.ok) {
-                            console.log(`[${extensionName}] HTTPS版本连接成功`);
-                            apiUrl = httpsUrl; // 使用HTTPS版本
-                        } else {
-                            console.log(`[${extensionName}] HTTPS版本失败，回退到HTTP`);
-                        }
-                    } catch (httpsError) {
-                        console.log(`[${extensionName}] HTTPS版本不可用: ${httpsError.message}`);
-                    }
-
-                    console.log(`[${extensionName}] 移动端HTTP兼容模式已启用`);
+                    console.log(`[${extensionName}] 移动端CORS代理模式已启用`);
                 } else {
                     // HTTPS请求的标准处理
                     fetchOptions.headers = {
@@ -10501,6 +10488,8 @@ ${currentPersonality}
     console.log("  - testMobileNetwork() - 移动端网络连接测试");
     console.log("  - setupMobileHTTPProxy() - 移动端HTTP代理解决方案");
     console.log("  - autoFixMobileHTTP() - 自动修复移动端HTTP问题");
+    console.log("  - checkSillyTavernProxy() - 检测SillyTavern CORS代理");
+    console.log("  - smartMobileAPIFix() - 智能移动端API修复");
     console.log("🤖 第三方API专用命令:");
     console.log("  - testGeminiAPI() - 测试Gemini API连接和格式");
     console.log("  - testThirdPartyAPI() - 测试当前配置的第三方API");
@@ -11146,6 +11135,113 @@ ${currentPersonality}
         console.log('❌ 自动修复失败，请手动处理');
         toastr.warning('请联系API提供商获取HTTPS端点', '🔧 需要手动处理', { timeOut: 8000 });
         return false;
+    };
+
+    /**
+     * 检测SillyTavern CORS代理是否可用
+     */
+    window.checkSillyTavernProxy = async function() {
+        console.log('🔍 检测SillyTavern CORS代理是否可用...');
+
+        try {
+            // 测试代理端点是否存在
+            const testUrl = '/proxy/https://httpbin.org/get';
+            const response = await fetch(testUrl, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (response.ok) {
+                console.log('✅ SillyTavern CORS代理可用');
+                toastr.success('SillyTavern CORS代理可用', '🔍 检测成功');
+                return true;
+            } else if (response.status === 404) {
+                console.log('❌ SillyTavern CORS代理未启用');
+                console.log('💡 解决方案:');
+                console.log('1. 在SillyTavern配置中启用CORS代理');
+                console.log('2. 或使用启动参数: --corsProxy');
+                toastr.warning('CORS代理未启用，请在SillyTavern设置中启用', '🔍 检测失败', { timeOut: 8000 });
+                return false;
+            } else {
+                console.log(`❌ CORS代理响应异常: ${response.status}`);
+                return false;
+            }
+        } catch (error) {
+            console.log(`❌ CORS代理检测失败: ${error.message}`);
+            toastr.error(`CORS代理检测失败: ${error.message}`, '🔍 检测失败', { timeOut: 5000 });
+            return false;
+        }
+    };
+
+    /**
+     * 智能移动端API修复
+     */
+    window.smartMobileAPIFix = async function() {
+        console.log('🔧 智能移动端API修复...');
+
+        const settings = loadAISettings();
+        if (!settings.apiUrl) {
+            console.log('❌ 请先配置API URL');
+            return false;
+        }
+
+        const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        if (!isMobile) {
+            console.log('✅ 当前不是移动端，无需修复');
+            return true;
+        }
+
+        if (settings.apiUrl.startsWith('https://')) {
+            console.log('✅ 已使用HTTPS，无需修复');
+            return true;
+        }
+
+        if (settings.apiUrl.startsWith('http://')) {
+            console.log('🔍 检测到HTTP API，开始修复...');
+
+            // 方案1: 检查CORS代理
+            const proxyAvailable = await checkSillyTavernProxy();
+            if (proxyAvailable) {
+                console.log('✅ 将使用SillyTavern CORS代理解决HTTP问题');
+                toastr.success('将使用SillyTavern CORS代理', '🔧 修复成功');
+                return true;
+            }
+
+            // 方案2: 尝试HTTPS版本
+            console.log('🔍 尝试HTTPS版本...');
+            const httpsUrl = settings.apiUrl.replace('http://', 'https://');
+            try {
+                const testSettings = { ...settings, apiUrl: httpsUrl };
+                const result = await callCustomAPI("测试", testSettings, 5000);
+
+                if (result) {
+                    console.log('✅ HTTPS版本可用，自动切换');
+                    $('#ai-url-input').val(httpsUrl);
+                    saveAISettings();
+                    toastr.success('已自动切换到HTTPS版本', '🔧 修复成功');
+                    return true;
+                }
+            } catch (error) {
+                console.log(`❌ HTTPS版本不可用: ${error.message}`);
+            }
+
+            // 方案3: 提供手动解决建议
+            console.log('❌ 自动修复失败，需要手动处理');
+            console.log('💡 建议解决方案:');
+            console.log('1. 启用SillyTavern的CORS代理功能');
+            console.log('2. 联系API提供商获取HTTPS端点');
+            console.log('3. 使用PC端访问HTTP API');
+
+            toastr.warning('需要手动处理HTTP API问题', '🔧 修复失败', {
+                timeOut: 10000,
+                extendedTimeOut: 5000
+            });
+            return false;
+        }
+
+        return true;
     };
 
     console.log("🐾 虚拟宠物系统脚本已加载完成");

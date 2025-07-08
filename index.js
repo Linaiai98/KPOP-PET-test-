@@ -1343,13 +1343,13 @@ jQuery(async () => {
                         content: prompt
                     }
                 ],
-                max_tokens: 200,  // 适中的token限制
+                max_tokens: 10000,  // 大幅增加token限制
                 temperature: 0.8
             };
         } else if (settings.apiType === 'claude') {
             requestBody = {
                 model: settings.apiModel || 'claude-3-sonnet-20240229',
-                max_tokens: 200,  // 适中的token限制
+                max_tokens: 10000,  // 大幅增加token限制
                 messages: [
                     {
                         role: 'user',
@@ -1370,7 +1370,7 @@ jQuery(async () => {
                     }
                 ],
                 generationConfig: {
-                    maxOutputTokens: 200,  // 适中的token限制
+                    maxOutputTokens: 10000,  // 大幅增加token限制
                     temperature: 0.8
                 }
             };
@@ -1379,7 +1379,7 @@ jQuery(async () => {
             requestBody = {
                 model: settings.apiModel || 'default',
                 prompt: prompt,
-                max_tokens: 200,  // 适中的token限制
+                max_tokens: 10000,  // 大幅增加token限制
                 temperature: 0.8
             };
         }

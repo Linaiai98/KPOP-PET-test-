@@ -1217,69 +1217,17 @@ jQuery(async () => {
      */
     async function callAIAPI(prompt, timeout = 30000) {
         try {
-            let result = null;
-
-            // 首先尝试使用自定义API配置
+            // 只使用自定义API配置
             const settings = loadAISettings();
-            if (settings.apiType && settings.apiUrl && settings.apiKey) {
-                console.log(`[${extensionName}] 使用自定义API: ${settings.apiType}`);
-                result = await callCustomAPI(prompt, settings, timeout);
+            if (!settings.apiType || !settings.apiUrl || !settings.apiKey) {
+                throw new Error('请先在插件设置中配置API信息（类型、URL和密钥）');
             }
 
-            // 如果自定义API失败或不可用，回退到SillyTavern API
-            if (!result) {
-                if (typeof window.generateReply === 'function') {
-                    // 方法1：直接调用generateReply函数
-                    console.log(`[${extensionName}] 使用generateReply API`);
-                    result = await window.generateReply(prompt);
-                } else if (typeof window.SillyTavern !== 'undefined' && window.SillyTavern.generateReply) {
-                    // 方法2：通过SillyTavern命名空间调用
-                    console.log(`[${extensionName}] 使用SillyTavern.generateReply API`);
-                    result = await window.SillyTavern.generateReply(prompt);
-                } else if (typeof window.Generate !== 'undefined') {
-                    // 方法3：使用Generate函数
-                    console.log(`[${extensionName}] 使用Generate API`);
-                    result = await window.Generate(prompt);
-                } else {
-                    // 方法4：尝试通过fetch调用SillyTavern的内部API
-                    console.log(`[${extensionName}] 尝试通过fetch调用SillyTavern内部API`);
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), timeout);
+            console.log(`[${extensionName}] 使用自定义API: ${settings.apiType}`);
+            const result = await callCustomAPI(prompt, settings, timeout);
 
-                    try {
-                        const response = await fetch('/api/v1/generate', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                                prompt: prompt,
-                                max_length: 100,
-                                temperature: 0.8
-                            }),
-                            signal: controller.signal
-                        });
-
-                        clearTimeout(timeoutId);
-
-                        if (response.ok) {
-                            const data = await response.json();
-                            result = data.text || data.response || data.result;
-                        } else {
-                            throw new Error(`SillyTavern API调用失败: ${response.status}`);
-                        }
-                    } catch (error) {
-                        clearTimeout(timeoutId);
-                        if (error.name === 'AbortError') {
-                            throw new Error('SillyTavern API调用超时');
-                        }
-                        throw error;
-                    }
-                }
-            }
-
-            // 验证返回结果
-            if (typeof result === 'string' && result.trim().length > 0) {
+            if (result && result.trim()) {
+                console.log(`[${extensionName}] 自定义API调用成功`);
                 return result.trim();
             } else {
                 throw new Error('API返回了空的或无效的回复');
@@ -1522,18 +1470,18 @@ jQuery(async () => {
      * @returns {boolean} - API是否可用
      */
     function isAIAPIAvailable() {
-        // 检查SillyTavern API
-        const sillyTavernAvailable = (
-            typeof window.generateReply === 'function' ||
-            (typeof window.SillyTavern !== 'undefined' && window.SillyTavern.generateReply) ||
-            typeof window.Generate === 'function'
-        );
-
-        // 检查自定义AI配置
+        // 只检查自定义AI配置
         const settings = loadAISettings();
         const customAPIAvailable = settings.apiType && settings.apiUrl && settings.apiKey;
 
-        return sillyTavernAvailable || customAPIAvailable;
+        console.log(`[${extensionName}] API可用性检查:`, {
+            apiType: settings.apiType || '未设置',
+            apiUrl: settings.apiUrl || '未设置',
+            apiKey: settings.apiKey ? '已设置' : '未设置',
+            available: customAPIAvailable
+        });
+
+        return customAPIAvailable;
     }
 
     /**
@@ -10399,8 +10347,10 @@ ${currentPersonality}
     console.log("  - diagnoseMobileAPI() - 移动端API诊断");
     console.log("  - testMobileAPIConnection() - 测试移动端API连接");
     console.log("  - testURLBuilder('your-url') - 测试URL自动构建功能");
-    console.log("🤖 Gemini API专用命令:");
+    console.log("🤖 第三方API专用命令:");
     console.log("  - testGeminiAPI() - 测试Gemini API连接和格式");
+    console.log("  - testThirdPartyAPI() - 测试当前配置的第三方API");
+    console.log("  - debugAPICall() - 调试API调用流程");
 
     /**
      * 测试URL自动构建功能
@@ -10548,6 +10498,100 @@ ${currentPersonality}
 
             toastr.error(`Gemini API测试失败: ${error.message}`, '❌ 测试失败', { timeOut: 10000 });
             return false;
+        }
+    };
+
+    /**
+     * 测试当前配置的第三方API
+     */
+    window.testThirdPartyAPI = async function() {
+        console.log('🌐 测试当前配置的第三方API...');
+
+        const settings = loadAISettings();
+        console.log('📋 当前API配置:', settings);
+
+        if (!settings.apiType || !settings.apiUrl || !settings.apiKey) {
+            console.log('❌ API配置不完整');
+            console.log(`API类型: ${settings.apiType || '未设置'}`);
+            console.log(`API URL: ${settings.apiUrl || '未设置'}`);
+            console.log(`API密钥: ${settings.apiKey ? '已设置' : '未设置'}`);
+            toastr.error('请先完整配置API信息', '❌ 配置不完整');
+            return false;
+        }
+
+        try {
+            console.log('\n📡 开始测试第三方API...');
+            const testPrompt = "请简单回复'测试成功'，不超过10个字。";
+
+            const response = await callCustomAPI(testPrompt, settings, 15000);
+
+            if (response && response.trim()) {
+                console.log('✅ 第三方API测试成功!');
+                console.log(`📝 AI回复: ${response}`);
+                toastr.success(`第三方API测试成功！AI回复: ${response.substring(0, 50)}`, '🌐 测试成功');
+                return true;
+            } else {
+                console.log('❌ 第三方API返回空响应');
+                toastr.error('第三方API返回空响应', '❌ 测试失败');
+                return false;
+            }
+
+        } catch (error) {
+            console.error('❌ 第三方API测试失败:', error);
+
+            // 提供详细的错误分析
+            if (error.message.includes('500')) {
+                console.log('💡 500错误分析:');
+                console.log('1. 请求格式可能不正确');
+                console.log('2. 模型名称可能错误');
+                console.log('3. API服务器内部错误');
+                console.log('4. 请求参数不符合API要求');
+                toastr.error('500错误：服务器内部错误，请检查请求格式', '❌ 服务器错误', { timeOut: 8000 });
+            } else if (error.message.includes('401') || error.message.includes('403')) {
+                console.log('💡 认证错误分析:');
+                console.log('1. API密钥无效或过期');
+                console.log('2. API密钥权限不足');
+                console.log('3. 认证头格式错误');
+                console.log('4. API配额已用完');
+                toastr.error('认证失败：请检查API密钥和权限', '❌ 认证错误', { timeOut: 8000 });
+            } else if (error.message.includes('404')) {
+                console.log('💡 404错误分析:');
+                console.log('1. API端点URL错误');
+                console.log('2. 模型名称不存在');
+                console.log('3. API版本路径错误');
+                toastr.error('404错误：请检查API URL和端点', '❌ 端点错误', { timeOut: 8000 });
+            }
+
+            toastr.error(`第三方API测试失败: ${error.message}`, '❌ 测试失败', { timeOut: 10000 });
+            return false;
+        }
+    };
+
+    /**
+     * 调试API调用流程
+     */
+    window.debugAPICall = async function() {
+        console.log('🔍 调试API调用流程...');
+
+        const settings = loadAISettings();
+        console.log('\n📋 API配置检查:');
+        console.log(`API类型: ${settings.apiType || '❌ 未设置'}`);
+        console.log(`API URL: ${settings.apiUrl || '❌ 未设置'}`);
+        console.log(`API密钥: ${settings.apiKey ? '✅ 已设置' : '❌ 未设置'}`);
+        console.log(`API模型: ${settings.apiModel || '❌ 未设置'}`);
+
+        console.log('\n✅ 注意: 插件现在只使用自定义API配置，不再调用SillyTavern API');
+
+        console.log('\n📡 开始调试API调用...');
+        const testPrompt = "测试";
+
+        try {
+            const result = await callAIAPI(testPrompt, 10000);
+            console.log('✅ API调用成功:', result);
+            toastr.success(`API调用成功: ${result}`, '🔍 调试成功');
+        } catch (error) {
+            console.error('❌ API调用失败:', error);
+            toastr.error(`API调用失败: ${error.message}`, '🔍 调试失败', { timeOut: 8000 });
         }
     };
 

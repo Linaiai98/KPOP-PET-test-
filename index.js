@@ -1397,6 +1397,15 @@ jQuery(async () => {
         console.log(`[${extensionName}] 请求体:`, requestBody);
         console.log(`[${extensionName}] 请求体JSON:`, JSON.stringify(requestBody, null, 2));
 
+        // 移动端专用调试信息
+        console.log(`[${extensionName}] 🔍 环境检测:`);
+        console.log(`- User Agent: ${navigator.userAgent}`);
+        console.log(`- 是否移动端: ${/Mobile|Android|iPhone|iPad/.test(navigator.userAgent)}`);
+        console.log(`- 当前协议: ${window.location.protocol}`);
+        console.log(`- 当前域名: ${window.location.hostname}`);
+        console.log(`- API URL协议: ${apiUrl.startsWith('https://') ? 'HTTPS' : 'HTTP'}`);
+        console.log(`- 网络连接类型: ${navigator.connection ? navigator.connection.effectiveType : '未知'}`);
+
         try {
             // 移动端API连接优化
             const fetchOptions = {
@@ -1413,12 +1422,50 @@ jQuery(async () => {
                 clearTimeout(timeoutId);
                 const mobileTimeoutId = setTimeout(() => controller.abort(), timeout + 10000); // 额外10秒
 
-                // 移动端添加额外的请求头
-                fetchOptions.headers = {
-                    ...fetchOptions.headers,
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache'
-                };
+                // 移动端HTTP请求特殊处理
+                if (apiUrl.startsWith('http://')) {
+                    console.log(`[${extensionName}] 检测到HTTP请求，应用移动端兼容性处理`);
+
+                    // 尝试使用代理或JSONP方式
+                    console.log(`[${extensionName}] 警告：移动端不支持HTTP请求，建议使用HTTPS`);
+
+                    // 添加移动端友好的请求头
+                    fetchOptions.headers = {
+                        ...fetchOptions.headers,
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache'
+                    };
+
+                    // 尝试修改为HTTPS（如果可能）
+                    const httpsUrl = apiUrl.replace('http://', 'https://');
+                    console.log(`[${extensionName}] 尝试HTTPS版本: ${httpsUrl}`);
+
+                    // 先尝试HTTPS版本
+                    try {
+                        const httpsResponse = await fetch(httpsUrl, {
+                            ...fetchOptions,
+                            signal: controller.signal
+                        });
+
+                        if (httpsResponse.ok) {
+                            console.log(`[${extensionName}] HTTPS版本连接成功`);
+                            apiUrl = httpsUrl; // 使用HTTPS版本
+                        } else {
+                            console.log(`[${extensionName}] HTTPS版本失败，回退到HTTP`);
+                        }
+                    } catch (httpsError) {
+                        console.log(`[${extensionName}] HTTPS版本不可用: ${httpsError.message}`);
+                    }
+
+                    console.log(`[${extensionName}] 移动端HTTP兼容模式已启用`);
+                } else {
+                    // HTTPS请求的标准处理
+                    fetchOptions.headers = {
+                        ...fetchOptions.headers,
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache'
+                    };
+                }
 
                 console.log(`[${extensionName}] 移动端API请求优化已应用`);
             }
@@ -10451,6 +10498,9 @@ ${currentPersonality}
     console.log("  - diagnoseMobileAPI() - 移动端API诊断");
     console.log("  - testMobileAPIConnection() - 测试移动端API连接");
     console.log("  - testURLBuilder('your-url') - 测试URL自动构建功能");
+    console.log("  - testMobileNetwork() - 移动端网络连接测试");
+    console.log("  - setupMobileHTTPProxy() - 移动端HTTP代理解决方案");
+    console.log("  - autoFixMobileHTTP() - 自动修复移动端HTTP问题");
     console.log("🤖 第三方API专用命令:");
     console.log("  - testGeminiAPI() - 测试Gemini API连接和格式");
     console.log("  - testThirdPartyAPI() - 测试当前配置的第三方API");
@@ -10916,6 +10966,186 @@ ${currentPersonality}
 
         toastr.warning('所有模型测试都失败了', '🧪 测试完成', { timeOut: 5000 });
         return { success: false };
+    };
+
+    /**
+     * 移动端网络连接测试
+     */
+    window.testMobileNetwork = async function() {
+        console.log('📱 移动端网络连接测试...');
+
+        const settings = loadAISettings();
+        if (!settings.apiUrl) {
+            console.log('❌ 请先配置API URL');
+            return false;
+        }
+
+        console.log('\n🔍 环境信息:');
+        console.log(`User Agent: ${navigator.userAgent}`);
+        console.log(`是否移动端: ${/Mobile|Android|iPhone|iPad/.test(navigator.userAgent)}`);
+        console.log(`当前协议: ${window.location.protocol}`);
+        console.log(`当前域名: ${window.location.hostname}`);
+        console.log(`API URL: ${settings.apiUrl}`);
+        console.log(`API协议: ${settings.apiUrl.startsWith('https://') ? 'HTTPS' : 'HTTP'}`);
+
+        if (navigator.connection) {
+            console.log(`网络类型: ${navigator.connection.effectiveType}`);
+            console.log(`下行速度: ${navigator.connection.downlink}Mbps`);
+            console.log(`RTT: ${navigator.connection.rtt}ms`);
+        }
+
+        console.log('\n🌐 网络连通性测试:');
+
+        // 测试1: 基础连通性
+        try {
+            console.log('1. 测试基础HTTP连接...');
+            const testUrl = new URL(settings.apiUrl);
+            const baseUrl = `${testUrl.protocol}//${testUrl.hostname}`;
+
+            const response = await fetch(baseUrl, {
+                method: 'GET',
+                mode: 'cors',
+                cache: 'no-cache'
+            });
+
+            console.log(`✅ 基础连接成功: ${response.status}`);
+        } catch (error) {
+            console.log(`❌ 基础连接失败: ${error.message}`);
+        }
+
+        // 测试2: API端点连接
+        try {
+            console.log('2. 测试API端点连接...');
+            const response = await fetch(settings.apiUrl, {
+                method: 'OPTIONS',
+                mode: 'cors',
+                cache: 'no-cache'
+            });
+
+            console.log(`✅ API端点连接成功: ${response.status}`);
+            console.log(`响应头:`, [...response.headers.entries()]);
+        } catch (error) {
+            console.log(`❌ API端点连接失败: ${error.message}`);
+        }
+
+        // 测试3: 完整API调用
+        try {
+            console.log('3. 测试完整API调用...');
+            const result = await testThirdPartyAPI();
+            if (result) {
+                console.log('✅ 完整API调用成功');
+            } else {
+                console.log('❌ 完整API调用失败');
+            }
+        } catch (error) {
+            console.log(`❌ 完整API调用异常: ${error.message}`);
+        }
+
+        console.log('\n💡 移动端网络问题排查建议:');
+        console.log('1. 检查是否使用HTTPS协议');
+        console.log('2. 尝试切换WiFi和移动数据');
+        console.log('3. 检查运营商是否屏蔽该域名');
+        console.log('4. 确认API服务商是否限制移动端访问');
+        console.log('5. 检查SillyTavern的移动端配置');
+
+        return true;
+    };
+
+    /**
+     * 移动端HTTP代理解决方案
+     */
+    window.setupMobileHTTPProxy = function() {
+        console.log('📱 设置移动端HTTP代理解决方案...');
+
+        const settings = loadAISettings();
+        if (!settings.apiUrl) {
+            console.log('❌ 请先配置API URL');
+            return false;
+        }
+
+        if (!settings.apiUrl.startsWith('http://')) {
+            console.log('✅ 当前使用HTTPS，无需代理');
+            return true;
+        }
+
+        console.log('🔧 移动端HTTP解决方案:');
+        console.log('');
+        console.log('方案1: 使用HTTPS代理服务');
+        console.log('- 将API URL改为: https://cors-anywhere.herokuapp.com/' + settings.apiUrl);
+        console.log('- 或使用其他CORS代理服务');
+        console.log('');
+        console.log('方案2: 使用本地代理');
+        console.log('- 在PC上运行代理服务器');
+        console.log('- 移动端通过PC的IP访问');
+        console.log('');
+        console.log('方案3: 联系API提供商');
+        console.log('- 询问是否提供HTTPS端点');
+        console.log('- 大多数服务商都支持HTTPS');
+        console.log('');
+        console.log('方案4: 修改SillyTavern配置');
+        console.log('- 在SillyTavern设置中允许不安全连接');
+        console.log('- 仅适用于某些版本');
+
+        // 自动尝试常见的HTTPS替代方案
+        const httpsAlternatives = [
+            settings.apiUrl.replace('http://', 'https://'),
+            'https://api.' + settings.apiUrl.replace('http://', '').replace('www.', ''),
+            'https://secure.' + settings.apiUrl.replace('http://', '').replace('www.', '')
+        ];
+
+        console.log('');
+        console.log('🔍 自动检测HTTPS替代方案:');
+        httpsAlternatives.forEach((url, index) => {
+            console.log(`${index + 1}. ${url}`);
+        });
+
+        console.log('');
+        console.log('💡 建议操作:');
+        console.log('1. 先尝试将API URL改为HTTPS版本');
+        console.log('2. 如果不行，联系API提供商获取HTTPS端点');
+        console.log('3. 最后考虑使用代理服务');
+
+        return httpsAlternatives;
+    };
+
+    /**
+     * 自动修复移动端HTTP问题
+     */
+    window.autoFixMobileHTTP = async function() {
+        console.log('🔧 自动修复移动端HTTP问题...');
+
+        const settings = loadAISettings();
+        if (!settings.apiUrl || !settings.apiUrl.startsWith('http://')) {
+            console.log('✅ 无需修复');
+            return true;
+        }
+
+        const httpsUrl = settings.apiUrl.replace('http://', 'https://');
+        console.log(`🔍 测试HTTPS版本: ${httpsUrl}`);
+
+        try {
+            // 测试HTTPS版本是否可用
+            const testSettings = { ...settings, apiUrl: httpsUrl };
+            const result = await callCustomAPI("测试", testSettings, 5000);
+
+            if (result) {
+                console.log('✅ HTTPS版本可用！');
+                console.log('🔧 自动更新API配置...');
+
+                // 自动更新配置
+                $('#ai-url-input').val(httpsUrl);
+                saveAISettings();
+
+                toastr.success('已自动切换到HTTPS版本', '🔧 修复成功', { timeOut: 5000 });
+                return true;
+            }
+        } catch (error) {
+            console.log(`❌ HTTPS版本不可用: ${error.message}`);
+        }
+
+        console.log('❌ 自动修复失败，请手动处理');
+        toastr.warning('请联系API提供商获取HTTPS端点', '🔧 需要手动处理', { timeOut: 8000 });
+        return false;
     };
 
     console.log("🐾 虚拟宠物系统脚本已加载完成");

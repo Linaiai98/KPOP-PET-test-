@@ -1602,7 +1602,8 @@ jQuery(async () => {
         const actionDescriptions = {
             'feed': '给我喂了食物',
             'play': '陪我玩耍',
-            'sleep': '让我休息'
+            'sleep': '让我休息',
+            'hug': '给了我一个温暖的拥抱'
         };
 
 
@@ -6593,6 +6594,8 @@ ${currentPersonality}
         console.log('- adjustInitialValues() - 调整初始数值到更合理的水平（增加成长感）');
         console.log('- testNewValueBalance() - 测试新的数值平衡体验（完整的照顾流程）');
         console.log('- testHugFunction() - 测试抱抱功能（检查按钮、函数、奖励）');
+        console.log('- testHugFunctionComplete() - 完整测试抱抱功能（包括前后检查）');
+        console.log('- quickVerifyHugFunction() - 快速验证抱抱功能是否完整');
 
         // 强制刷新UI
         if (typeof renderPetStatus === 'function') {
@@ -9366,6 +9369,155 @@ ${currentPersonality}
             functionExists: typeof window.hugPet === 'function',
             buttonExists: popup.length > 0 && popup.find(".hug-btn").length > 0,
             canHug: !petData.lastHugTime || (Date.now() - petData.lastHugTime) >= 25000,
+            isAlive: petData.isAlive
+        };
+    };
+
+    /**
+     * 完整测试抱抱功能（包括前后检查）
+     */
+    window.testHugFunctionComplete = function() {
+        console.log('🤗 完整测试抱抱功能（包括前后检查）...');
+
+        // 1. 检查函数实现
+        console.log('\n📋 1. 函数实现检查:');
+        const hugFunctionExists = typeof window.hugPet === 'function';
+        console.log(`- hugPet函数存在: ${hugFunctionExists ? '✅' : '❌'}`);
+
+        if (hugFunctionExists) {
+            const hugCode = window.hugPet.toString();
+            console.log(`- 包含金币奖励: ${hugCode.includes('gainCoins') ? '✅' : '❌'}`);
+            console.log(`- 包含经验奖励: ${hugCode.includes('gainExperience') ? '✅' : '❌'}`);
+            console.log(`- 包含AI回复: ${hugCode.includes('handleAIReply') ? '✅' : '❌'}`);
+            console.log(`- 冷却时间设置: ${hugCode.includes('25000') ? '25秒 ✅' : '❌'}`);
+            console.log(`- 奖励配置: ${hugCode.includes('coins: 2') && hugCode.includes('experience: 1') ? '2金币+1经验 ✅' : '❌'}`);
+        }
+
+        // 2. 检查UI按钮
+        console.log('\n🖱️ 2. UI按钮检查:');
+        const popup = $("#virtual-pet-popup");
+        if (popup.length > 0) {
+            const hugBtn = popup.find(".hug-btn");
+            console.log(`- 抱抱按钮存在: ${hugBtn.length > 0 ? '✅' : '❌'} (数量: ${hugBtn.length})`);
+
+            if (hugBtn.length > 0) {
+                const events = $._data(hugBtn[0], 'events');
+                console.log(`- 按钮事件绑定: ${events ? '✅ ' + Object.keys(events).join(', ') : '❌ 无'}`);
+                console.log(`- 按钮样式: ${hugBtn.css('background-color') ? '✅ 有样式' : '❌ 无样式'}`);
+            }
+        } else {
+            console.log('⚠️ 宠物界面未打开，请先运行 showPopup()');
+        }
+
+        // 3. 检查提示词支持
+        console.log('\n📝 3. 提示词支持检查:');
+        try {
+            const hugPrompt = buildInteractionPrompt('hug');
+            const hasHugDescription = hugPrompt.includes('给了我一个温暖的拥抱');
+            console.log(`- 提示词包含抱抱描述: ${hasHugDescription ? '✅' : '❌'}`);
+            console.log(`- 提示词避免游戏机制: ${hugPrompt.includes('不要在回复中提及金币') ? '✅' : '❌'}`);
+        } catch (error) {
+            console.log(`❌ 提示词生成失败: ${error.message}`);
+        }
+
+        // 4. 测试功能执行
+        console.log('\n🧪 4. 功能执行测试:');
+        const beforeState = {
+            coins: petData.coins || 100,
+            experience: petData.experience || 0,
+            happiness: petData.happiness || 0,
+            health: petData.health || 0,
+            lastHugTime: petData.lastHugTime || 0
+        };
+
+        console.log('测试前状态:');
+        console.log(`- 金币: ${beforeState.coins}`);
+        console.log(`- 经验: ${beforeState.experience}`);
+        console.log(`- 快乐: ${beforeState.happiness}`);
+        console.log(`- 健康: ${beforeState.health}`);
+
+        // 检查冷却状态
+        const now = Date.now();
+        const timeSinceLastHug = now - beforeState.lastHugTime;
+        const canHug = timeSinceLastHug >= 25000;
+        console.log(`- 冷却状态: ${canHug ? '✅ 可以抱抱' : `❌ 还需等待${Math.ceil((25000 - timeSinceLastHug) / 1000)}秒`}`);
+
+        if (canHug && hugFunctionExists) {
+            console.log('\n🎯 执行抱抱测试...');
+
+            // 设置追踪
+            let coinsGained = false;
+            let expGained = false;
+
+            const originalGainCoins = window.gainCoins;
+            const originalGainExp = window.gainExperience;
+
+            window.gainCoins = function(amount) {
+                console.log(`🔍 [追踪] gainCoins被调用: +${amount}`);
+                coinsGained = true;
+                return originalGainCoins.call(this, amount);
+            };
+
+            window.gainExperience = function(exp) {
+                console.log(`🔍 [追踪] gainExperience被调用: +${exp}`);
+                expGained = true;
+                return originalGainExp.call(this, exp);
+            };
+
+            // 执行抱抱（不等待AI回复）
+            try {
+                window.hugPet();
+
+                setTimeout(() => {
+                    console.log('\n📊 测试后状态:');
+                    console.log(`- 金币: ${petData.coins} (变化: +${(petData.coins || 0) - beforeState.coins})`);
+                    console.log(`- 经验: ${petData.experience} (变化: +${(petData.experience || 0) - beforeState.experience})`);
+                    console.log(`- 快乐: ${petData.happiness} (变化: +${petData.happiness - beforeState.happiness})`);
+                    console.log(`- 健康: ${petData.health} (变化: +${petData.health - beforeState.health})`);
+
+                    console.log('\n🔍 奖励函数调用:');
+                    console.log(`- gainCoins被调用: ${coinsGained ? '✅' : '❌'}`);
+                    console.log(`- gainExperience被调用: ${expGained ? '✅' : '❌'}`);
+
+                    // 恢复原始函数
+                    window.gainCoins = originalGainCoins;
+                    window.gainExperience = originalGainExp;
+
+                    // 综合评估
+                    const allGood = hugFunctionExists && coinsGained && expGained &&
+                                   (petData.coins > beforeState.coins) &&
+                                   (petData.experience > beforeState.experience);
+
+                    console.log('\n🎉 综合评估:');
+                    if (allGood) {
+                        console.log('✅ 抱抱功能完全正常！');
+                        toastr.success('🤗 抱抱功能测试通过！', '', { timeOut: 3000 });
+                    } else {
+                        console.log('❌ 抱抱功能存在问题');
+                        toastr.warning('抱抱功能需要检查', '', { timeOut: 3000 });
+                    }
+                }, 1000);
+
+            } catch (error) {
+                console.log(`❌ 抱抱执行失败: ${error.message}`);
+                // 恢复原始函数
+                window.gainCoins = originalGainCoins;
+                window.gainExperience = originalGainExp;
+            }
+        }
+
+        console.log('\n💡 抱抱功能特点:');
+        console.log('✅ 25秒冷却时间');
+        console.log('✅ +10快乐度, +3健康度');
+        console.log('✅ +2纪律性, -1忽视计数');
+        console.log('✅ 减少疾病-3（如果生病）');
+        console.log('✅ 奖励：2金币 + 1经验');
+        console.log('✅ AI回复支持');
+
+        return {
+            functionExists: hugFunctionExists,
+            buttonExists: popup.length > 0 && popup.find(".hug-btn").length > 0,
+            canHug: canHug,
             isAlive: petData.isAlive
         };
     };
@@ -12510,5 +12662,63 @@ ${currentPersonality}
         toastr.warning('所有模型测试都失败了', '🧪 测试完成', { timeOut: 5000 });
         return { success: false };
     };
+
+    /**
+     * 快速验证抱抱功能是否完整
+     */
+    window.quickVerifyHugFunction = function() {
+        console.log('🚀 快速验证抱抱功能是否完整...');
+
+        const checks = {
+            hugFunctionExists: typeof window.hugPet === 'function',
+            promptSupport: false,
+            uiButton: false,
+            rewardSystem: false
+        };
+
+        // 检查提示词支持
+        try {
+            const prompt = buildInteractionPrompt('hug');
+            checks.promptSupport = prompt.includes('给了我一个温暖的拥抱');
+        } catch (e) {
+            checks.promptSupport = false;
+        }
+
+        // 检查UI按钮
+        const popup = $("#virtual-pet-popup");
+        if (popup.length > 0) {
+            checks.uiButton = popup.find(".hug-btn").length > 0;
+        }
+
+        // 检查奖励系统
+        if (checks.hugFunctionExists) {
+            const hugCode = window.hugPet.toString();
+            checks.rewardSystem = hugCode.includes('gainCoins') && hugCode.includes('gainExperience');
+        }
+
+        console.log('\n📊 验证结果:');
+        console.log(`✅ hugPet函数存在: ${checks.hugFunctionExists ? '✅' : '❌'}`);
+        console.log(`✅ 提示词支持: ${checks.promptSupport ? '✅' : '❌'}`);
+        console.log(`✅ UI按钮存在: ${checks.uiButton ? '✅' : '❌'} ${!popup.length ? '(需要先打开宠物界面)' : ''}`);
+        console.log(`✅ 奖励系统: ${checks.rewardSystem ? '✅' : '❌'}`);
+
+        const allGood = checks.hugFunctionExists && checks.promptSupport && checks.rewardSystem;
+
+        if (allGood) {
+            console.log('\n🎉 抱抱功能完全正常！');
+            console.log('💡 特点: 25秒冷却，+10快乐+3健康，2金币+1经验');
+            toastr.success('🤗 抱抱功能验证通过！', '', { timeOut: 2000 });
+        } else {
+            console.log('\n⚠️ 抱抱功能可能存在问题');
+            if (!checks.hugFunctionExists) console.log('💡 运行: forceApplyTamagotchiSystem()');
+        }
+
+        return {
+            allGood,
+            details: checks,
+            recommendation: allGood ? '功能正常，可以使用' : '需要检查或重新应用拓麻歌子系统'
+        };
+    };
+
     console.log("🐾 虚拟宠物系统脚本已加载完成");
 });

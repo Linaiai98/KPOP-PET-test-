@@ -2427,95 +2427,11 @@ ${currentPersonality}
         }
     }
     
-    /**
-     * 喂食宠物
-     */
-    async function feedPet() {
-        const now = Date.now();
-        const timeSinceLastFeed = now - petData.lastFeedTime;
-
-        if (timeSinceLastFeed < 45000) { // 45秒冷却 (20→45秒)
-            toastr.warning("宠物还不饿，等一会再喂吧！");
-            return;
-        }
-
-        // 更新宠物状态 - 使用新的平衡数值
-        petData.hunger = Math.min(100, petData.hunger + 8);      // 15→8
-        petData.happiness = Math.min(100, petData.happiness + 3); // 5→3
-        petData.lastFeedTime = now;
-
-        // 验证数值
-        validateAndFixValues();
-
-        // 获得经验
-        gainExperience(3);
-
-        // 使用AI生成回复
-        await handleAIReply('feed', `${petData.name} 吃得很开心！`);
-
-        savePetData();
-        renderPetStatus();
-    }
+    // 旧版本feedPet函数已删除，使用拓麻歌子版本
     
-    /**
-     * 和宠物玩耍
-     */
-    async function playWithPet() {
-        const now = Date.now();
-        const timeSinceLastPlay = now - petData.lastPlayTime;
-
-        if (timeSinceLastPlay < 60000) { // 60秒冷却 (40→60秒)
-            toastr.warning("宠物需要休息一下！");
-            return;
-        }
-
-        // 更新宠物状态 - 使用新的平衡数值
-        petData.happiness = Math.min(100, petData.happiness + 8);  // 12→8
-        petData.energy = Math.max(0, petData.energy - 10);         // 8→10
-        petData.lastPlayTime = now;
-
-        // 验证数值
-        validateAndFixValues();
-
-        // 获得经验
-        gainExperience(4);
-
-        // 使用AI生成回复
-        await handleAIReply('play', `${petData.name} 玩得很开心！`);
-
-        savePetData();
-        renderPetStatus();
-    }
+    // 旧版本playWithPet函数已删除，使用拓麻歌子版本
     
-    /**
-     * 让宠物休息
-     */
-    async function petSleep() {
-        const now = Date.now();
-        const timeSinceLastSleep = now - petData.lastSleepTime;
-
-        if (timeSinceLastSleep < 80000) { // 80秒冷却
-            toastr.warning("宠物还不困！");
-            return;
-        }
-
-        // 更新宠物状态
-        petData.energy = Math.min(100, petData.energy + 20);
-        petData.health = Math.min(100, petData.health + 5);
-        petData.lastSleepTime = now;
-
-        // 验证数值
-        validateAndFixValues();
-
-        // 获得经验
-        gainExperience(2);
-
-        // 使用AI生成回复
-        await handleAIReply('sleep', `${petData.name} 睡得很香！`);
-
-        savePetData();
-        renderPetStatus();
-    }
+    // 旧版本petSleep函数已删除，使用拓麻歌子版本
     
     /**
      * 获得经验值
@@ -6621,6 +6537,8 @@ ${currentPersonality}
         console.log('- testUIAfterCooldown() - 等待冷却时间后测试UI按钮');
         console.log('- inspectUIFeedPet() - 检查UI实际调用的函数并强制修复');
         console.log('- forceUIRefresh() - 强制刷新UI显示（解决金币显示延迟）');
+        console.log('- forceOverrideOldFunctions() - 强制覆盖旧版本函数（解决金币不增加问题）');
+        console.log('- verifyOldVersionsRemoved() - 验证旧版本函数已删除');
 
         // 强制刷新UI
         if (typeof renderPetStatus === 'function') {
@@ -8778,6 +8696,105 @@ ${currentPersonality}
             console.error('❌ UI刷新失败:', error);
             return false;
         }
+    };
+
+    /**
+     * 强制覆盖旧版本函数，确保使用拓麻歌子版本
+     */
+    window.forceOverrideOldFunctions = function() {
+        console.log('🔧 强制覆盖旧版本函数...');
+
+        // 强制应用拓麻歌子系统
+        applyTamagotchiSystem();
+
+        // 确保全局作用域也使用拓麻歌子版本
+        if (typeof window.feedPet === 'function') {
+            // 覆盖全局的feedPet
+            feedPet = window.feedPet;
+            console.log('✅ 已覆盖全局feedPet函数');
+        }
+
+        if (typeof window.playWithPet === 'function') {
+            playWithPet = window.playWithPet;
+            console.log('✅ 已覆盖全局playWithPet函数');
+        }
+
+        if (typeof window.petSleep === 'function') {
+            petSleep = window.petSleep;
+            console.log('✅ 已覆盖全局petSleep函数');
+        }
+
+        // 验证覆盖结果
+        console.log('\n🔍 验证覆盖结果:');
+        const feedPetCode = feedPet.toString();
+        console.log(`- feedPet包含gainCoins: ${feedPetCode.includes('gainCoins') ? '✅' : '❌'}`);
+        console.log(`- feedPet包含gainExperience: ${feedPetCode.includes('gainExperience') ? '✅' : '❌'}`);
+        console.log(`- feedPet冷却时间: ${feedPetCode.includes('30000') ? '30秒(拓麻歌子)' : '45秒(旧版本)'}`);
+
+        // 重新绑定UI事件
+        if (typeof bindUnifiedUIEvents === 'function') {
+            bindUnifiedUIEvents();
+            console.log('✅ UI事件已重新绑定');
+        }
+
+        console.log('🎉 函数覆盖完成！现在应该使用包含金币奖励的版本了');
+
+        return true;
+    };
+
+    /**
+     * 验证旧版本函数已删除
+     */
+    window.verifyOldVersionsRemoved = function() {
+        console.log('🔍 验证旧版本函数已删除...');
+
+        // 检查当前的互动函数
+        console.log('\n📋 当前互动函数检查:');
+
+        if (typeof feedPet === 'function') {
+            const feedPetCode = feedPet.toString();
+            console.log('🍖 feedPet函数:');
+            console.log(`  - 包含gainCoins: ${feedPetCode.includes('gainCoins') ? '✅' : '❌'}`);
+            console.log(`  - 包含gainExperience: ${feedPetCode.includes('gainExperience') ? '✅' : '❌'}`);
+            console.log(`  - 冷却时间: ${feedPetCode.includes('30000') ? '30秒(拓麻歌子)' : feedPetCode.includes('45000') ? '45秒(旧版本)' : '未知'}`);
+        }
+
+        if (typeof playWithPet === 'function') {
+            const playCode = playWithPet.toString();
+            console.log('🎮 playWithPet函数:');
+            console.log(`  - 包含gainCoins: ${playCode.includes('gainCoins') ? '✅' : '❌'}`);
+            console.log(`  - 包含gainExperience: ${playCode.includes('gainExperience') ? '✅' : '❌'}`);
+            console.log(`  - 冷却时间: ${playCode.includes('45000') ? '45秒(拓麻歌子)' : playCode.includes('60000') ? '60秒(旧版本)' : '未知'}`);
+        }
+
+        if (typeof petSleep === 'function') {
+            const sleepCode = petSleep.toString();
+            console.log('😴 petSleep函数:');
+            console.log(`  - 包含gainCoins: ${sleepCode.includes('gainCoins') ? '✅' : '❌'}`);
+            console.log(`  - 包含gainExperience: ${sleepCode.includes('gainExperience') ? '✅' : '❌'}`);
+            console.log(`  - 冷却时间: ${sleepCode.includes('120000') ? '120秒(拓麻歌子)' : sleepCode.includes('80000') ? '80秒(旧版本)' : '未知'}`);
+        }
+
+        // 判断版本状态
+        const feedHasCoins = typeof feedPet === 'function' && feedPet.toString().includes('gainCoins');
+        const playHasCoins = typeof playWithPet === 'function' && playWithPet.toString().includes('gainCoins');
+        const sleepHasCoins = typeof petSleep === 'function' && petSleep.toString().includes('gainCoins');
+
+        console.log('\n🎯 版本状态:');
+        if (feedHasCoins && playHasCoins && sleepHasCoins) {
+            console.log('✅ 所有函数都是拓麻歌子版本，旧版本已成功删除！');
+            console.log('💰 金币系统应该正常工作');
+        } else {
+            console.log('❌ 仍有函数不包含金币奖励');
+            console.log('💡 可能需要运行: forceApplyTamagotchiSystem()');
+        }
+
+        return {
+            feedHasCoins,
+            playHasCoins,
+            sleepHasCoins,
+            allGood: feedHasCoins && playHasCoins && sleepHasCoins
+        };
     };
 
     // 检查localStorage中的数据

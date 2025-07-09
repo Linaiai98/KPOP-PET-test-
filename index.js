@@ -6600,6 +6600,9 @@ ${currentPersonality}
         console.log('- testCleanPrompt() - 测试优化后的提示词（避免AI混淆金币）');
         console.log('- diagnoseRewardSystem() - 诊断金币和经验值问题');
         console.log('- checkInteractionFunctions() - 检查当前使用的互动函数版本');
+        console.log('- testSimpleInteraction() - 测试简化互动（不包含AI）');
+        console.log('- testInteractionFlow() - 测试完整互动流程（包含AI）');
+        console.log('- traceFeedPetExecution() - 追踪喂食函数的详细执行流程');
 
         // 强制刷新UI
         if (typeof renderPetStatus === 'function') {
@@ -7930,6 +7933,257 @@ ${currentPersonality}
             },
             version: isTamagotchi ? 'tamagotchi' : isBalanced ? 'balanced' : isOld ? 'old' : 'unknown'
         };
+    };
+
+    /**
+     * 测试互动流程中的奖励执行顺序
+     */
+    window.testInteractionFlow = async function() {
+        console.log('🧪 测试互动流程中的奖励执行顺序...');
+
+        if (!petData.isAlive) {
+            console.log('❌ 宠物已死亡，无法测试');
+            return;
+        }
+
+        console.log('\n📊 测试前状态:');
+        const beforeCoins = petData.coins || 0;
+        const beforeExp = petData.experience || 0;
+        const beforeLevel = petData.level || 1;
+
+        console.log(`- 金币: ${beforeCoins}`);
+        console.log(`- 经验: ${beforeExp}`);
+        console.log(`- 等级: ${beforeLevel}`);
+
+        console.log('\n🔄 模拟喂食流程...');
+
+        try {
+            // 模拟喂食流程的关键步骤
+            console.log('1. 更新宠物状态...');
+            petData.hunger = Math.min(100, petData.hunger + 20);
+            petData.happiness = Math.min(100, petData.happiness + 5);
+            petData.weight += 1;
+            petData.lastFeedTime = Date.now();
+            petData.lastCareTime = Date.now();
+
+            console.log('2. 验证数值...');
+            validateAndFixValues();
+
+            console.log('3. 获得经验...');
+            gainExperience(2);
+            console.log(`   经验变化: ${beforeExp} → ${petData.experience}`);
+
+            console.log('4. 获得金币...');
+            gainCoins(3);
+            console.log(`   金币变化: ${beforeCoins} → ${petData.coins}`);
+
+            console.log('5. 处理AI回复...');
+            await handleAIReply('feed', `${petData.name} 吃得很开心！`);
+            console.log('   AI回复完成');
+
+            console.log('6. 保存数据...');
+            savePetData();
+            console.log('   数据保存完成');
+
+            console.log('7. 渲染状态...');
+            renderPetStatus();
+            console.log('   状态渲染完成');
+
+        } catch (error) {
+            console.error('❌ 流程执行出错:', error);
+        }
+
+        console.log('\n📊 测试后状态:');
+        console.log(`- 金币: ${petData.coins} (变化: +${(petData.coins || 0) - beforeCoins})`);
+        console.log(`- 经验: ${petData.experience} (变化: +${(petData.experience || 0) - beforeExp})`);
+        console.log(`- 等级: ${petData.level} (变化: +${(petData.level || 1) - beforeLevel})`);
+
+        // 验证结果
+        const coinsGained = (petData.coins || 0) - beforeCoins;
+        const expGained = (petData.experience || 0) - beforeExp;
+
+        console.log('\n🎯 测试结果:');
+        if (coinsGained === 3) {
+            console.log('✅ 金币奖励正常 (+3)');
+        } else {
+            console.log(`❌ 金币奖励异常 (期望+3，实际+${coinsGained})`);
+        }
+
+        if (expGained >= 2) {
+            console.log('✅ 经验奖励正常 (+2或更多)');
+        } else {
+            console.log(`❌ 经验奖励异常 (期望+2，实际+${expGained})`);
+        }
+
+        return {
+            before: { coins: beforeCoins, experience: beforeExp, level: beforeLevel },
+            after: { coins: petData.coins, experience: petData.experience, level: petData.level },
+            changes: { coins: coinsGained, experience: expGained, level: (petData.level || 1) - beforeLevel }
+        };
+    };
+
+    /**
+     * 测试不包含AI回复的简化互动
+     */
+    window.testSimpleInteraction = function() {
+        console.log('🧪 测试简化互动（不包含AI回复）...');
+
+        if (!petData.isAlive) {
+            console.log('❌ 宠物已死亡，无法测试');
+            return;
+        }
+
+        console.log('\n📊 测试前状态:');
+        const beforeCoins = petData.coins || 0;
+        const beforeExp = petData.experience || 0;
+
+        console.log(`- 金币: ${beforeCoins}`);
+        console.log(`- 经验: ${beforeExp}`);
+
+        console.log('\n🔄 执行简化互动...');
+
+        try {
+            console.log('1. 获得经验...');
+            gainExperience(2);
+
+            console.log('2. 获得金币...');
+            gainCoins(3);
+
+            console.log('3. 保存数据...');
+            savePetData();
+
+        } catch (error) {
+            console.error('❌ 执行出错:', error);
+        }
+
+        console.log('\n📊 测试后状态:');
+        const afterCoins = petData.coins || 0;
+        const afterExp = petData.experience || 0;
+
+        console.log(`- 金币: ${afterCoins} (变化: +${afterCoins - beforeCoins})`);
+        console.log(`- 经验: ${afterExp} (变化: +${afterExp - beforeExp})`);
+
+        // 验证结果
+        const coinsGained = afterCoins - beforeCoins;
+        const expGained = afterExp - beforeExp;
+
+        console.log('\n🎯 测试结果:');
+        if (coinsGained === 3) {
+            console.log('✅ 金币功能正常');
+        } else {
+            console.log(`❌ 金币功能异常 (期望+3，实际+${coinsGained})`);
+        }
+
+        if (expGained >= 2) {
+            console.log('✅ 经验功能正常');
+        } else {
+            console.log(`❌ 经验功能异常 (期望+2，实际+${expGained})`);
+        }
+
+        if (coinsGained === 3 && expGained >= 2) {
+            console.log('\n💡 结论: 奖励系统本身正常，问题可能出在AI互动流程中');
+        } else {
+            console.log('\n💡 结论: 奖励系统本身有问题');
+        }
+
+        return {
+            coinsGained,
+            expGained,
+            success: coinsGained === 3 && expGained >= 2
+        };
+    };
+
+    /**
+     * 追踪喂食函数的执行流程
+     */
+    window.traceFeedPetExecution = async function() {
+        console.log('🔍 追踪喂食函数的执行流程...');
+
+        // 获取原始的feedPet函数代码
+        const feedPetCode = window.feedPet.toString();
+        console.log('\n📝 feedPet函数源码片段:');
+        console.log(feedPetCode.substring(0, 500) + '...');
+
+        console.log('\n🚀 开始执行追踪版本的喂食...');
+
+        try {
+            console.log('1. 检查宠物存活状态...');
+            if (!petData.isAlive) {
+                console.log('❌ 宠物已死亡，函数应该在这里返回');
+                return;
+            }
+            console.log('✅ 宠物存活');
+
+            console.log('2. 检查冷却时间...');
+            const now = Date.now();
+            const timeSinceLastFeed = now - petData.lastFeedTime;
+            console.log(`   距离上次喂食: ${timeSinceLastFeed}ms`);
+            console.log(`   冷却时间要求: 30000ms (30秒)`);
+
+            if (timeSinceLastFeed < 30000) {
+                console.log('❌ 冷却时间未到，函数应该在这里返回');
+                return;
+            }
+            console.log('✅ 冷却时间已过');
+
+            console.log('3. 更新宠物状态...');
+            const oldHunger = petData.hunger;
+            const oldHappiness = petData.happiness;
+            const oldWeight = petData.weight;
+
+            petData.hunger = Math.min(100, petData.hunger + 20);
+            petData.happiness = Math.min(100, petData.happiness + 5);
+            petData.weight += 1;
+            petData.lastFeedTime = now;
+            petData.lastCareTime = now;
+            petData.careNeglectCount = Math.max(0, petData.careNeglectCount - 1);
+
+            console.log(`   饱食: ${oldHunger} → ${petData.hunger}`);
+            console.log(`   快乐: ${oldHappiness} → ${petData.happiness}`);
+            console.log(`   体重: ${oldWeight} → ${petData.weight}`);
+
+            console.log('4. 过度喂食检查...');
+            if (petData.weight > 50) {
+                petData.sickness = Math.min(100, petData.sickness + 10);
+                console.log('⚠️ 触发过度喂食警告');
+            } else {
+                console.log('✅ 体重正常');
+            }
+
+            console.log('5. 验证数值...');
+            validateAndFixValues();
+            console.log('✅ 数值验证完成');
+
+            console.log('6. 获得经验...');
+            const oldExp = petData.experience;
+            const oldLevel = petData.level;
+            gainExperience(2);
+            console.log(`   经验: ${oldExp} → ${petData.experience}`);
+            console.log(`   等级: ${oldLevel} → ${petData.level}`);
+
+            console.log('7. 获得金币...');
+            const oldCoins = petData.coins;
+            gainCoins(3);
+            console.log(`   金币: ${oldCoins} → ${petData.coins}`);
+
+            console.log('8. 处理AI回复...');
+            await handleAIReply('feed', `${petData.name} 吃得很开心！`);
+            console.log('✅ AI回复完成');
+
+            console.log('9. 保存数据...');
+            savePetData();
+            console.log('✅ 数据保存完成');
+
+            console.log('10. 渲染状态...');
+            renderPetStatus();
+            console.log('✅ 状态渲染完成');
+
+            console.log('\n🎉 喂食流程完全执行完毕！');
+
+        } catch (error) {
+            console.error('❌ 执行过程中发生错误:', error);
+            console.error('错误堆栈:', error.stack);
+        }
     };
 
     // 检查localStorage中的数据

@@ -2544,6 +2544,16 @@ ${currentPersonality}
         if (!petData.coins) petData.coins = 100;
         petData.coins += amount;
         console.log(`💰 获得 ${amount} 金币，当前金币: ${petData.coins}`);
+
+        // 立即更新UI显示
+        setTimeout(() => {
+            if (typeof updateUnifiedUIStatus === 'function') {
+                updateUnifiedUIStatus();
+            }
+            if (typeof renderPetStatus === 'function') {
+                renderPetStatus();
+            }
+        }, 50);
     }
 
     /**
@@ -6610,6 +6620,7 @@ ${currentPersonality}
         console.log('- testFixedUIButton() - 测试修复后的UI按钮（包含详细追踪）');
         console.log('- testUIAfterCooldown() - 等待冷却时间后测试UI按钮');
         console.log('- inspectUIFeedPet() - 检查UI实际调用的函数并强制修复');
+        console.log('- forceUIRefresh() - 强制刷新UI显示（解决金币显示延迟）');
 
         // 强制刷新UI
         if (typeof renderPetStatus === 'function') {
@@ -8712,7 +8723,62 @@ ${currentPersonality}
 
         savePetData();
         renderPetStatus();
+
+        // 强制更新UI显示
+        setTimeout(() => {
+            updateUnifiedUIStatus();
+            console.log('🔄 UI状态已强制刷新');
+        }, 100);
     }
+
+    /**
+     * 强制刷新UI显示
+     */
+    window.forceUIRefresh = function() {
+        console.log('🔄 强制刷新UI显示...');
+
+        try {
+            // 刷新宠物状态显示
+            if (typeof renderPetStatus === 'function') {
+                renderPetStatus();
+                console.log('✅ renderPetStatus 已调用');
+            }
+
+            // 刷新统一UI状态
+            if (typeof updateUnifiedUIStatus === 'function') {
+                updateUnifiedUIStatus();
+                console.log('✅ updateUnifiedUIStatus 已调用');
+            }
+
+            // 强制更新金币显示
+            const popup = $("#virtual-pet-popup");
+            if (popup.length > 0) {
+                const coinsElement = popup.find('.coins-display, .coin-count, [class*="coin"]');
+                if (coinsElement.length > 0) {
+                    coinsElement.text(`💰 ${petData.coins || 100}`);
+                    console.log(`✅ 金币显示已更新: ${petData.coins || 100}`);
+                } else {
+                    console.log('⚠️ 找不到金币显示元素');
+                }
+
+                // 强制更新所有状态显示
+                popup.find('.status-value').each(function() {
+                    const $this = $(this);
+                    const text = $this.text();
+                    if (text.includes('金币') || text.includes('💰')) {
+                        $this.text(`💰 ${petData.coins || 100}`);
+                    }
+                });
+            }
+
+            console.log('🔄 UI刷新完成');
+            return true;
+
+        } catch (error) {
+            console.error('❌ UI刷新失败:', error);
+            return false;
+        }
+    };
 
     // 检查localStorage中的数据
     window.checkStoredData = function() {

@@ -6608,6 +6608,7 @@ ${currentPersonality}
         console.log('- restoreOriginalFunctions() - 恢复原始函数（追踪后使用）');
         console.log('- checkFeedPetVersions() - 检查不同作用域的feedPet函数并修复UI绑定');
         console.log('- testFixedUIButton() - 测试修复后的UI按钮（包含详细追踪）');
+        console.log('- testUIAfterCooldown() - 等待冷却时间后测试UI按钮');
 
         // 强制刷新UI
         if (typeof renderPetStatus === 'function') {
@@ -8488,6 +8489,97 @@ ${currentPersonality}
             }
 
         }, 2000); // 等待2秒
+
+        return true;
+    };
+
+    /**
+     * 等待冷却时间后测试UI按钮
+     */
+    window.testUIAfterCooldown = function() {
+        console.log('⏰ 等待冷却时间后测试UI按钮...');
+
+        const now = Date.now();
+        const timeSinceLastFeed = now - (petData.lastFeedTime || 0);
+        const cooldownRemaining = Math.max(0, 30000 - timeSinceLastFeed);
+
+        if (cooldownRemaining > 0) {
+            console.log(`⏰ 还需等待 ${Math.ceil(cooldownRemaining / 1000)} 秒`);
+            console.log('💡 请等待冷却时间结束后再次运行此函数');
+            return false;
+        }
+
+        console.log('✅ 冷却时间已过，开始测试...');
+
+        const popup = $("#virtual-pet-popup");
+        if (popup.length === 0) {
+            console.log('❌ 弹窗不存在，请先打开宠物界面');
+            return false;
+        }
+
+        const feedBtn = popup.find(".feed-btn");
+        if (feedBtn.length === 0) {
+            console.log('❌ 找不到喂食按钮');
+            return false;
+        }
+
+        // 记录测试前状态
+        const beforeCoins = petData.coins || 0;
+        const beforeExp = petData.experience || 0;
+
+        console.log('\n📊 测试前状态:');
+        console.log(`- 金币: ${beforeCoins}`);
+        console.log(`- 经验: ${beforeExp}`);
+
+        // 设置追踪（在点击前设置）
+        let gainCoinsWasCalled = false;
+        let gainExpWasCalled = false;
+        let coinsAmount = 0;
+        let expAmount = 0;
+
+        const originalGainCoins = window.gainCoins || gainCoins;
+        const originalGainExp = window.gainExperience || gainExperience;
+
+        window.gainCoins = function(amount) {
+            console.log(`🔍 [追踪] gainCoins被调用: +${amount}`);
+            gainCoinsWasCalled = true;
+            coinsAmount = amount;
+            return originalGainCoins.call(this, amount);
+        };
+
+        window.gainExperience = function(exp) {
+            console.log(`🔍 [追踪] gainExperience被调用: +${exp}`);
+            gainExpWasCalled = true;
+            expAmount = exp;
+            return originalGainExp.call(this, exp);
+        };
+
+        console.log('\n🖱️ 点击喂食按钮...');
+        feedBtn.trigger('click');
+
+        // 等待一下再检查结果
+        setTimeout(() => {
+            console.log('\n📊 测试后状态:');
+            console.log(`- 金币: ${petData.coins} (变化: +${(petData.coins || 0) - beforeCoins})`);
+            console.log(`- 经验: ${petData.experience} (变化: +${(petData.experience || 0) - beforeExp})`);
+
+            console.log('\n🔍 函数调用追踪:');
+            console.log(`- gainCoins被调用: ${gainCoinsWasCalled ? '✅' : '❌'}`);
+            console.log(`- gainExperience被调用: ${gainExpWasCalled ? '✅' : '❌'}`);
+
+            if (gainCoinsWasCalled) {
+                console.log(`✅ 金币系统正常工作！获得了 ${coinsAmount} 金币`);
+            }
+
+            if (gainExpWasCalled) {
+                console.log(`✅ 经验系统正常工作！获得了 ${expAmount} 经验`);
+            }
+
+            // 恢复原始函数
+            window.gainCoins = originalGainCoins;
+            window.gainExperience = originalGainExp;
+
+        }, 3000); // 等待3秒
 
         return true;
     };

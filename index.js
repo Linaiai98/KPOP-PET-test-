@@ -6598,6 +6598,7 @@ ${currentPersonality}
         console.log('- testTamagotchiSystem() - 测试拓麻歌子系统');
         console.log('- forceApplyTamagotchiSystem() - 强制应用拓麻歌子系统（修复金币问题）');
         console.log('- testCleanPrompt() - 测试优化后的提示词（避免AI混淆金币）');
+        console.log('- diagnoseRewardSystem() - 诊断金币和经验值问题');
 
         // 强制刷新UI
         if (typeof renderPetStatus === 'function') {
@@ -7763,6 +7764,92 @@ ${currentPersonality}
                 includesReward,
                 includesGameMechanic,
                 hasCleanNote
+            }
+        };
+    };
+
+    /**
+     * 诊断金币和经验值问题
+     */
+    window.diagnoseRewardSystem = function() {
+        console.log('🔍 诊断金币和经验值系统...');
+
+        console.log('\n📊 当前数据状态:');
+        console.log(`- 数据版本: ${petData.dataVersion}`);
+        console.log(`- 当前金币: ${petData.coins}`);
+        console.log(`- 当前经验: ${petData.experience}`);
+        console.log(`- 当前等级: ${petData.level}`);
+        console.log(`- 宠物存活: ${petData.isAlive}`);
+
+        console.log('\n🔧 函数检查:');
+        console.log(`- gainCoins函数存在: ${typeof gainCoins === 'function'}`);
+        console.log(`- gainExperience函数存在: ${typeof gainExperience === 'function'}`);
+        console.log(`- feedPet函数存在: ${typeof window.feedPet === 'function'}`);
+
+        console.log('\n🧪 测试金币功能:');
+        const oldCoins = petData.coins || 0;
+        console.log(`测试前金币: ${oldCoins}`);
+
+        try {
+            gainCoins(10);
+            console.log(`测试后金币: ${petData.coins}`);
+            console.log(`金币增加: ${(petData.coins || 0) - oldCoins}`);
+
+            if ((petData.coins || 0) - oldCoins === 10) {
+                console.log('✅ gainCoins函数工作正常');
+            } else {
+                console.log('❌ gainCoins函数有问题');
+            }
+        } catch (error) {
+            console.log(`❌ gainCoins函数错误: ${error.message}`);
+        }
+
+        console.log('\n🧪 测试经验功能:');
+        const oldExp = petData.experience || 0;
+        const oldLevel = petData.level || 1;
+        console.log(`测试前经验: ${oldExp}, 等级: ${oldLevel}`);
+
+        try {
+            gainExperience(5);
+            console.log(`测试后经验: ${petData.experience}, 等级: ${petData.level}`);
+            console.log(`经验增加: ${(petData.experience || 0) - oldExp}`);
+
+            if ((petData.experience || 0) >= oldExp) {
+                console.log('✅ gainExperience函数工作正常');
+            } else {
+                console.log('❌ gainExperience函数有问题');
+            }
+        } catch (error) {
+            console.log(`❌ gainExperience函数错误: ${error.message}`);
+        }
+
+        console.log('\n🔍 互动函数检查:');
+        const feedPetString = window.feedPet.toString();
+        const hasGainCoins = feedPetString.includes('gainCoins');
+        const hasGainExp = feedPetString.includes('gainExperience');
+
+        console.log(`- feedPet包含gainCoins调用: ${hasGainCoins ? '✅' : '❌'}`);
+        console.log(`- feedPet包含gainExperience调用: ${hasGainExp ? '✅' : '❌'}`);
+
+        if (!hasGainCoins || !hasGainExp) {
+            console.log('❌ 互动函数缺少奖励调用，需要重新应用拓麻歌子系统');
+            console.log('💡 运行: forceApplyTamagotchiSystem()');
+        }
+
+        return {
+            dataVersion: petData.dataVersion,
+            coins: petData.coins,
+            experience: petData.experience,
+            level: petData.level,
+            isAlive: petData.isAlive,
+            functionsExist: {
+                gainCoins: typeof gainCoins === 'function',
+                gainExperience: typeof gainExperience === 'function',
+                feedPet: typeof window.feedPet === 'function'
+            },
+            feedPetIncludes: {
+                gainCoins: hasGainCoins,
+                gainExperience: hasGainExp
             }
         };
     };

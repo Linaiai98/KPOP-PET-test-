@@ -6609,6 +6609,7 @@ ${currentPersonality}
         console.log('- checkFeedPetVersions() - 检查不同作用域的feedPet函数并修复UI绑定');
         console.log('- testFixedUIButton() - 测试修复后的UI按钮（包含详细追踪）');
         console.log('- testUIAfterCooldown() - 等待冷却时间后测试UI按钮');
+        console.log('- inspectUIFeedPet() - 检查UI实际调用的函数并强制修复');
 
         // 强制刷新UI
         if (typeof renderPetStatus === 'function') {
@@ -8583,6 +8584,135 @@ ${currentPersonality}
 
         return true;
     };
+
+    /**
+     * 检查UI实际调用的feedPet函数内容
+     */
+    window.inspectUIFeedPet = function() {
+        console.log('🔍 检查UI实际调用的feedPet函数内容...');
+
+        const popup = $("#virtual-pet-popup");
+        if (popup.length === 0) {
+            console.log('❌ 弹窗不存在，请先打开宠物界面');
+            return false;
+        }
+
+        const feedBtn = popup.find(".feed-btn");
+        if (feedBtn.length === 0) {
+            console.log('❌ 找不到喂食按钮');
+            return false;
+        }
+
+        console.log('✅ 找到喂食按钮');
+
+        // 获取按钮绑定的事件
+        const events = $._data(feedBtn[0], 'events');
+        console.log('\n📋 按钮事件:', events);
+
+        // 检查当前作用域中的feedPet函数
+        console.log('\n📝 函数内容分析:');
+
+        if (typeof window.feedPet === 'function') {
+            const windowFeedPetCode = window.feedPet.toString();
+            console.log('\n🔍 window.feedPet 函数:');
+            console.log(`- 长度: ${windowFeedPetCode.length} 字符`);
+            console.log(`- 包含gainCoins: ${windowFeedPetCode.includes('gainCoins')}`);
+            console.log(`- 包含gainExperience: ${windowFeedPetCode.includes('gainExperience')}`);
+            console.log(`- 包含weight: ${windowFeedPetCode.includes('weight')}`);
+            console.log(`- 包含handleAIReply: ${windowFeedPetCode.includes('handleAIReply')}`);
+
+            // 显示函数的前500个字符
+            console.log('\n📄 函数开头:');
+            console.log(windowFeedPetCode.substring(0, 500) + '...');
+        }
+
+        if (typeof feedPet === 'function' && feedPet !== window.feedPet) {
+            const globalFeedPetCode = feedPet.toString();
+            console.log('\n🔍 global feedPet 函数:');
+            console.log(`- 长度: ${globalFeedPetCode.length} 字符`);
+            console.log(`- 包含gainCoins: ${globalFeedPetCode.includes('gainCoins')}`);
+            console.log(`- 包含gainExperience: ${globalFeedPetCode.includes('gainExperience')}`);
+            console.log(`- 包含weight: ${globalFeedPetCode.includes('weight')}`);
+            console.log(`- 包含handleAIReply: ${globalFeedPetCode.includes('handleAIReply')}`);
+
+            // 显示函数的前500个字符
+            console.log('\n📄 函数开头:');
+            console.log(globalFeedPetCode.substring(0, 500) + '...');
+        }
+
+        // 强制重新绑定到正确的函数
+        console.log('\n🔧 强制重新绑定到拓麻歌子版本...');
+
+        // 移除旧的事件绑定
+        feedBtn.off("click touchend");
+
+        // 重新绑定到确保包含金币奖励的版本
+        feedBtn.on("click touchend", function(e) {
+            e.preventDefault();
+            console.log("🍖 喂食宠物 (强制使用拓麻歌子版本)");
+
+            // 直接调用拓麻歌子版本的逻辑
+            if (typeof window.feedPet === 'function' && window.feedPet.toString().includes('gainCoins')) {
+                window.feedPet();
+            } else {
+                console.error('❌ 找不到包含gainCoins的feedPet版本');
+                // 手动执行拓麻歌子逻辑
+                console.log('🔧 手动执行拓麻歌子喂食逻辑...');
+                manualTamagotchiFeed();
+            }
+        });
+
+        console.log('✅ UI按钮已重新绑定');
+
+        return true;
+    };
+
+    /**
+     * 手动执行拓麻歌子喂食逻辑
+     */
+    function manualTamagotchiFeed() {
+        console.log('🔧 手动执行拓麻歌子喂食逻辑...');
+
+        if (!petData.isAlive) {
+            toastr.error("💀 你的宠物已经死亡，无法喂食...");
+            return;
+        }
+
+        const now = Date.now();
+        const timeSinceLastFeed = now - petData.lastFeedTime;
+
+        if (timeSinceLastFeed < 30000) { // 30秒冷却
+            toastr.warning("宠物还不饿，等一会再喂吧！");
+            return;
+        }
+
+        // 拓麻歌子式喂食效果
+        petData.hunger = Math.min(100, petData.hunger + 20);
+        petData.happiness = Math.min(100, petData.happiness + 5);
+        petData.weight += 1;
+        petData.lastFeedTime = now;
+        petData.lastCareTime = now;
+        petData.careNeglectCount = Math.max(0, petData.careNeglectCount - 1);
+
+        // 过度喂食检查
+        if (petData.weight > 50) {
+            petData.sickness = Math.min(100, petData.sickness + 10);
+            toastr.warning("⚠️ 宠物吃得太多了，可能会生病！");
+        }
+
+        validateAndFixValues();
+
+        // 确保调用奖励函数
+        console.log('🎁 给予奖励...');
+        gainExperience(2);
+        gainCoins(3);
+
+        // AI回复
+        handleAIReply('feed', `${petData.name} 吃得很开心！`);
+
+        savePetData();
+        renderPetStatus();
+    }
 
     // 检查localStorage中的数据
     window.checkStoredData = function() {

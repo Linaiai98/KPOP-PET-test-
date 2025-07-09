@@ -2033,8 +2033,8 @@ ${currentPersonality}
                         petData = { ...petData, ...savedData };
                     }
 
-                    // 确保平衡性调整已应用
-                    applyBalancedFunctions();
+                    // 确保拓麻歌子系统已应用
+                    applyTamagotchiSystem();
                 }
 
                 // 确保人设数据完整性
@@ -4307,11 +4307,14 @@ ${currentPersonality}
         // 4. 加载宠物数据
         loadPetData();
 
-        // 4.1 确保拓麻歌子系统已应用（对于已有的4.0版本数据）
+        // 4.1 确保拓麻歌子系统已应用
         if (petData.dataVersion >= 4.0) {
             applyTamagotchiSystem();
-        } else if (petData.dataVersion >= 3.0) {
-            applyBalancedFunctions();
+        } else {
+            // 旧版本数据自动升级到拓麻歌子系统
+            petData.dataVersion = 4.0;
+            applyTamagotchiSystem();
+            savePetData();
         }
 
         // 5. 加载自定义头像数据
@@ -5912,8 +5915,8 @@ ${currentPersonality}
 
                         petData = mergedData;
 
-                        // 应用平衡函数
-                        applyBalancedFunctions();
+                        // 应用拓麻歌子系统
+                        applyTamagotchiSystem();
 
                         // 保存数据
                         savePetData();
@@ -6591,6 +6594,7 @@ ${currentPersonality}
         console.log('- fixAllIssues() - 修复所有问题');
         console.log('- showPopup() - 显示拓麻歌子UI');
         console.log('- testTamagotchiSystem() - 测试拓麻歌子系统');
+        console.log('- forceApplyTamagotchiSystem() - 强制应用拓麻歌子系统（修复金币问题）');
 
         // 强制刷新UI
         if (typeof renderPetStatus === 'function') {
@@ -7685,150 +7689,32 @@ ${currentPersonality}
         }
     }
 
-    // 应用平衡后的函数（保留兼容性）
-    function applyBalancedFunctions() {
-        // 重新定义喂食函数 - 平衡后的版本
-        window.feedPet = async function() {
-            const now = Date.now();
-            const timeSinceLastFeed = now - petData.lastFeedTime;
+    // 平衡版本已删除，只保留拓麻歌子版本
 
-            if (timeSinceLastFeed < 45000) { // 45秒冷却
-                toastr.warning("宠物还不饿，等一会再喂吧！");
-                return;
-            }
-
-            // 更新宠物状态 - 平衡后的效果
-            petData.hunger = Math.min(100, petData.hunger + 8);  // 降低效果 15→8
-            petData.happiness = Math.min(100, petData.happiness + 3);  // 降低效果 5→3
-            petData.lastFeedTime = now;
-
-            validateAndFixValues();
-            gainExperience(3);
-            await handleAIReply('feed', `${petData.name} 吃得很开心！`);
-            savePetData();
-            renderPetStatus();
-        };
-
-        // 重新定义玩耍函数 - 平衡后的版本
-        window.playWithPet = async function() {
-            const now = Date.now();
-            const timeSinceLastPlay = now - petData.lastPlayTime;
-
-            if (timeSinceLastPlay < 60000) { // 60秒冷却
-                toastr.warning("宠物需要休息一下！");
-                return;
-            }
-
-            // 更新宠物状态 - 平衡后的效果
-            petData.happiness = Math.min(100, petData.happiness + 8);  // 降低效果 12→8
-            petData.energy = Math.max(0, petData.energy - 10);  // 增加消耗 8→10
-            petData.lastPlayTime = now;
-
-            validateAndFixValues();
-            gainExperience(4);
-            await handleAIReply('play', `${petData.name} 玩得很开心！`);
-            savePetData();
-            renderPetStatus();
-        };
-
-        // 重新定义睡觉函数 - 平衡后的版本
-        window.petSleep = async function() {
-            const now = Date.now();
-            const timeSinceLastSleep = now - petData.lastSleepTime;
-
-            if (timeSinceLastSleep < 120000) { // 120秒冷却
-                toastr.warning("宠物还不困！");
-                return;
-            }
-
-            // 更新宠物状态 - 平衡后的效果
-            petData.energy = Math.min(100, petData.energy + 15);  // 降低效果 20→15
-            petData.health = Math.min(100, petData.health + 3);   // 降低效果 5→3
-            petData.lastSleepTime = now;
-
-            validateAndFixValues();
-            gainExperience(2);
-            await handleAIReply('sleep', `${petData.name} 睡得很香！`);
-            savePetData();
-            renderPetStatus();
-        };
-
-        // 重新定义状态更新函数 - 平衡后的版本
-        window.updatePetStatus = function() {
-            const now = Date.now();
-            const timeSinceLastUpdate = now - (petData.lastUpdateTime || now);
-            const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
-
-            const safeHoursElapsed = Math.min(hoursElapsed, 24);
-
-            // 更频繁的更新，更快的衰减
-            if (safeHoursElapsed > 0.083) { // 每5分钟更新一次
-                petData.hunger = Math.max(0, petData.hunger - safeHoursElapsed * 1.0);  // 调整衰减速度
-                petData.energy = Math.max(0, petData.energy - safeHoursElapsed * 0.8);  // 调整衰减速度
-
-                // 饥饿和疲劳影响健康和快乐
-                if (petData.hunger < 20) {
-                    petData.health = Math.max(0, petData.health - safeHoursElapsed * 1);
-                    petData.happiness = Math.max(0, petData.happiness - safeHoursElapsed * 0.8);
-                }
-
-                if (petData.energy < 20) {
-                    petData.happiness = Math.max(0, petData.happiness - safeHoursElapsed * 0.5);
-                }
-
-                petData.lastUpdateTime = now;
-                validateAndFixValues();
-                savePetData();
-                checkAndSendNotifications();
-            }
-        };
-    };
-
-    // 手动应用平衡性调整（用户可调用，主要用于测试）
-    window.applyBalanceAdjustments = function() {
-        console.log('🎯 手动应用数值平衡性调整...');
-
-        console.log('\n📝 调整方案:');
-        console.log('1. 降低互动效果:');
-        console.log('   - 喂食: 饱食+15→+8, 快乐+5→+3');
-        console.log('   - 玩耍: 快乐+12→+8, 精力-8→-10');
-        console.log('   - 睡觉: 精力+20→+15, 健康+5→+3');
-        console.log('2. 加快衰减速度:');
-        console.log('   - 饱食衰减: 0.8→1.5/小时');
-        console.log('   - 精力衰减: 0.6→1.2/小时');
-        console.log('   - 更新频率: 12分钟→5分钟');
-        console.log('3. 延长冷却时间:');
-        console.log('   - 喂食: 20秒→45秒');
-        console.log('   - 玩耍: 40秒→60秒');
-        console.log('   - 睡觉: 80秒→120秒');
-
-        if (!confirm('确定要手动应用这些平衡性调整吗？注意：系统会在数据迁移时自动应用。')) {
-            return;
-        }
-
-        // 应用平衡函数
-        applyBalancedFunctions();
+    /**
+     * 强制应用拓麻歌子系统（确保金币功能正常）
+     */
+    window.forceApplyTamagotchiSystem = function() {
+        console.log('🥚 强制应用拓麻歌子系统...');
 
         // 更新数据版本
-        petData.dataVersion = 3.0;
+        petData.dataVersion = 4.0;
+
+        // 应用拓麻歌子系统
+        applyTamagotchiSystem();
+
+        // 保存数据
         savePetData();
 
-        console.log('✅ 平衡性调整已手动应用！');
-        toastr.success('数值平衡已调整！现在数值增长会更慢，衰减会更快。');
+        console.log('✅ 拓麻歌子系统已强制应用！');
+        console.log('💰 金币功能现在应该正常工作了');
 
-        // 立即更新一次状态
-        updatePetStatus();
-        renderPetStatus();
+        toastr.success('拓麻歌子系统已应用！金币功能已启用！', '', { timeOut: 3000 });
 
         return {
             applied: true,
-            timestamp: new Date().toISOString(),
-            changes: {
-                feedEffect: { hunger: '15→8', happiness: '5→3', cooldown: '20s→45s' },
-                playEffect: { happiness: '12→8', energy: '-8→-10', cooldown: '40s→60s' },
-                sleepEffect: { energy: '20→15', health: '5→3', cooldown: '80s→120s' },
-                decay: { hunger: '0.8→1.5/h', energy: '0.6→1.2/h', frequency: '12min→5min' }
-            }
+            dataVersion: petData.dataVersion,
+            timestamp: new Date().toISOString()
         };
     };
 

@@ -5187,10 +5187,12 @@ ${currentPersonality}
         const feedBtn = $('.feed-btn');
         const playBtn = $('.play-btn');
         const sleepBtn = $('.sleep-btn');
+        const hugBtn = $('.hug-btn');
 
         console.log(`喂食按钮: ${feedBtn.length > 0 ? '✅ 存在' : '❌ 不存在'}`);
         console.log(`玩耍按钮: ${playBtn.length > 0 ? '✅ 存在' : '❌ 不存在'}`);
         console.log(`睡觉按钮: ${sleepBtn.length > 0 ? '✅ 存在' : '❌ 不存在'}`);
+        console.log(`抱抱按钮: ${hugBtn.length > 0 ? '✅ 存在' : '❌ 不存在'}`);
 
         // 4. 测试状态数值
         console.log("\n4. 测试状态数值:");
@@ -6590,6 +6592,7 @@ ${currentPersonality}
         console.log('- testNewDecaySystem() - 测试新的衰减系统效果（预测离线影响）');
         console.log('- adjustInitialValues() - 调整初始数值到更合理的水平（增加成长感）');
         console.log('- testNewValueBalance() - 测试新的数值平衡体验（完整的照顾流程）');
+        console.log('- testHugFunction() - 测试抱抱功能（检查按钮、函数、奖励）');
 
         // 强制刷新UI
         if (typeof renderPetStatus === 'function') {
@@ -7536,6 +7539,64 @@ ${currentPersonality}
             renderPetStatus();
         };
 
+        // 抱抱宠物 - 新的互动方式
+        window.hugPet = async function() {
+            if (!petData.isAlive) {
+                toastr.error("💀 你的宠物已经死亡，无法抱抱...");
+                return;
+            }
+
+            const now = Date.now();
+            const timeSinceLastHug = now - (petData.lastHugTime || 0);
+
+            if (timeSinceLastHug < 25000) { // 25秒冷却
+                const remainingTime = Math.ceil((25000 - timeSinceLastHug) / 1000);
+                toastr.warning(`宠物还在回味刚才的拥抱，${remainingTime}秒后再试吧！`);
+                return;
+            }
+
+            try {
+                // 拓麻歌子式抱抱效果
+                petData.happiness = Math.min(100, petData.happiness + 10);
+                petData.health = Math.min(100, petData.health + 3);
+                petData.discipline = Math.min(100, (petData.discipline || 50) + 2); // 增加纪律性
+                petData.lastHugTime = now;
+                petData.lastCareTime = now;
+                petData.careNeglectCount = Math.max(0, (petData.careNeglectCount || 0) - 1);
+
+                // 特殊效果：抱抱能减少疾病
+                if (petData.sickness > 0) {
+                    petData.sickness = Math.max(0, petData.sickness - 3);
+                    toastr.info("💕 温暖的拥抱让宠物感觉好了一些！");
+                }
+
+                validateAndFixValues();
+
+                // 定义奖励
+                const rewards = { coins: 2, experience: 1 };
+
+                // 应用奖励
+                gainExperience(rewards.experience);
+                gainCoins(rewards.coins);
+
+                // AI回复时传递奖励信息，用于独立显示
+                await handleAIReply('hug', `${petData.name} 享受着温暖的拥抱！`, rewards);
+                savePetData();
+                renderPetStatus();
+
+                // 强制更新UI显示
+                setTimeout(() => {
+                    if (typeof updateUnifiedUIStatus === 'function') {
+                        updateUnifiedUIStatus();
+                    }
+                }, 100);
+
+            } catch (error) {
+                console.error('抱抱宠物时发生错误:', error);
+                toastr.error("抱抱时出现了问题...");
+            }
+        };
+
         // 添加治疗功能
         window.healPet = async function() {
             if (!petData.isAlive) {
@@ -8213,11 +8274,13 @@ ${currentPersonality}
         const feedBtn = popup.find(".feed-btn");
         const playBtn = popup.find(".play-btn");
         const sleepBtn = popup.find(".sleep-btn");
+        const hugBtn = popup.find(".hug-btn");
 
         console.log('\n📋 按钮存在性检查:');
         console.log(`- 喂食按钮: ${feedBtn.length > 0 ? '✅' : '❌'} (数量: ${feedBtn.length})`);
         console.log(`- 玩耍按钮: ${playBtn.length > 0 ? '✅' : '❌'} (数量: ${playBtn.length})`);
         console.log(`- 睡觉按钮: ${sleepBtn.length > 0 ? '✅' : '❌'} (数量: ${sleepBtn.length})`);
+        console.log(`- 抱抱按钮: ${hugBtn.length > 0 ? '✅' : '❌'} (数量: ${hugBtn.length})`);
 
         // 检查事件绑定
         console.log('\n🔗 事件绑定检查:');
@@ -8850,6 +8913,14 @@ ${currentPersonality}
             console.log(`  - 冷却时间: ${sleepCode.includes('120000') ? '120秒(拓麻歌子)' : sleepCode.includes('80000') ? '80秒(旧版本)' : '未知'}`);
         }
 
+        if (typeof hugPet === 'function') {
+            const hugCode = hugPet.toString();
+            console.log('🤗 hugPet函数:');
+            console.log(`  - 包含gainCoins: ${hugCode.includes('gainCoins') ? '✅' : '❌'}`);
+            console.log(`  - 包含gainExperience: ${hugCode.includes('gainExperience') ? '✅' : '❌'}`);
+            console.log(`  - 冷却时间: ${hugCode.includes('25000') ? '25秒(拓麻歌子)' : '未知'}`);
+        }
+
         // 判断版本状态
         const feedHasCoins = typeof feedPet === 'function' && feedPet.toString().includes('gainCoins');
         const playHasCoins = typeof playWithPet === 'function' && playWithPet.toString().includes('gainCoins');
@@ -9224,6 +9295,78 @@ ${currentPersonality}
                 energy: petData.energy
             },
             improvement: '显著的成长感和照顾价值'
+        };
+    };
+
+    /**
+     * 测试抱抱功能
+     */
+    window.testHugFunction = function() {
+        console.log('🤗 测试抱抱功能...');
+
+        // 检查抱抱函数是否存在
+        console.log('\n📋 函数检查:');
+        console.log(`- hugPet函数存在: ${typeof hugPet === 'function' ? '✅' : '❌'}`);
+        console.log(`- window.hugPet函数存在: ${typeof window.hugPet === 'function' ? '✅' : '❌'}`);
+
+        // 检查UI按钮
+        const popup = $("#virtual-pet-popup");
+        if (popup.length > 0) {
+            const hugBtn = popup.find(".hug-btn");
+            console.log(`- 抱抱按钮存在: ${hugBtn.length > 0 ? '✅' : '❌'} (数量: ${hugBtn.length})`);
+
+            if (hugBtn.length > 0) {
+                const events = $._data(hugBtn[0], 'events');
+                console.log(`- 抱抱按钮事件: ${events ? Object.keys(events).join(', ') : '无'}`);
+            }
+        } else {
+            console.log('⚠️ 宠物界面未打开，请先运行 showPopup()');
+        }
+
+        // 检查抱抱函数内容
+        if (typeof window.hugPet === 'function') {
+            const hugPetCode = window.hugPet.toString();
+            console.log('\n📝 抱抱函数分析:');
+            console.log(`- 包含gainCoins: ${hugPetCode.includes('gainCoins') ? '✅' : '❌'}`);
+            console.log(`- 包含gainExperience: ${hugPetCode.includes('gainExperience') ? '✅' : '❌'}`);
+            console.log(`- 包含handleAIReply: ${hugPetCode.includes('handleAIReply') ? '✅' : '❌'}`);
+            console.log(`- 冷却时间: ${hugPetCode.includes('25000') ? '25秒 ✅' : '未知 ❌'}`);
+            console.log(`- 奖励设置: ${hugPetCode.includes('coins: 2') && hugPetCode.includes('experience: 1') ? '金币2+经验1 ✅' : '未知 ❌'}`);
+        }
+
+        // 显示当前状态
+        console.log('\n📊 当前状态:');
+        console.log(`- 健康: ${petData.health}/100`);
+        console.log(`- 快乐: ${petData.happiness}/100`);
+        console.log(`- 金币: ${petData.coins || 100}`);
+        console.log(`- 经验: ${petData.experience || 0}`);
+        console.log(`- 上次抱抱时间: ${petData.lastHugTime ? new Date(petData.lastHugTime).toLocaleTimeString() : '从未'}`);
+
+        // 检查冷却状态
+        if (petData.lastHugTime) {
+            const now = Date.now();
+            const timeSinceLastHug = now - petData.lastHugTime;
+            const cooldownRemaining = Math.max(0, 25000 - timeSinceLastHug);
+
+            console.log('\n⏰ 冷却状态:');
+            console.log(`- 距离上次抱抱: ${Math.round(timeSinceLastHug / 1000)}秒`);
+            console.log(`- 冷却剩余: ${Math.round(cooldownRemaining / 1000)}秒`);
+            console.log(`- 可以抱抱: ${cooldownRemaining === 0 ? '✅' : '❌'}`);
+        }
+
+        console.log('\n💡 抱抱功能特点:');
+        console.log('✅ 25秒冷却时间（比其他互动更短）');
+        console.log('✅ 增加快乐度+10，健康度+3');
+        console.log('✅ 增加纪律性+2');
+        console.log('✅ 减少疾病-3（如果生病）');
+        console.log('✅ 奖励：2金币 + 1经验');
+        console.log('✅ 减少忽视计数');
+
+        return {
+            functionExists: typeof window.hugPet === 'function',
+            buttonExists: popup.length > 0 && popup.find(".hug-btn").length > 0,
+            canHug: !petData.lastHugTime || (Date.now() - petData.lastHugTime) >= 25000,
+            isAlive: petData.isAlive
         };
     };
 
@@ -9941,7 +10084,7 @@ ${currentPersonality}
                 <!-- 操作按钮 -->
                 <div class="pet-actions-section" style="
                     display: grid !important;
-                    grid-template-columns: 1fr 1fr !important;
+                    grid-template-columns: 1fr 1fr 1fr !important;
                     gap: 6px !important;
                 ">
                     <button class="action-btn feed-btn" style="
@@ -10009,6 +10152,28 @@ ${currentPersonality}
                     ">
                         <span style="font-size: 1em !important;">😴</span>
                         <span>休息</span>
+                    </button>
+                    <button class="action-btn hug-btn" style="
+                        padding: 8px !important;
+                        background: #FF69B4 !important;
+                        color: ${candyColors.textWhite} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 11px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
+                        cursor: pointer !important;
+                        min-height: 36px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 4px !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                    ">
+                        <span style="font-size: 1em !important;">🤗</span>
+                        <span>抱抱</span>
                     </button>
                     <button class="action-btn heal-btn" style="
                         padding: 8px !important;
@@ -10199,7 +10364,7 @@ ${currentPersonality}
                 <!-- 操作按钮 -->
                 <div class="pet-actions-section" style="
                     display: grid !important;
-                    grid-template-columns: 1fr 1fr !important;
+                    grid-template-columns: 1fr 1fr 1fr !important;
                     gap: 8px !important;
                 ">
                     <button class="action-btn feed-btn" style="
@@ -10267,6 +10432,28 @@ ${currentPersonality}
                     ">
                         <span style="font-size: 1.1em !important;">😴</span>
                         <span>休息</span>
+                    </button>
+                    <button class="action-btn hug-btn" style="
+                        padding: 12px !important;
+                        background: #FF69B4 !important;
+                        color: ${candyColors.textWhite} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 12px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
+                        cursor: pointer !important;
+                        min-height: 44px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 6px !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                    ">
+                        <span style="font-size: 1.1em !important;">🤗</span>
+                        <span>抱抱</span>
                     </button>
                     <button class="action-btn heal-btn" style="
                         padding: 12px !important;
@@ -10382,6 +10569,17 @@ ${currentPersonality}
             e.preventDefault();
             console.log("😴 宠物休息");
             petSleep();
+            // 更新UI显示
+            setTimeout(() => {
+                updateUnifiedUIStatus();
+            }, 100);
+        });
+
+        // 抱抱按钮
+        $container.find(".hug-btn").on("click touchend", function(e) {
+            e.preventDefault();
+            console.log("🤗 抱抱宠物");
+            hugPet();
             // 更新UI显示
             setTimeout(() => {
                 updateUnifiedUIStatus();

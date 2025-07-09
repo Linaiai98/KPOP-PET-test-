@@ -1637,9 +1637,10 @@ ${currentPersonality}
      * 处理AI回复的通用函数
      * @param {string} action - 行为类型
      * @param {string} fallbackMessage - 回退消息
+     * @param {Object} rewards - 奖励信息 {coins: number, experience: number}
      * @returns {Promise<void>}
      */
-    async function handleAIReply(action, fallbackMessage) {
+    async function handleAIReply(action, fallbackMessage, rewards = null) {
         try {
             if (isAIAPIAvailable()) {
                 // 显示加载状态
@@ -1691,10 +1692,55 @@ ${currentPersonality}
                     extendedTimeOut: 1000
                 });
             }
+
+            // 独立显示奖励信息（如果提供了奖励数据）
+            if (rewards && (rewards.coins > 0 || rewards.experience > 0)) {
+                setTimeout(() => {
+                    showRewardNotification(rewards);
+                }, 1000); // 延迟1秒显示，让AI回复先显示
+            }
+
         } catch (error) {
             console.error(`[${extensionName}] 处理AI回复时发生错误:`, error);
             // 最终回退
             toastr.success(fallbackMessage);
+
+            // 即使出错也显示奖励
+            if (rewards && (rewards.coins > 0 || rewards.experience > 0)) {
+                setTimeout(() => {
+                    showRewardNotification(rewards);
+                }, 500);
+            }
+        }
+    }
+
+    /**
+     * 显示奖励通知
+     * @param {Object} rewards - 奖励信息 {coins: number, experience: number}
+     */
+    function showRewardNotification(rewards) {
+        let rewardText = "🎁 获得奖励：";
+        const rewardParts = [];
+
+        if (rewards.coins > 0) {
+            rewardParts.push(`💰 ${rewards.coins} 金币`);
+        }
+
+        if (rewards.experience > 0) {
+            rewardParts.push(`⭐ ${rewards.experience} 经验`);
+        }
+
+        if (rewardParts.length > 0) {
+            rewardText += rewardParts.join("，");
+
+            // 显示奖励通知
+            toastr.info(rewardText, "", {
+                timeOut: 3000,
+                extendedTimeOut: 1000,
+                positionClass: "toast-bottom-right" // 显示在右下角，避免与AI回复重叠
+            });
+
+            console.log(`🎁 ${rewardText}`);
         }
     }
 
@@ -6539,6 +6585,7 @@ ${currentPersonality}
         console.log('- forceUIRefresh() - 强制刷新UI显示（解决金币显示延迟）');
         console.log('- forceOverrideOldFunctions() - 强制覆盖旧版本函数（解决金币不增加问题）');
         console.log('- verifyOldVersionsRemoved() - 验证旧版本函数已删除');
+        console.log('- testRewardDisplay() - 测试新的奖励显示系统');
 
         // 强制刷新UI
         if (typeof renderPetStatus === 'function') {
@@ -7395,9 +7442,16 @@ ${currentPersonality}
             }
 
             validateAndFixValues();
-            gainExperience(2);
-            gainCoins(3); // 喂食获得3金币
-            await handleAIReply('feed', `${petData.name} 吃得很开心！`);
+
+            // 定义奖励
+            const rewards = { coins: 3, experience: 2 };
+
+            // 应用奖励
+            gainExperience(rewards.experience);
+            gainCoins(rewards.coins);
+
+            // AI回复时传递奖励信息，用于独立显示
+            await handleAIReply('feed', `${petData.name} 吃得很开心！`, rewards);
             savePetData();
             renderPetStatus();
         };
@@ -7427,9 +7481,16 @@ ${currentPersonality}
             petData.careNeglectCount = Math.max(0, petData.careNeglectCount - 1);
 
             validateAndFixValues();
-            gainExperience(3);
-            gainCoins(5); // 玩耍获得5金币
-            await handleAIReply('play', `${petData.name} 玩得很开心！`);
+
+            // 定义奖励
+            const rewards = { coins: 5, experience: 3 };
+
+            // 应用奖励
+            gainExperience(rewards.experience);
+            gainCoins(rewards.coins);
+
+            // AI回复时传递奖励信息，用于独立显示
+            await handleAIReply('play', `${petData.name} 玩得很开心！`, rewards);
             savePetData();
             renderPetStatus();
         };
@@ -7457,9 +7518,16 @@ ${currentPersonality}
             petData.lastCareTime = now;
 
             validateAndFixValues();
-            gainExperience(1);
-            gainCoins(2); // 睡觉获得2金币
-            await handleAIReply('sleep', `${petData.name} 睡得很香！`);
+
+            // 定义奖励
+            const rewards = { coins: 2, experience: 1 };
+
+            // 应用奖励
+            gainExperience(rewards.experience);
+            gainCoins(rewards.coins);
+
+            // AI回复时传递奖励信息，用于独立显示
+            await handleAIReply('sleep', `${petData.name} 睡得很香！`, rewards);
             savePetData();
             renderPetStatus();
         };
@@ -8631,13 +8699,16 @@ ${currentPersonality}
 
         validateAndFixValues();
 
+        // 定义奖励
+        const rewards = { coins: 3, experience: 2 };
+
         // 确保调用奖励函数
         console.log('🎁 给予奖励...');
-        gainExperience(2);
-        gainCoins(3);
+        gainExperience(rewards.experience);
+        gainCoins(rewards.coins);
 
-        // AI回复
-        handleAIReply('feed', `${petData.name} 吃得很开心！`);
+        // AI回复时传递奖励信息，用于独立显示
+        handleAIReply('feed', `${petData.name} 吃得很开心！`, rewards);
 
         savePetData();
         renderPetStatus();
@@ -8795,6 +8866,38 @@ ${currentPersonality}
             sleepHasCoins,
             allGood: feedHasCoins && playHasCoins && sleepHasCoins
         };
+    };
+
+    /**
+     * 测试新的奖励显示系统
+     */
+    window.testRewardDisplay = function() {
+        console.log('🎁 测试新的奖励显示系统...');
+
+        // 测试奖励通知显示
+        console.log('1. 测试奖励通知显示...');
+        showRewardNotification({ coins: 5, experience: 3 });
+
+        setTimeout(() => {
+            console.log('2. 测试只有金币的奖励...');
+            showRewardNotification({ coins: 10, experience: 0 });
+        }, 2000);
+
+        setTimeout(() => {
+            console.log('3. 测试只有经验的奖励...');
+            showRewardNotification({ coins: 0, experience: 5 });
+        }, 4000);
+
+        setTimeout(() => {
+            console.log('4. 测试完整的互动流程...');
+            console.log('💡 现在可以点击UI中的喂食按钮测试完整流程');
+            console.log('预期效果：');
+            console.log('  1. AI回复显示在左上角');
+            console.log('  2. 奖励信息显示在右下角');
+            console.log('  3. 两者不会重叠');
+        }, 6000);
+
+        return true;
     };
 
     // 检查localStorage中的数据

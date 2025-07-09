@@ -340,10 +340,10 @@ jQuery(async () => {
         type: "cat", // cat, dog, dragon, etc.
         level: 1,
         experience: 0,
-        health: 35,      // 拓麻歌子式：合理起始值
-        happiness: 25,   // 拓麻歌子式：合理起始值
-        hunger: 40,      // 拓麻歌子式：合理起始值
-        energy: 50,      // 拓麻歌子式：合理起始值
+        health: 25,      // 更低的起始值：需要照顾才能成长
+        happiness: 20,   // 更低的起始值：需要互动才能快乐
+        hunger: 30,      // 更低的起始值：需要喂食才能饱足
+        energy: 35,      // 更低的起始值：需要休息才能精力充沛
 
         // 拓麻歌子式生命状态
         lifeStage: "baby",    // baby, child, teen, adult, senior
@@ -3513,10 +3513,10 @@ ${currentPersonality}
             type: "cat",
             level: 1,
             experience: 0,
-            health: 50,
-            happiness: 50,
-            hunger: 50,
-            energy: 50,
+            health: 25,    // 更低的起始值
+            happiness: 20, // 更低的起始值
+            hunger: 30,    // 更低的起始值
+            energy: 35,    // 更低的起始值
 
             // 拓麻歌子式属性
             lifeStage: "baby",
@@ -6588,6 +6588,8 @@ ${currentPersonality}
         console.log('- testRewardDisplay() - 测试新的奖励显示系统');
         console.log('- adjustDecaySystem() - 调整衰减速度和缓冲机制（解决数值过高问题）');
         console.log('- testNewDecaySystem() - 测试新的衰减系统效果（预测离线影响）');
+        console.log('- adjustInitialValues() - 调整初始数值到更合理的水平（增加成长感）');
+        console.log('- testNewValueBalance() - 测试新的数值平衡体验（完整的照顾流程）');
 
         // 强制刷新UI
         if (typeof renderPetStatus === 'function') {
@@ -9061,6 +9063,168 @@ ${currentPersonality}
         console.log('✅ 真实的养成体验 - 像真正的宠物一样需要持续照顾');
 
         return true;
+    };
+
+    /**
+     * 调整初始数值到更合理的水平
+     */
+    window.adjustInitialValues = function() {
+        console.log('⚖️ 调整初始数值到更合理的水平...');
+
+        console.log('\n📊 当前数值:');
+        console.log(`- 健康: ${petData.health}/100`);
+        console.log(`- 快乐: ${petData.happiness}/100`);
+        console.log(`- 饱食: ${petData.hunger}/100`);
+        console.log(`- 精力: ${petData.energy}/100`);
+
+        // 设置更低的初始数值，增加成长感
+        const newValues = {
+            health: 25,    // 从35降到25 - 需要照顾才能健康
+            happiness: 20, // 从25降到20 - 需要互动才能快乐
+            hunger: 30,    // 从40降到30 - 需要喂食才能饱足
+            energy: 35     // 从50降到35 - 需要休息才能精力充沛
+        };
+
+        console.log('\n🎯 新的初始数值:');
+        Object.entries(newValues).forEach(([key, value]) => {
+            const oldValue = petData[key];
+            petData[key] = value;
+            console.log(`- ${key}: ${oldValue} → ${value} (${value - oldValue > 0 ? '+' : ''}${value - oldValue})`);
+        });
+
+        // 重置等级和经验，让玩家从头开始
+        petData.level = 1;
+        petData.experience = 0;
+
+        // 重置时间戳，避免立即衰减
+        const now = Date.now();
+        petData.lastFeedTime = now;
+        petData.lastPlayTime = now;
+        petData.lastSleepTime = now;
+        petData.lastUpdateTime = now;
+        petData.lastCareTime = now;
+
+        // 确保宠物是活着的
+        petData.isAlive = true;
+        petData.deathReason = null;
+
+        // 重置拓麻歌子属性
+        petData.lifeStage = "baby";
+        petData.age = 0;
+        petData.weight = 30;
+        petData.sickness = 0;
+        petData.discipline = 50;
+        petData.careNeglectCount = 0;
+
+        // 保存数据
+        savePetData();
+
+        // 更新UI
+        if (typeof updateUnifiedUIStatus === 'function') {
+            updateUnifiedUIStatus();
+        }
+        if (typeof renderPetStatus === 'function') {
+            renderPetStatus();
+        }
+
+        console.log('\n💡 设计理念:');
+        console.log('✅ 更低的起始数值增加成长感');
+        console.log('✅ 玩家需要通过互动来提升宠物状态');
+        console.log('✅ 每次照顾都有明显的改善效果');
+        console.log('✅ 创造真正的养成体验');
+
+        console.log('\n🎮 建议的游戏流程:');
+        console.log('1. 先喂食提升饱食度 (30→50)');
+        console.log('2. 玩耍提升快乐度 (20→35)');
+        console.log('3. 睡觉恢复精力 (35→60)');
+        console.log('4. 持续照顾提升健康度 (25→45+)');
+
+        toastr.success('🎯 初始数值已调整！现在需要更多照顾才能让宠物茁壮成长！', '', { timeOut: 5000 });
+
+        return {
+            oldValues: {
+                health: 35, happiness: 25, hunger: 40, energy: 50
+            },
+            newValues: newValues,
+            improvement: '降低了起始数值，增加成长感和照顾的必要性'
+        };
+    };
+
+    /**
+     * 测试新的数值平衡体验
+     */
+    window.testNewValueBalance = function() {
+        console.log('🎮 测试新的数值平衡体验...');
+
+        // 先应用新的初始数值
+        adjustInitialValues();
+
+        console.log('\n📊 起始状态:');
+        console.log(`- 健康: ${petData.health}/100 (${petData.health < 30 ? '需要照顾' : '良好'})`);
+        console.log(`- 快乐: ${petData.happiness}/100 (${petData.happiness < 30 ? '需要互动' : '良好'})`);
+        console.log(`- 饱食: ${petData.hunger}/100 (${petData.hunger < 40 ? '需要喂食' : '良好'})`);
+        console.log(`- 精力: ${petData.energy}/100 (${petData.energy < 40 ? '需要休息' : '良好'})`);
+
+        console.log('\n🎯 模拟照顾流程:');
+
+        // 模拟喂食
+        console.log('\n1. 🍖 喂食效果:');
+        const oldHunger = petData.hunger;
+        const oldHappiness1 = petData.happiness;
+        petData.hunger = Math.min(100, petData.hunger + 20);
+        petData.happiness = Math.min(100, petData.happiness + 5);
+        console.log(`   饱食度: ${oldHunger} → ${petData.hunger} (+${petData.hunger - oldHunger})`);
+        console.log(`   快乐度: ${oldHappiness1} → ${petData.happiness} (+${petData.happiness - oldHappiness1})`);
+        console.log(`   效果: ${petData.hunger >= 50 ? '✅ 饱足了' : '⚠️ 还需要更多食物'}`);
+
+        // 模拟玩耍
+        console.log('\n2. 🎮 玩耍效果:');
+        const oldHappiness2 = petData.happiness;
+        const oldEnergy = petData.energy;
+        petData.happiness = Math.min(100, petData.happiness + 15);
+        petData.energy = Math.max(0, petData.energy - 10);
+        console.log(`   快乐度: ${oldHappiness2} → ${petData.happiness} (+${petData.happiness - oldHappiness2})`);
+        console.log(`   精力: ${oldEnergy} → ${petData.energy} (${petData.energy - oldEnergy})`);
+        console.log(`   效果: ${petData.happiness >= 50 ? '✅ 很开心' : '⚠️ 还需要更多互动'}`);
+
+        // 模拟睡觉
+        console.log('\n3. 😴 睡觉效果:');
+        const oldEnergy2 = petData.energy;
+        const oldHealth = petData.health;
+        petData.energy = Math.min(100, petData.energy + 25);
+        petData.health = Math.min(100, petData.health + 10);
+        console.log(`   精力: ${oldEnergy2} → ${petData.energy} (+${petData.energy - oldEnergy2})`);
+        console.log(`   健康: ${oldHealth} → ${petData.health} (+${petData.health - oldHealth})`);
+        console.log(`   效果: ${petData.energy >= 60 ? '✅ 精力充沛' : '⚠️ 还需要更多休息'}`);
+
+        console.log('\n📈 照顾后状态:');
+        console.log(`- 健康: ${petData.health}/100 (${petData.health >= 50 ? '✅ 健康' : '⚠️ 需要更多照顾'})`);
+        console.log(`- 快乐: ${petData.happiness}/100 (${petData.happiness >= 50 ? '✅ 快乐' : '⚠️ 需要更多互动'})`);
+        console.log(`- 饱食: ${petData.hunger}/100 (${petData.hunger >= 50 ? '✅ 饱足' : '⚠️ 需要更多食物'})`);
+        console.log(`- 精力: ${petData.energy}/100 (${petData.energy >= 60 ? '✅ 充沛' : '⚠️ 需要更多休息'})`);
+
+        console.log('\n💡 新数值平衡的优势:');
+        console.log('✅ 每次互动都有明显的改善效果');
+        console.log('✅ 玩家能清楚感受到照顾的价值');
+        console.log('✅ 从低数值到高数值有明显的成长感');
+        console.log('✅ 鼓励玩家进行多种类型的互动');
+
+        // 保存测试后的状态
+        savePetData();
+        if (typeof updateUnifiedUIStatus === 'function') {
+            updateUnifiedUIStatus();
+        }
+
+        return {
+            startValues: { health: 25, happiness: 20, hunger: 30, energy: 35 },
+            endValues: {
+                health: petData.health,
+                happiness: petData.happiness,
+                hunger: petData.hunger,
+                energy: petData.energy
+            },
+            improvement: '显著的成长感和照顾价值'
+        };
     };
 
     // 检查localStorage中的数据

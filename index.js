@@ -6599,6 +6599,7 @@ ${currentPersonality}
         console.log('- forceApplyTamagotchiSystem() - 强制应用拓麻歌子系统（修复金币问题）');
         console.log('- testCleanPrompt() - 测试优化后的提示词（避免AI混淆金币）');
         console.log('- diagnoseRewardSystem() - 诊断金币和经验值问题');
+        console.log('- checkInteractionFunctions() - 检查当前使用的互动函数版本');
 
         // 强制刷新UI
         if (typeof renderPetStatus === 'function') {
@@ -7851,6 +7852,83 @@ ${currentPersonality}
                 gainCoins: hasGainCoins,
                 gainExperience: hasGainExp
             }
+        };
+    };
+
+    /**
+     * 检查当前使用的互动函数版本
+     */
+    window.checkInteractionFunctions = function() {
+        console.log('🔍 检查当前使用的互动函数版本...');
+
+        console.log('\n📋 函数源码分析:');
+
+        // 检查feedPet函数
+        const feedPetCode = window.feedPet.toString();
+        console.log('\n🍖 feedPet函数分析:');
+        console.log(`- 包含gainCoins: ${feedPetCode.includes('gainCoins') ? '✅' : '❌'}`);
+        console.log(`- 包含gainExperience: ${feedPetCode.includes('gainExperience') ? '✅' : '❌'}`);
+        console.log(`- 包含handleAIReply: ${feedPetCode.includes('handleAIReply') ? '✅' : '❌'}`);
+        console.log(`- 包含拓麻歌子特征(weight): ${feedPetCode.includes('weight') ? '✅' : '❌'}`);
+        console.log(`- 冷却时间: ${feedPetCode.includes('30000') ? '30秒(拓麻歌子)' : feedPetCode.includes('45000') ? '45秒(平衡版)' : '未知'}`);
+
+        // 检查playWithPet函数
+        const playPetCode = window.playWithPet.toString();
+        console.log('\n🎮 playWithPet函数分析:');
+        console.log(`- 包含gainCoins: ${playPetCode.includes('gainCoins') ? '✅' : '❌'}`);
+        console.log(`- 包含gainExperience: ${playPetCode.includes('gainExperience') ? '✅' : '❌'}`);
+        console.log(`- 包含handleAIReply: ${playPetCode.includes('handleAIReply') ? '✅' : '❌'}`);
+        console.log(`- 冷却时间: ${playPetCode.includes('45000') ? '45秒(拓麻歌子)' : playPetCode.includes('60000') ? '60秒(平衡版)' : '未知'}`);
+
+        // 检查petSleep函数
+        const sleepCode = window.petSleep.toString();
+        console.log('\n😴 petSleep函数分析:');
+        console.log(`- 包含gainCoins: ${sleepCode.includes('gainCoins') ? '✅' : '❌'}`);
+        console.log(`- 包含gainExperience: ${sleepCode.includes('gainExperience') ? '✅' : '❌'}`);
+        console.log(`- 包含handleAIReply: ${sleepCode.includes('handleAIReply') ? '✅' : '❌'}`);
+        console.log(`- 冷却时间: ${sleepCode.includes('120000') ? '120秒(拓麻歌子)' : '未知'}`);
+
+        // 判断版本
+        const isTamagotchi = feedPetCode.includes('gainCoins') && feedPetCode.includes('weight');
+        const isBalanced = feedPetCode.includes('45000') && !feedPetCode.includes('gainCoins');
+        const isOld = !feedPetCode.includes('gainCoins') && !feedPetCode.includes('weight');
+
+        console.log('\n🎯 版本判断:');
+        if (isTamagotchi) {
+            console.log('✅ 当前使用拓麻歌子版本 - 包含完整的金币和经验奖励');
+        } else if (isBalanced) {
+            console.log('⚠️ 当前使用平衡版本 - 缺少金币奖励');
+        } else if (isOld) {
+            console.log('❌ 当前使用旧版本 - 缺少金币奖励');
+        } else {
+            console.log('❓ 无法确定版本');
+        }
+
+        // 提供修复建议
+        if (!isTamagotchi) {
+            console.log('\n💡 修复建议:');
+            console.log('运行以下命令强制应用拓麻歌子系统:');
+            console.log('forceApplyTamagotchiSystem()');
+        }
+
+        return {
+            feedPet: {
+                hasGainCoins: feedPetCode.includes('gainCoins'),
+                hasGainExperience: feedPetCode.includes('gainExperience'),
+                hasWeight: feedPetCode.includes('weight'),
+                cooldown: feedPetCode.includes('30000') ? 30 : feedPetCode.includes('45000') ? 45 : 'unknown'
+            },
+            playWithPet: {
+                hasGainCoins: playPetCode.includes('gainCoins'),
+                hasGainExperience: playPetCode.includes('gainExperience'),
+                cooldown: playPetCode.includes('45000') ? 45 : playPetCode.includes('60000') ? 60 : 'unknown'
+            },
+            petSleep: {
+                hasGainCoins: sleepCode.includes('gainCoins'),
+                hasGainExperience: sleepCode.includes('gainExperience'),
+                cooldown: sleepCode.includes('120000') ? 120 : 'unknown'
+            },
+            version: isTamagotchi ? 'tamagotchi' : isBalanced ? 'balanced' : isOld ? 'old' : 'unknown'
         };
     };
 

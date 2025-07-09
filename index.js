@@ -1610,15 +1610,7 @@ jQuery(async () => {
         // 获取当前人设，确保不包含冲突信息
         const currentPersonality = getCurrentPersonality();
 
-        // 获取金币奖励信息
-        const coinRewards = {
-            'feed': 3,
-            'play': 5,
-            'sleep': 2
-        };
-        const coinReward = coinRewards[action] || 0;
-
-        // 构建完整的Prompt - 包含金币系统信息
+        // 构建完整的Prompt - 优化版本，避免金币理解错误
         const prompt = `你是${petData.name}，请严格按照以下人设回应用户。
 
 【你的身份设定】：
@@ -1631,16 +1623,12 @@ ${currentPersonality}
 - 快乐：${Math.round(petData.happiness)}/100 ${petData.happiness < 30 ? '(心情不太好)' : petData.happiness > 70 ? '(很开心)' : '(心情一般)'}
 - 饱食：${Math.round(petData.hunger)}/100 ${petData.hunger < 30 ? '(很饿)' : petData.hunger > 70 ? '(很饱)' : '(有点饿)'}
 - 精力：${Math.round(petData.energy)}/100 ${petData.energy < 30 ? '(很累)' : petData.energy > 70 ? '(精力充沛)' : '(有点累)'}
-- 金币：${petData.coins || 100} 💰
 
-【情景】：现在是${timeOfDay}，用户刚刚${actionDescriptions[action]}。${coinReward > 0 ? `我获得了${coinReward}金币奖励！` : ''}
+【情景】：现在是${timeOfDay}，用户刚刚${actionDescriptions[action]}。
 
-【回应要求】：
-1. 严格按照你的人设回应
-2. 可以适当提及获得的金币奖励（如果有的话）
-3. 不超过30字
+【注意】：不要在回复中提及金币、奖励或任何游戏机制，只需要按照你的人设自然回应即可。
 
-请以${petData.name}的身份回应：`;
+请以${petData.name}的身份，严格按照你的人设回应（不超过30字）：`;
 
         return prompt;
     }
@@ -6609,7 +6597,7 @@ ${currentPersonality}
         console.log('- showPopup() - 显示拓麻歌子UI');
         console.log('- testTamagotchiSystem() - 测试拓麻歌子系统');
         console.log('- forceApplyTamagotchiSystem() - 强制应用拓麻歌子系统（修复金币问题）');
-        console.log('- testCoinPrompt() - 测试包含金币信息的新提示词');
+        console.log('- testCleanPrompt() - 测试优化后的提示词（避免AI混淆金币）');
 
         // 强制刷新UI
         if (typeof renderPetStatus === 'function') {
@@ -7734,10 +7722,10 @@ ${currentPersonality}
     };
 
     /**
-     * 测试包含金币信息的新提示词
+     * 测试优化后的提示词（不包含金币信息避免混淆）
      */
-    window.testCoinPrompt = function(action = 'feed') {
-        console.log('💰 测试包含金币信息的新提示词...');
+    window.testCleanPrompt = function(action = 'feed') {
+        console.log('🎯 测试优化后的提示词...');
 
         console.log(`\n📊 当前状态:`);
         console.log(`- 宠物名称: ${petData.name}`);
@@ -7752,18 +7740,20 @@ ${currentPersonality}
         console.log(`\n🔍 提示词分析:`);
         const includesCoins = prompt.includes('金币');
         const includesReward = prompt.includes('奖励');
-        const includesCurrentCoins = prompt.includes(`${petData.coins || 100}`);
+        const includesGameMechanic = prompt.includes('游戏机制');
+        const hasCleanNote = prompt.includes('不要在回复中提及');
 
-        console.log(`- 包含金币信息: ${includesCoins ? '✅' : '❌'}`);
-        console.log(`- 包含奖励信息: ${includesReward ? '✅' : '❌'}`);
-        console.log(`- 包含当前金币数: ${includesCurrentCoins ? '✅' : '❌'}`);
+        console.log(`- 包含金币信息: ${includesCoins ? '❌ 是（应该避免）' : '✅ 否'}`);
+        console.log(`- 包含奖励信息: ${includesReward ? '❌ 是（应该避免）' : '✅ 否'}`);
+        console.log(`- 包含游戏机制: ${includesGameMechanic ? '❌ 是（应该避免）' : '✅ 否'}`);
+        console.log(`- 有清晰的注意事项: ${hasCleanNote ? '✅ 是' : '❌ 否'}`);
 
-        if (includesCoins && includesCurrentCoins) {
-            console.log('✅ 新提示词包含完整的金币信息！');
-            toastr.success('新提示词包含完整的金币信息！', '💰 测试成功');
+        if (!includesCoins && !includesReward && hasCleanNote) {
+            console.log('✅ 提示词已优化，AI不会混淆金币概念！');
+            toastr.success('提示词已优化，AI不会混淆金币概念！', '🎯 测试成功');
         } else {
-            console.log('❌ 提示词缺少金币信息');
-            toastr.warning('提示词缺少金币信息', '💰 测试失败');
+            console.log('❌ 提示词仍可能导致AI混淆');
+            toastr.warning('提示词仍可能导致AI混淆', '🎯 测试失败');
         }
 
         return {
@@ -7771,7 +7761,8 @@ ${currentPersonality}
             analysis: {
                 includesCoins,
                 includesReward,
-                includesCurrentCoins
+                includesGameMechanic,
+                hasCleanNote
             }
         };
     };

@@ -8330,7 +8330,15 @@ ${currentPersonality}
         console.log('\n📋 函数存在性检查:');
         console.log(`- window.feedPet: ${typeof window.feedPet === 'function'}`);
         console.log(`- global feedPet: ${typeof feedPet === 'function'}`);
-        console.log(`- this.feedPet: ${typeof this.feedPet === 'function'}`);
+
+        // 安全检查this.feedPet
+        let thisFeedPetExists = false;
+        try {
+            thisFeedPetExists = typeof this.feedPet === 'function';
+        } catch (e) {
+            thisFeedPetExists = false;
+        }
+        console.log(`- this.feedPet: ${thisFeedPetExists}`);
 
         // 检查函数内容
         if (typeof window.feedPet === 'function') {

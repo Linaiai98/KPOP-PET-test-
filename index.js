@@ -6606,6 +6606,7 @@ ${currentPersonality}
         console.log('- checkUIButtonBinding() - 检查UI按钮事件绑定');
         console.log('- traceUIFeedPet() - 追踪UI点击时的函数调用');
         console.log('- restoreOriginalFunctions() - 恢复原始函数（追踪后使用）');
+        console.log('- checkFeedPetVersions() - 检查不同作用域的feedPet函数并修复UI绑定');
 
         // 强制刷新UI
         if (typeof renderPetStatus === 'function') {
@@ -8318,6 +8319,74 @@ ${currentPersonality}
 
         console.log('✅ 原始函数已恢复');
         return true;
+    };
+
+    /**
+     * 检查不同作用域中的feedPet函数
+     */
+    window.checkFeedPetVersions = function() {
+        console.log('🔍 检查不同作用域中的feedPet函数...');
+
+        console.log('\n📋 函数存在性检查:');
+        console.log(`- window.feedPet: ${typeof window.feedPet === 'function'}`);
+        console.log(`- global feedPet: ${typeof feedPet === 'function'}`);
+        console.log(`- this.feedPet: ${typeof this.feedPet === 'function'}`);
+
+        // 检查函数内容
+        if (typeof window.feedPet === 'function') {
+            const windowFeedPetCode = window.feedPet.toString();
+            console.log('\n📝 window.feedPet 函数分析:');
+            console.log(`- 包含gainCoins: ${windowFeedPetCode.includes('gainCoins')}`);
+            console.log(`- 包含gainExperience: ${windowFeedPetCode.includes('gainExperience')}`);
+            console.log(`- 包含handleAIReply: ${windowFeedPetCode.includes('handleAIReply')}`);
+            console.log(`- 包含拓麻歌子特征(weight): ${windowFeedPetCode.includes('weight')}`);
+            console.log(`- 函数长度: ${windowFeedPetCode.length} 字符`);
+        }
+
+        if (typeof feedPet === 'function' && feedPet !== window.feedPet) {
+            const globalFeedPetCode = feedPet.toString();
+            console.log('\n📝 global feedPet 函数分析:');
+            console.log(`- 包含gainCoins: ${globalFeedPetCode.includes('gainCoins')}`);
+            console.log(`- 包含gainExperience: ${globalFeedPetCode.includes('gainExperience')}`);
+            console.log(`- 包含handleAIReply: ${globalFeedPetCode.includes('handleAIReply')}`);
+            console.log(`- 包含拓麻歌子特征(weight): ${globalFeedPetCode.includes('weight')}`);
+            console.log(`- 函数长度: ${globalFeedPetCode.length} 字符`);
+        }
+
+        // 强制UI使用window.feedPet
+        console.log('\n🔧 强制修复UI绑定...');
+        const popup = $("#virtual-pet-popup");
+        if (popup.length > 0) {
+            const feedBtn = popup.find(".feed-btn");
+            if (feedBtn.length > 0) {
+                // 移除旧的事件绑定
+                feedBtn.off("click touchend");
+
+                // 重新绑定到window.feedPet
+                feedBtn.on("click touchend", function(e) {
+                    e.preventDefault();
+                    console.log("🍖 喂食宠物 (强制使用window.feedPet)");
+                    if (typeof window.feedPet === 'function') {
+                        window.feedPet();
+                    } else {
+                        console.error('❌ window.feedPet 不存在');
+                    }
+                });
+
+                console.log('✅ UI按钮已重新绑定到window.feedPet');
+            } else {
+                console.log('❌ 找不到喂食按钮');
+            }
+        } else {
+            console.log('❌ 找不到弹窗，请先打开宠物界面');
+        }
+
+        return {
+            windowFeedPet: typeof window.feedPet === 'function',
+            globalFeedPet: typeof feedPet === 'function',
+            areTheSame: window.feedPet === feedPet,
+            uiFixed: popup.length > 0
+        };
     };
 
     // 检查localStorage中的数据

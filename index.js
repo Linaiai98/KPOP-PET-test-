@@ -1606,7 +1606,14 @@ jQuery(async () => {
             'hug': '给了我一个温暖的拥抱'
         };
 
+        // 安全获取行为描述，确保不会出现undefined
+        const actionDescription = actionDescriptions[action] || `与我进行了${action || '未知'}互动`;
 
+        // 调试日志
+        console.log(`[buildInteractionPrompt] action: "${action}", description: "${actionDescription}"`);
+
+        // 如果action为undefined或null，使用默认值
+        const safeAction = action || 'interact';
 
         // 获取当前人设，确保不包含冲突信息
         const currentPersonality = getCurrentPersonality();
@@ -1625,7 +1632,7 @@ ${currentPersonality}
 - 饱食：${Math.round(petData.hunger)}/100 ${petData.hunger < 30 ? '(很饿)' : petData.hunger > 70 ? '(很饱)' : '(有点饿)'}
 - 精力：${Math.round(petData.energy)}/100 ${petData.energy < 30 ? '(很累)' : petData.energy > 70 ? '(精力充沛)' : '(有点累)'}
 
-【情景】：现在是${timeOfDay}，用户刚刚${actionDescriptions[action]}。
+【情景】：现在是${timeOfDay}，用户刚刚${actionDescription}。
 
 【注意】：不要在回复中提及金币、奖励或任何游戏机制，只需要按照你的人设自然回应即可。
 
@@ -12718,6 +12725,58 @@ ${currentPersonality}
             details: checks,
             recommendation: allGood ? '功能正常，可以使用' : '需要检查或重新应用拓麻歌子系统'
         };
+    };
+
+    /**
+     * 测试提示词生成（检查undefined问题）
+     */
+    window.testPromptGeneration = function() {
+        console.log('📝 测试提示词生成（检查undefined问题）...');
+
+        const actions = ['feed', 'play', 'sleep', 'hug'];
+
+        actions.forEach(action => {
+            console.log(`\n🧪 测试 ${action} 动作:`);
+
+            try {
+                const prompt = buildInteractionPrompt(action);
+
+                // 检查是否包含undefined
+                const hasUndefined = prompt.includes('undefined');
+                console.log(`- 包含undefined: ${hasUndefined ? '❌ 是' : '✅ 否'}`);
+
+                // 提取情景部分
+                const scenarioMatch = prompt.match(/【情景】：(.+?)。/);
+                if (scenarioMatch) {
+                    console.log(`- 情景描述: "${scenarioMatch[1]}"`);
+                } else {
+                    console.log('- 情景描述: ❌ 未找到');
+                }
+
+                // 检查动作描述
+                const actionDescriptions = {
+                    'feed': '给我喂了食物',
+                    'play': '陪我玩耍',
+                    'sleep': '让我休息',
+                    'hug': '给了我一个温暖的拥抱'
+                };
+
+                const expectedDesc = actionDescriptions[action];
+                const hasCorrectDesc = prompt.includes(expectedDesc);
+                console.log(`- 预期描述: "${expectedDesc}"`);
+                console.log(`- 描述正确: ${hasCorrectDesc ? '✅ 是' : '❌ 否'}`);
+
+            } catch (error) {
+                console.log(`❌ 生成失败: ${error.message}`);
+            }
+        });
+
+        console.log('\n💡 如果发现undefined问题:');
+        console.log('1. 检查actionDescriptions对象是否包含所有动作');
+        console.log('2. 检查传递给buildInteractionPrompt的参数是否正确');
+        console.log('3. 检查是否有拼写错误');
+
+        return true;
     };
 
     console.log("🐾 虚拟宠物系统脚本已加载完成");

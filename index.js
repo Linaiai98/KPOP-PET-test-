@@ -6604,6 +6604,8 @@ ${currentPersonality}
         console.log('- testInteractionFlow() - 测试完整互动流程（包含AI）');
         console.log('- traceFeedPetExecution() - 追踪喂食函数的详细执行流程');
         console.log('- checkUIButtonBinding() - 检查UI按钮事件绑定');
+        console.log('- traceUIFeedPet() - 追踪UI点击时的函数调用');
+        console.log('- restoreOriginalFunctions() - 恢复原始函数（追踪后使用）');
 
         // 强制刷新UI
         if (typeof renderPetStatus === 'function') {
@@ -8262,6 +8264,60 @@ ${currentPersonality}
             },
             bindFunctionExists: typeof bindUnifiedUIEvents === 'function'
         };
+    };
+
+    /**
+     * 在UI点击时追踪feedPet函数执行
+     */
+    window.traceUIFeedPet = function() {
+        console.log('🔍 在UI点击时追踪feedPet函数执行...');
+
+        // 保存原始的gainCoins和gainExperience函数
+        const originalGainCoins = window.gainCoins || gainCoins;
+        const originalGainExperience = window.gainExperience || gainExperience;
+
+        // 创建追踪版本
+        window.gainCoins = function(amount) {
+            console.log(`🔍 [追踪] gainCoins被调用，参数: ${amount}`);
+            console.log(`🔍 [追踪] 调用堆栈:`, new Error().stack);
+            return originalGainCoins.call(this, amount);
+        };
+
+        window.gainExperience = function(exp) {
+            console.log(`🔍 [追踪] gainExperience被调用，参数: ${exp}`);
+            console.log(`🔍 [追踪] 调用堆栈:`, new Error().stack);
+            return originalGainExperience.call(this, exp);
+        };
+
+        console.log('✅ 追踪函数已设置');
+        console.log('💡 现在点击UI中的喂食按钮，观察调用情况');
+        console.log('💡 完成后运行 restoreOriginalFunctions() 恢复原始函数');
+
+        // 保存原始函数以便恢复
+        window._originalGainCoins = originalGainCoins;
+        window._originalGainExperience = originalGainExperience;
+
+        return true;
+    };
+
+    /**
+     * 恢复原始函数
+     */
+    window.restoreOriginalFunctions = function() {
+        console.log('🔄 恢复原始函数...');
+
+        if (window._originalGainCoins) {
+            window.gainCoins = window._originalGainCoins;
+            delete window._originalGainCoins;
+        }
+
+        if (window._originalGainExperience) {
+            window.gainExperience = window._originalGainExperience;
+            delete window._originalGainExperience;
+        }
+
+        console.log('✅ 原始函数已恢复');
+        return true;
     };
 
     // 检查localStorage中的数据

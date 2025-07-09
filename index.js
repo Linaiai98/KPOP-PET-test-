@@ -6603,6 +6603,7 @@ ${currentPersonality}
         console.log('- testSimpleInteraction() - 测试简化互动（不包含AI）');
         console.log('- testInteractionFlow() - 测试完整互动流程（包含AI）');
         console.log('- traceFeedPetExecution() - 追踪喂食函数的详细执行流程');
+        console.log('- checkUIButtonBinding() - 检查UI按钮事件绑定');
 
         // 强制刷新UI
         if (typeof renderPetStatus === 'function') {
@@ -8184,6 +8185,83 @@ ${currentPersonality}
             console.error('❌ 执行过程中发生错误:', error);
             console.error('错误堆栈:', error.stack);
         }
+    };
+
+    /**
+     * 检查UI按钮事件绑定
+     */
+    window.checkUIButtonBinding = function() {
+        console.log('🔍 检查UI按钮事件绑定...');
+
+        const popup = $("#virtual-pet-popup");
+        if (popup.length === 0) {
+            console.log('❌ 弹窗不存在，请先打开宠物界面');
+            console.log('💡 运行: showPopup()');
+            return false;
+        }
+
+        console.log('✅ 弹窗存在');
+
+        // 检查按钮是否存在
+        const feedBtn = popup.find(".feed-btn");
+        const playBtn = popup.find(".play-btn");
+        const sleepBtn = popup.find(".sleep-btn");
+
+        console.log('\n📋 按钮存在性检查:');
+        console.log(`- 喂食按钮: ${feedBtn.length > 0 ? '✅' : '❌'} (数量: ${feedBtn.length})`);
+        console.log(`- 玩耍按钮: ${playBtn.length > 0 ? '✅' : '❌'} (数量: ${playBtn.length})`);
+        console.log(`- 睡觉按钮: ${sleepBtn.length > 0 ? '✅' : '❌'} (数量: ${sleepBtn.length})`);
+
+        // 检查事件绑定
+        console.log('\n🔗 事件绑定检查:');
+
+        if (feedBtn.length > 0) {
+            const events = $._data(feedBtn[0], 'events');
+            console.log(`- 喂食按钮事件: ${events ? Object.keys(events).join(', ') : '无'}`);
+
+            // 测试点击事件
+            console.log('\n🧪 测试喂食按钮点击...');
+            const oldCoins = petData.coins || 0;
+            const oldExp = petData.experience || 0;
+
+            console.log(`测试前 - 金币: ${oldCoins}, 经验: ${oldExp}`);
+
+            // 模拟点击
+            feedBtn.trigger('click');
+
+            // 等待一下再检查结果
+            setTimeout(() => {
+                console.log(`测试后 - 金币: ${petData.coins}, 经验: ${petData.experience}`);
+
+                const coinsChanged = (petData.coins || 0) !== oldCoins;
+                const expChanged = (petData.experience || 0) !== oldExp;
+
+                if (coinsChanged || expChanged) {
+                    console.log('✅ 按钮点击有效果！');
+                } else {
+                    console.log('❌ 按钮点击无效果');
+                    console.log('💡 可能原因:');
+                    console.log('  1. 冷却时间未到');
+                    console.log('  2. 宠物已死亡');
+                    console.log('  3. 事件绑定失效');
+                    console.log('  4. 函数被覆盖');
+                }
+            }, 1000);
+        }
+
+        // 检查bindUnifiedUIEvents是否被调用
+        console.log('\n🔧 绑定函数检查:');
+        console.log(`- bindUnifiedUIEvents函数存在: ${typeof bindUnifiedUIEvents === 'function'}`);
+
+        return {
+            popupExists: popup.length > 0,
+            buttons: {
+                feed: feedBtn.length,
+                play: playBtn.length,
+                sleep: sleepBtn.length
+            },
+            bindFunctionExists: typeof bindUnifiedUIEvents === 'function'
+        };
     };
 
     // 检查localStorage中的数据

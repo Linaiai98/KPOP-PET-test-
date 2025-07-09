@@ -2066,28 +2066,9 @@ ${currentPersonality}
 
                     toastr.info('🥚 欢迎来到拓麻歌子世界！你的宠物现在需要真正的照顾，请定期关注它的状态！', '', { timeOut: 8000 });
                 } else {
-                    // 数据版本正确，但检查是否需要重置过高数值
-                    const hasHighValues = savedData.happiness > 90 || savedData.hunger > 90 ||
-                                         savedData.health > 90 || savedData.energy > 90;
-
-                    if (hasHighValues) {
-                        console.log(`[${extensionName}] 检测到3.0版本数据中有过高数值，进行调整...`);
-
-                        // 保留大部分数据，但调整过高的数值
-                        petData = {
-                            ...savedData,
-                            health: Math.min(savedData.health, 75),
-                            happiness: Math.min(savedData.happiness, 75),
-                            hunger: Math.min(savedData.hunger, 75),
-                            energy: Math.min(savedData.energy, 75)
-                        };
-
-                        savePetData();
-                        toastr.info('检测到过高数值，已调整到合理范围', '', { timeOut: 4000 });
-                    } else {
-                        // 数据正常，直接加载
-                        petData = { ...petData, ...savedData };
-                    }
+                    // 数据版本正确，直接加载（移除过高数值检测，让自然衰减处理）
+                    petData = { ...petData, ...savedData };
+                    console.log(`[${extensionName}] 加载已有的拓麻歌子数据`);
 
                     // 确保拓麻歌子系统已应用
                     applyTamagotchiSystem();
@@ -6603,6 +6584,7 @@ ${currentPersonality}
         console.log('- testHugFunction() - 测试抱抱功能（检查按钮、函数、奖励）');
         console.log('- testHugFunctionComplete() - 完整测试抱抱功能（包括前后检查）');
         console.log('- quickVerifyHugFunction() - 快速验证抱抱功能是否完整');
+        console.log('- diagnose75ValueIssue() - 诊断和修复75数值问题');
 
         // 强制刷新UI
         if (typeof renderPetStatus === 'function') {
@@ -12777,6 +12759,103 @@ ${currentPersonality}
         console.log('3. 检查是否有拼写错误');
 
         return true;
+    };
+
+    /**
+     * 诊断和修复75数值问题
+     */
+    window.diagnose75ValueIssue = function() {
+        console.log('🔍 诊断75数值问题...');
+
+        console.log('\n📊 当前宠物状态:');
+        console.log(`- 健康: ${petData.health}/100`);
+        console.log(`- 快乐: ${petData.happiness}/100`);
+        console.log(`- 饱食: ${petData.hunger}/100`);
+        console.log(`- 精力: ${petData.energy}/100`);
+
+        // 检查是否所有数值都是75
+        const values = [petData.health, petData.happiness, petData.hunger, petData.energy];
+        const allAre75 = values.every(val => val === 75);
+
+        console.log('\n🔍 问题分析:');
+        console.log(`- 所有数值都是75: ${allAre75 ? '✅ 是的，这就是问题' : '❌ 不是'}`);
+
+        if (allAre75) {
+            console.log('\n❌ 确认问题: 数值被强制限制在75');
+            console.log('🔧 原因: 数据加载时的过高数值检测逻辑有问题');
+            console.log('✅ 修复: 已移除强制75限制的代码');
+        }
+
+        // 检查数据版本
+        console.log('\n📋 数据版本信息:');
+        console.log(`- 数据版本: ${petData.dataVersion}`);
+        console.log(`- 上次更新时间: ${new Date(petData.lastUpdateTime || 0).toLocaleString()}`);
+
+        // 检查时间差
+        const now = Date.now();
+        const timeSinceLastUpdate = now - (petData.lastUpdateTime || now);
+        const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
+        console.log(`- 距离上次更新: ${hoursElapsed.toFixed(1)}小时`);
+
+        // 提供修复方案
+        console.log('\n🔧 修复方案:');
+
+        if (allAre75) {
+            console.log('1. 重置为更合理的初始数值:');
+
+            // 设置更合理的数值
+            petData.health = 45;
+            petData.happiness = 40;
+            petData.hunger = 50;
+            petData.energy = 55;
+
+            // 更新时间戳
+            petData.lastUpdateTime = now;
+            petData.lastFeedTime = now - 20000; // 20秒前
+            petData.lastPlayTime = now - 30000; // 30秒前
+            petData.lastSleepTime = now - 60000; // 1分钟前
+            petData.lastHugTime = now - 15000; // 15秒前
+
+            // 保存数据
+            savePetData();
+
+            console.log('✅ 已重置数值:');
+            console.log(`   - 健康: 75 → ${petData.health}`);
+            console.log(`   - 快乐: 75 → ${petData.happiness}`);
+            console.log(`   - 饱食: 75 → ${petData.hunger}`);
+            console.log(`   - 精力: 75 → ${petData.energy}`);
+
+            // 更新UI
+            if (typeof updateUnifiedUIStatus === 'function') {
+                updateUnifiedUIStatus();
+            }
+            if (typeof renderPetStatus === 'function') {
+                renderPetStatus();
+            }
+
+            toastr.success('🎯 已修复75数值问题！现在数值会正常变化了', '', { timeOut: 5000 });
+        }
+
+        console.log('\n💡 预防措施:');
+        console.log('✅ 已移除强制75限制的代码');
+        console.log('✅ 数值现在会根据时间自然衰减');
+        console.log('✅ 缓冲机制只在真正需要时触发');
+
+        console.log('\n🧪 测试建议:');
+        console.log('1. 关闭并重新打开SillyTavern');
+        console.log('2. 观察数值是否不再固定在75');
+        console.log('3. 进行几次互动，观察数值变化');
+
+        return {
+            wasFixed: allAre75,
+            currentValues: {
+                health: petData.health,
+                happiness: petData.happiness,
+                hunger: petData.hunger,
+                energy: petData.energy
+            },
+            hoursElapsed: hoursElapsed
+        };
     };
 
     console.log("🐾 虚拟宠物系统脚本已加载完成");

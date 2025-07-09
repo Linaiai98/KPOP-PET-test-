@@ -6586,6 +6586,8 @@ ${currentPersonality}
         console.log('- forceOverrideOldFunctions() - 强制覆盖旧版本函数（解决金币不增加问题）');
         console.log('- verifyOldVersionsRemoved() - 验证旧版本函数已删除');
         console.log('- testRewardDisplay() - 测试新的奖励显示系统');
+        console.log('- adjustDecaySystem() - 调整衰减速度和缓冲机制（解决数值过高问题）');
+        console.log('- testNewDecaySystem() - 测试新的衰减系统效果（预测离线影响）');
 
         // 强制刷新UI
         if (typeof renderPetStatus === 'function') {
@@ -8896,6 +8898,167 @@ ${currentPersonality}
             console.log('  2. 奖励信息显示在右下角');
             console.log('  3. 两者不会重叠');
         }, 6000);
+
+        return true;
+    };
+
+    /**
+     * 调整衰减速度和缓冲机制
+     */
+    window.adjustDecaySystem = function() {
+        console.log('⚖️ 调整衰减速度和缓冲机制...');
+
+        // 重新定义更平衡的衰减系统
+        window.updatePetStatus = function() {
+            if (!petData.isAlive) return;
+
+            const now = Date.now();
+            const timeSinceLastUpdate = now - (petData.lastUpdateTime || now);
+            const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
+
+            if (hoursElapsed > 0.1) { // 每6分钟更新一次
+
+                // 1. 年龄增长
+                petData.age += hoursElapsed;
+
+                // 2. 生命阶段检查
+                if (typeof checkLifeStageProgression === 'function') {
+                    checkLifeStageProgression();
+                }
+
+                // 3. 更真实的衰减速度 - 让时间流逝更有感知
+                petData.hunger = Math.max(0, petData.hunger - hoursElapsed * 3.5);    // 每小时-3.5 (离线8小时下降28点)
+                petData.energy = Math.max(0, petData.energy - hoursElapsed * 3.0);    // 每小时-3.0 (离线8小时下降24点)
+                petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 2.5); // 每小时-2.5 (离线8小时下降20点)
+
+                // 4. 状态不佳时的惩罚性衰减 - 提高门槛和惩罚力度
+                if (petData.hunger < 25) { // 门槛提高到25，给玩家更多反应时间
+                    petData.health = Math.max(0, petData.health - hoursElapsed * 1.5); // 惩罚加大
+                    petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 1.0);
+                }
+
+                if (petData.energy < 25) { // 门槛提高到25
+                    petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 0.8);
+                }
+
+                // 5. 死亡检查
+                if (typeof checkDeathConditions === 'function') {
+                    checkDeathConditions();
+                }
+
+                petData.lastUpdateTime = now;
+                validateAndFixValues();
+                savePetData();
+            }
+        };
+
+        // 重新定义更宽松的缓冲机制
+        window.applyInitializationBuffer = function() {
+            const now = Date.now();
+            const timeSinceLastUpdate = now - (petData.lastUpdateTime || now);
+            const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
+
+            // 如果距离上次更新超过2小时，给予"急救包"缓冲
+            if (hoursElapsed > 2) {
+                console.log(`检测到长时间未更新 (${hoursElapsed.toFixed(1)}小时)，应用急救缓冲...`);
+
+                // 急救包式的最低数值保证 - 防止宠物死亡但鼓励频繁互动
+                const minValues = {
+                    hunger: 35,    // 最低饱食度35 - 急救水平
+                    energy: 30,    // 最低精力30 - 急救水平
+                    happiness: 25, // 最低快乐度25 - 急救水平
+                    health: 40     // 最低健康度40 - 急救水平
+                };
+
+                let buffered = false;
+                Object.entries(minValues).forEach(([key, minValue]) => {
+                    if (petData[key] < minValue) {
+                        console.log(`缓冲 ${key}: ${petData[key]} → ${minValue}`);
+                        petData[key] = minValue;
+                        buffered = true;
+                    }
+                });
+
+                if (buffered) {
+                    petData.lastUpdateTime = now;
+                    savePetData();
+                    toastr.info('🌟 欢迎回来！已为你的宠物提供了基础照顾。', '', { timeOut: 4000 });
+                    console.log('初始化缓冲已应用');
+                }
+            }
+        };
+
+        console.log('✅ 衰减系统已调整为更真实的养成体验');
+        console.log('📊 新的衰减速度 (更有感知的时间流逝):');
+        console.log('  - 饱食度: 每小时 -3.5 (离线8小时下降28点)');
+        console.log('  - 精力: 每小时 -3.0 (离线8小时下降24点)');
+        console.log('  - 快乐度: 每小时 -2.5 (离线8小时下降20点)');
+        console.log('⚠️ 惩罚性衰减 (状态不佳时):');
+        console.log('  - 饥饿门槛: <25 (原来 <15)');
+        console.log('  - 疲劳门槛: <25 (原来 <15)');
+        console.log('  - 惩罚力度: 显著增加');
+        console.log('🛡️ 急救缓冲机制:');
+        console.log('  - 触发时间: 2小时 (更严格)');
+        console.log('  - 最低饱食度: 35 (急救水平)');
+        console.log('  - 最低精力: 30 (急救水平)');
+        console.log('  - 最低快乐度: 25 (急救水平)');
+        console.log('  - 最低健康度: 40 (急救水平)');
+        console.log('💡 设计理念: 鼓励频繁互动，但提供死亡保护');
+
+        // 立即应用缓冲
+        applyInitializationBuffer();
+
+        return true;
+    };
+
+    /**
+     * 测试新的衰减系统效果
+     */
+    window.testNewDecaySystem = function() {
+        console.log('🧪 测试新的衰减系统效果...');
+
+        // 显示当前状态
+        console.log('\n📊 当前宠物状态:');
+        console.log(`- 饱食度: ${petData.hunger}/100`);
+        console.log(`- 精力: ${petData.energy}/100`);
+        console.log(`- 快乐度: ${petData.happiness}/100`);
+        console.log(`- 健康度: ${petData.health}/100`);
+
+        // 模拟不同时长的离线效果
+        console.log('\n⏰ 模拟离线效果预测:');
+
+        const scenarios = [
+            { hours: 2, desc: '短暂离线 (2小时)' },
+            { hours: 8, desc: '一个工作日 (8小时)' },
+            { hours: 24, desc: '一整天 (24小时)' },
+            { hours: 72, desc: '周末 (72小时)' }
+        ];
+
+        scenarios.forEach(scenario => {
+            const hungerLoss = scenario.hours * 3.5;
+            const energyLoss = scenario.hours * 3.0;
+            const happinessLoss = scenario.hours * 2.5;
+
+            const predictedHunger = Math.max(0, petData.hunger - hungerLoss);
+            const predictedEnergy = Math.max(0, petData.energy - energyLoss);
+            const predictedHappiness = Math.max(0, petData.happiness - happinessLoss);
+
+            console.log(`\n${scenario.desc}:`);
+            console.log(`  饱食度: ${petData.hunger} → ${predictedHunger} (${hungerLoss > 0 ? '-' : ''}${hungerLoss})`);
+            console.log(`  精力: ${petData.energy} → ${predictedEnergy} (${energyLoss > 0 ? '-' : ''}${energyLoss})`);
+            console.log(`  快乐度: ${petData.happiness} → ${predictedHappiness} (${happinessLoss > 0 ? '-' : ''}${happinessLoss})`);
+
+            // 判断是否会触发缓冲
+            if (scenario.hours > 2) {
+                console.log(`  🛡️ 会触发急救缓冲 (最低保证: 饱食35, 精力30, 快乐25)`);
+            }
+        });
+
+        console.log('\n💡 新系统特点:');
+        console.log('✅ 离线时间有明显感知 - 不再是"假装的时间流逝"');
+        console.log('✅ 鼓励频繁互动 - 状态下降更快，需要更多关注');
+        console.log('✅ 死亡保护机制 - 长时间离线不会直接死亡');
+        console.log('✅ 真实的养成体验 - 像真正的宠物一样需要持续照顾');
 
         return true;
     };

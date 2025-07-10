@@ -649,7 +649,7 @@ jQuery(async () => {
         },
 
         /**
-         * 上传头像到云端存储
+         * 上传头像到云端存储 - 两阶段火箭机制
          */
         async uploadAvatar(imageData) {
             try {
@@ -661,27 +661,73 @@ jQuery(async () => {
                     throw new Error('用户认证失败');
                 }
 
+                console.log('[FirebaseManager] 🚀 启动头像上传两阶段火箭...');
+
+                // 🚀 第一阶段：上传文件到Cloud Storage
+                console.log('[FirebaseManager] 📤 第一阶段：上传文件到Cloud Storage');
+
                 // 将base64转换为Blob
                 const response = await fetch(imageData);
                 const blob = await response.blob();
+                console.log(`[FirebaseManager] 📦 文件大小: ${Math.round(blob.size / 1024)}KB`);
 
-                // 上传到Firebase Storage
-                const storageRef = this.storage.ref();
-                const avatarRef = storageRef.child(`avatars/${this.currentUser.uid}/avatar.png`);
+                let downloadURL;
+                const avatarPath = `avatars/${this.currentUser.uid}/avatar.png`;
 
-                const snapshot = await avatarRef.put(blob);
-                const downloadURL = await snapshot.ref.getDownloadURL();
+                // 检查是否使用v9+ SDK
+                if (typeof window.ref !== 'undefined' && typeof window.uploadBytes !== 'undefined') {
+                    // v9+ 模块化SDK
+                    console.log('[FirebaseManager] 使用v9+ SDK上传');
+                    const storageRef = window.ref(this.storage, avatarPath);
+                    const snapshot = await window.uploadBytes(storageRef, blob);
+                    downloadURL = await window.getDownloadURL(snapshot.ref);
+                } else {
+                    // 兼容模式SDK
+                    console.log('[FirebaseManager] 使用兼容模式SDK上传');
+                    const storageRef = this.storage.ref();
+                    const avatarRef = storageRef.child(avatarPath);
+                    const snapshot = await avatarRef.put(blob);
+                    downloadURL = await snapshot.ref.getDownloadURL();
+                }
 
-                // 保存URL到用户文档
-                await this.db.collection('users').doc(this.currentUser.uid).set({
+                console.log('[FirebaseManager] ✅ 第一阶段完成：文件已上传到Cloud Storage');
+                console.log(`[FirebaseManager] 📎 文件URL: ${downloadURL}`);
+
+                // 🚀 第二阶段：保存URL到Firestore数据库（关键的同步信号）
+                console.log('[FirebaseManager] 📊 第二阶段：保存URL到Firestore数据库');
+
+                const avatarData = {
                     avatarURL: downloadURL,
-                    avatarUpdatedAt: Date.now()
-                }, { merge: true });
+                    avatarUpdatedAt: Date.now(),
+                    avatarPath: avatarPath
+                };
 
-                console.log('[FirebaseManager] 头像已上传到云端:', downloadURL);
+                // 检查是否使用v9+ SDK
+                if (typeof window.doc !== 'undefined' && typeof window.setDoc !== 'undefined') {
+                    // v9+ 模块化SDK
+                    const userDocRef = window.doc(this.db, 'users', this.currentUser.uid);
+                    await window.setDoc(userDocRef, avatarData, { merge: true });
+                } else {
+                    // 兼容模式SDK
+                    await this.db.collection('users').doc(this.currentUser.uid).set(avatarData, { merge: true });
+                }
+
+                console.log('[FirebaseManager] ✅ 第二阶段完成：URL已保存到数据库');
+                console.log('[FirebaseManager] 🎉 两阶段火箭发射成功！头像同步信号已发送');
+
                 return downloadURL;
             } catch (error) {
-                console.error('[FirebaseManager] 上传头像失败:', error);
+                console.error('[FirebaseManager] 🚨 两阶段火箭发射失败:', error);
+
+                // 详细的错误分析
+                if (error.message.includes('storage')) {
+                    console.error('[FirebaseManager] 💥 第一阶段失败：Cloud Storage上传错误');
+                } else if (error.message.includes('firestore') || error.message.includes('document')) {
+                    console.error('[FirebaseManager] 💥 第二阶段失败：Firestore数据库写入错误');
+                } else {
+                    console.error('[FirebaseManager] 💥 未知错误阶段');
+                }
+
                 return null;
             }
         },
@@ -13718,6 +13764,208 @@ ${currentPersonality}
     };
 
     /**
+     * 测试头像上传的"两阶段火箭"机制
+     */
+    window.testAvatarUpload = async function() {
+        console.log('🧪 测试头像上传的"两阶段火箭"机制...');
+
+        try {
+            // 创建一个测试用的小图片（1x1像素的红色PNG）
+            const testImageData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+
+            console.log('📸 创建测试图片（1x1像素红色PNG）');
+            console.log('🚀 开始测试两阶段火箭上传...');
+
+            // 记录开始时间
+            const startTime = Date.now();
+
+            // 调用头像上传函数
+            const result = await firebaseManager.uploadAvatar(testImageData);
+
+            const endTime = Date.now();
+            const duration = endTime - startTime;
+
+            if (result) {
+                console.log(`✅ 头像上传测试成功！耗时: ${duration}ms`);
+                console.log(`📎 返回的URL: ${result}`);
+
+                // 等待一下，然后验证数据库记录
+                console.log('⏳ 等待2秒后验证数据库记录...');
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                // 验证数据库记录
+                await diagnoseAvatarSync();
+
+                toastr.success('🧪 头像上传测试成功！', '测试完成', { timeOut: 3000 });
+            } else {
+                console.log('❌ 头像上传测试失败');
+                toastr.error('头像上传测试失败', '测试结果', { timeOut: 3000 });
+            }
+
+        } catch (error) {
+            console.error('❌ 头像上传测试异常:', error);
+            toastr.error('头像上传测试异常', '测试结果', { timeOut: 3000 });
+        }
+    };
+
+    /**
+     * 诊断头像同步的"两阶段火箭"机制
+     */
+    window.diagnoseAvatarSync = async function() {
+        console.log('🚀 诊断头像同步的"两阶段火箭"机制...');
+        console.log('');
+
+        try {
+            // 检查用户认证状态
+            console.log('👤 第0阶段：用户认证检查');
+            if (!firebaseManager.currentUser) {
+                console.log('❌ 用户未认证，尝试认证...');
+                await firebaseManager.authenticateUser();
+            }
+
+            if (!firebaseManager.currentUser) {
+                console.log('❌ 用户认证失败，无法进行头像同步诊断');
+                return;
+            }
+
+            console.log(`✅ 用户已认证: ${firebaseManager.currentUser.uid}`);
+            console.log('');
+
+            // 第一阶段：检查Cloud Storage中的头像文件
+            console.log('🗂️ 第一阶段：检查Cloud Storage中的头像文件');
+
+            try {
+                // 构建头像文件路径
+                const avatarPath = `avatars/${firebaseManager.currentUser.uid}/avatar.png`;
+                console.log(`📁 头像文件路径: ${avatarPath}`);
+
+                // 尝试获取下载URL（这会验证文件是否存在）
+                let downloadURL = null;
+
+                if (typeof window.ref !== 'undefined' && typeof window.getDownloadURL !== 'undefined') {
+                    // v9+ SDK
+                    const storageRef = window.ref(firebaseManager.storage, avatarPath);
+                    downloadURL = await window.getDownloadURL(storageRef);
+                } else if (firebaseManager.storage && firebaseManager.storage.ref) {
+                    // 兼容模式SDK
+                    const storageRef = firebaseManager.storage.ref(avatarPath);
+                    downloadURL = await storageRef.getDownloadURL();
+                } else {
+                    throw new Error('Storage服务不可用');
+                }
+
+                console.log('✅ 第一阶段成功：头像文件存在于Cloud Storage');
+                console.log(`📎 文件URL: ${downloadURL}`);
+
+                // 第二阶段：检查Firestore数据库中的URL记录
+                console.log('');
+                console.log('📊 第二阶段：检查Firestore数据库中的URL记录');
+
+                let docSnapshot;
+
+                if (typeof window.doc !== 'undefined' && typeof window.getDoc !== 'undefined') {
+                    // v9+ SDK
+                    const userDocRef = window.doc(firebaseManager.db, 'users', firebaseManager.currentUser.uid);
+                    docSnapshot = await window.getDoc(userDocRef);
+                } else {
+                    // 兼容模式SDK
+                    docSnapshot = await firebaseManager.db.collection('users').doc(firebaseManager.currentUser.uid).get();
+                }
+
+                if (docSnapshot.exists || (docSnapshot.exists && docSnapshot.exists())) {
+                    const userData = docSnapshot.data();
+                    const dbAvatarURL = userData.avatarURL;
+                    const avatarUpdatedAt = userData.avatarUpdatedAt;
+
+                    console.log('✅ 第二阶段检查：用户文档存在');
+                    console.log(`📊 数据库中的avatarURL: ${dbAvatarURL || '❌ 未设置'}`);
+                    console.log(`⏰ 头像更新时间: ${avatarUpdatedAt ? new Date(avatarUpdatedAt).toLocaleString() : '❌ 未设置'}`);
+
+                    // 比较URL是否一致
+                    if (dbAvatarURL === downloadURL) {
+                        console.log('🎉 两阶段火箭完美对接！Cloud Storage文件URL与数据库记录一致');
+                    } else {
+                        console.log('🚨 发现问题：两阶段火箭未对接！');
+                        console.log('💡 问题分析:');
+                        console.log(`  - Cloud Storage URL: ${downloadURL}`);
+                        console.log(`  - 数据库记录URL: ${dbAvatarURL || '无'}`);
+                        console.log('');
+                        console.log('🔧 可能的原因:');
+                        console.log('  1. 上传成功但未更新数据库记录');
+                        console.log('  2. 数据库更新失败');
+                        console.log('  3. URL格式不匹配');
+                    }
+                } else {
+                    console.log('❌ 第二阶段失败：用户文档不存在');
+                    console.log('💡 这意味着虽然文件上传成功，但数据库记录缺失');
+                }
+
+            } catch (storageError) {
+                console.log('❌ 第一阶段失败：头像文件不存在于Cloud Storage');
+                console.log(`错误详情: ${storageError.message}`);
+
+                // 即使第一阶段失败，也检查第二阶段
+                console.log('');
+                console.log('📊 第二阶段：检查数据库记录（即使文件不存在）');
+
+                try {
+                    let docSnapshot;
+
+                    if (typeof window.doc !== 'undefined' && typeof window.getDoc !== 'undefined') {
+                        const userDocRef = window.doc(firebaseManager.db, 'users', firebaseManager.currentUser.uid);
+                        docSnapshot = await window.getDoc(userDocRef);
+                    } else {
+                        docSnapshot = await firebaseManager.db.collection('users').doc(firebaseManager.currentUser.uid).get();
+                    }
+
+                    if (docSnapshot.exists || (docSnapshot.exists && docSnapshot.exists())) {
+                        const userData = docSnapshot.data();
+                        const dbAvatarURL = userData.avatarURL;
+
+                        if (dbAvatarURL) {
+                            console.log('⚠️ 数据库中有头像URL记录，但对应文件不存在');
+                            console.log(`📊 数据库URL: ${dbAvatarURL}`);
+                        } else {
+                            console.log('ℹ️ 数据库中也没有头像URL记录');
+                        }
+                    } else {
+                        console.log('ℹ️ 用户文档不存在');
+                    }
+                } catch (dbError) {
+                    console.error('❌ 数据库检查也失败:', dbError.message);
+                }
+            }
+
+            // 第三阶段：检查监听器配置
+            console.log('');
+            console.log('👂 第三阶段：检查实时监听器配置');
+
+            const listenerCount = firebaseManager.listeners.size;
+            console.log(`📡 活跃监听器数量: ${listenerCount}`);
+
+            if (listenerCount > 0) {
+                console.log('✅ 实时监听器已设置');
+                console.log('💡 监听器应该能检测到avatarURL字段的变化');
+            } else {
+                console.log('❌ 没有活跃的实时监听器');
+                console.log('💡 这可能是头像无法实时同步的原因');
+            }
+
+            console.log('');
+            console.log('📋 诊断总结:');
+            console.log('🚀 两阶段火箭机制说明:');
+            console.log('  第一阶段：上传头像文件到Cloud Storage');
+            console.log('  第二阶段：将文件URL保存到Firestore数据库');
+            console.log('  第三阶段：监听器检测数据库变化，触发其他设备更新');
+            console.log('');
+            console.log('💡 如果头像无法同步，通常是第二阶段出现问题');
+
+        } catch (error) {
+            console.error('❌ 头像同步诊断失败:', error);
+        }
+    };
+
+    /**
      * Firebase v9+ SDK使用指南
      */
     window.setupFirebaseV9 = function() {
@@ -14114,6 +14362,11 @@ ${currentPersonality}
     console.log("🧪 运行 checkFirebaseStatus() 来检查连接状态");
     console.log("🧪 运行 testFirebaseSync() 来测试同步功能");
     console.log("🧪 运行 verifyCleanup() 来验证清理状态");
+    console.log("");
+    console.log("🚀 头像同步诊断:");
+    console.log("🚀 运行 testAvatarUpload() 来测试头像上传功能");
+    console.log("🚀 运行 diagnoseAvatarSync() 来诊断头像同步问题");
+    console.log("💡 如果头像无法跨设备同步，这些函数会帮你找到问题");
     console.log("");
     console.log("🔥 Firebase SDK管理:");
     console.log("🔥 运行 setupFirebaseV9() 来查看v9+ SDK配置指南");

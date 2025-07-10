@@ -53,14 +53,15 @@ jQuery(async () => {
      * Firebase云端服务管理器 - 跨平台同步的核心
      */
     const firebaseManager = {
-        // Firebase配置
+        // Firebase配置 - KPOP Pet项目
         config: {
-            apiKey: "your-api-key",
-            authDomain: "virtual-pet-sync.firebaseapp.com",
-            projectId: "virtual-pet-sync",
-            storageBucket: "virtual-pet-sync.appspot.com",
-            messagingSenderId: "123456789",
-            appId: "your-app-id"
+            apiKey: "AIzaSyDkalkcfsqeGUp1umyjVL-UXEh5-xR28MI",
+            authDomain: "kpop-pet.firebaseapp.com",
+            projectId: "kpop-pet",
+            storageBucket: "kpop-pet.firebasestorage.app",
+            messagingSenderId: "695150172164",
+            appId: "1:695150172164:web:15c194d777d9005fd3bd51",
+            measurementId: "G-68P4FH08DM"
         },
 
         // 初始化状态
@@ -77,8 +78,14 @@ jQuery(async () => {
             try {
                 // 检查Firebase SDK是否可用
                 if (typeof firebase === 'undefined') {
-                    console.warn('[FirebaseManager] Firebase SDK未加载，使用本地存储降级');
-                    return false;
+                    console.warn('[FirebaseManager] Firebase SDK未加载，尝试动态加载...');
+
+                    // 尝试动态加载Firebase SDK
+                    const sdkLoaded = await this.loadFirebaseSDK();
+                    if (!sdkLoaded) {
+                        console.warn('[FirebaseManager] Firebase SDK加载失败，使用本地存储降级');
+                        return false;
+                    }
                 }
 
                 // 初始化Firebase
@@ -91,11 +98,58 @@ jQuery(async () => {
                 this.initialized = true;
 
                 console.log('[FirebaseManager] Firebase初始化成功');
+                console.log('[FirebaseManager] 项目ID:', this.config.projectId);
                 return true;
             } catch (error) {
                 console.error('[FirebaseManager] Firebase初始化失败:', error);
                 return false;
             }
+        },
+
+        /**
+         * 动态加载Firebase SDK
+         */
+        async loadFirebaseSDK() {
+            try {
+                console.log('[FirebaseManager] 动态加载Firebase SDK...');
+
+                // 加载Firebase核心SDK
+                await this.loadScript('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js');
+                await this.loadScript('https://www.gstatic.com/firebasejs/9.0.0/firebase-auth-compat.js');
+                await this.loadScript('https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore-compat.js');
+                await this.loadScript('https://www.gstatic.com/firebasejs/9.0.0/firebase-storage-compat.js');
+
+                // 检查是否加载成功
+                if (typeof firebase !== 'undefined') {
+                    console.log('[FirebaseManager] Firebase SDK动态加载成功');
+                    return true;
+                } else {
+                    console.error('[FirebaseManager] Firebase SDK动态加载失败');
+                    return false;
+                }
+            } catch (error) {
+                console.error('[FirebaseManager] 动态加载Firebase SDK异常:', error);
+                return false;
+            }
+        },
+
+        /**
+         * 加载外部脚本
+         */
+        loadScript(src) {
+            return new Promise((resolve, reject) => {
+                // 检查是否已经加载
+                if (document.querySelector(`script[src="${src}"]`)) {
+                    resolve();
+                    return;
+                }
+
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
         },
 
         /**
@@ -13402,8 +13456,116 @@ ${currentPersonality}
         }
     };
 
+    /**
+     * 检查Firebase连接状态
+     */
+    window.checkFirebaseStatus = async function() {
+        console.log('🔥 检查Firebase连接状态...');
+
+        try {
+            // 检查配置
+            console.log('\n⚙️ Firebase配置检查:');
+            console.log(`- 项目ID: ${firebaseManager.config.projectId}`);
+            console.log(`- 认证域: ${firebaseManager.config.authDomain}`);
+            console.log(`- 存储桶: ${firebaseManager.config.storageBucket}`);
+
+            // 检查SDK加载状态
+            console.log('\n📦 SDK加载状态:');
+            console.log(`- Firebase核心: ${typeof firebase !== 'undefined' ? '✅ 已加载' : '❌ 未加载'}`);
+
+            if (typeof firebase !== 'undefined') {
+                console.log(`- Auth: ${typeof firebase.auth !== 'undefined' ? '✅' : '❌'}`);
+                console.log(`- Firestore: ${typeof firebase.firestore !== 'undefined' ? '✅' : '❌'}`);
+                console.log(`- Storage: ${typeof firebase.storage !== 'undefined' ? '✅' : '❌'}`);
+            }
+
+            // 检查初始化状态
+            console.log('\n🚀 初始化状态:');
+            console.log(`- Firebase初始化: ${firebaseManager.initialized ? '✅ 已初始化' : '❌ 未初始化'}`);
+            console.log(`- 当前用户: ${firebaseManager.currentUser ? '✅ 已认证' : '❌ 未认证'}`);
+
+            if (firebaseManager.currentUser) {
+                console.log(`- 用户ID: ${firebaseManager.currentUser.uid}`);
+            }
+
+            // 尝试连接测试
+            console.log('\n🔗 连接测试:');
+
+            if (!firebaseManager.initialized) {
+                console.log('正在初始化Firebase...');
+                const initResult = await firebaseManager.init();
+                console.log(`- 初始化结果: ${initResult ? '✅ 成功' : '❌ 失败'}`);
+            }
+
+            if (firebaseManager.initialized) {
+                console.log('正在测试用户认证...');
+                const authResult = await firebaseManager.authenticateUser();
+                console.log(`- 认证结果: ${authResult ? '✅ 成功' : '❌ 失败'}`);
+
+                if (authResult) {
+                    console.log('正在测试数据库连接...');
+                    try {
+                        // 简单的读取测试
+                        const testDoc = await firebaseManager.db.collection('test').doc('connection').get();
+                        console.log('- 数据库连接: ✅ 成功');
+                    } catch (dbError) {
+                        console.log('- 数据库连接: ❌ 失败', dbError.message);
+                    }
+
+                    console.log('正在测试存储连接...');
+                    try {
+                        // 简单的存储测试
+                        const storageRef = firebaseManager.storage.ref();
+                        console.log('- 存储连接: ✅ 成功');
+                    } catch (storageError) {
+                        console.log('- 存储连接: ❌ 失败', storageError.message);
+                    }
+                }
+            }
+
+            console.log('\n📋 总结:');
+            const isFullyWorking = firebaseManager.initialized && firebaseManager.currentUser;
+
+            if (isFullyWorking) {
+                console.log('🎉 Firebase跨平台同步系统完全正常！');
+                console.log('💡 你现在可以:');
+                console.log('  - 在多设备间同步宠物数据');
+                console.log('  - 上传和同步自定义头像');
+                console.log('  - 使用设备连接码连接新设备');
+                toastr.success('🔥 Firebase系统运行正常！', '', { timeOut: 3000 });
+            } else {
+                console.log('⚠️ Firebase系统未完全启用');
+                console.log('💡 可能的原因:');
+                console.log('  - 网络连接问题');
+                console.log('  - Firebase配置错误');
+                console.log('  - 浏览器兼容性问题');
+                console.log('  - Firebase服务未启用');
+                toastr.warning('Firebase系统需要检查', '', { timeOut: 3000 });
+            }
+
+            return {
+                configured: true,
+                initialized: firebaseManager.initialized,
+                authenticated: !!firebaseManager.currentUser,
+                fullyWorking: isFullyWorking
+            };
+
+        } catch (error) {
+            console.error('❌ Firebase状态检查失败:', error);
+            toastr.error('Firebase状态检查失败', '', { timeOut: 3000 });
+            return {
+                configured: false,
+                initialized: false,
+                authenticated: false,
+                fullyWorking: false,
+                error: error.message
+            };
+        }
+    };
+
     console.log("🐾 虚拟宠物系统脚本已加载完成");
-    console.log("🔥 Firebase跨平台同步系统已启用");
+    console.log("🔥 Firebase跨平台同步系统已启用 (KPOP Pet项目)");
+    console.log("🧪 运行 checkFirebaseStatus() 来检查Firebase状态");
     console.log("🧪 运行 testFirebaseSync() 来测试同步功能");
     console.log("🔗 运行 generateDeviceCode() 来生成设备连接码");
     console.log("📱 运行 connectWithCode() 来连接新设备");

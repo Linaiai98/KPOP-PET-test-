@@ -2685,6 +2685,9 @@ ${currentPersonality}
             }
         }, 1000);
 
+        // 设备连接UI事件处理
+        initializeDeviceConnectionUI();
+
         console.log(`[${extensionName}] 设置面板初始化完成`);
         console.log(`[${extensionName}] 当前人设类型: ${currentPersonalityType}`);
         console.log(`[${extensionName}] 当前人设内容: ${getCurrentPersonality()}`);
@@ -2704,6 +2707,146 @@ ${currentPersonality}
             $("#virtual-pet-custom-personality-container").show();
         } else {
             $("#virtual-pet-custom-personality-container").hide();
+        }
+    }
+
+    /**
+     * 初始化设备连接UI事件处理
+     */
+    function initializeDeviceConnectionUI() {
+        // 刷新设备身份状态按钮
+        $('#refresh-identity-btn').on('click', async function() {
+            const button = $(this);
+            const originalText = button.text();
+
+            button.prop('disabled', true).text('🔄');
+
+            try {
+                await updateDeviceIdentityStatus();
+            } finally {
+                button.prop('disabled', false).text(originalText);
+            }
+        });
+
+        // 生成设备连接码按钮
+        $('#generate-device-code-btn').on('click', async function() {
+            const button = $(this);
+            const originalText = button.text();
+
+            button.prop('disabled', true).text('🔄 生成中...');
+
+            try {
+                const code = await generateDeviceCode();
+                if (code) {
+                    // 显示生成的连接码
+                    $('#generated-code-display').text(code).show();
+
+                    // 5分钟后自动隐藏
+                    setTimeout(() => {
+                        $('#generated-code-display').hide().text('------');
+                    }, 5 * 60 * 1000);
+                }
+            } finally {
+                button.prop('disabled', false).text(originalText);
+            }
+        });
+
+        // 连接设备按钮
+        $('#connect-device-btn').on('click', async function() {
+            const button = $(this);
+            const originalText = button.text();
+            const code = $('#device-code-input').val().trim();
+
+            if (!code) {
+                toastr.warning('请输入6位连接码', '提示', { timeOut: 3000 });
+                $('#device-code-input').focus();
+                return;
+            }
+
+            if (code.length !== 6 || !/^\d{6}$/.test(code)) {
+                toastr.warning('连接码必须是6位数字', '提示', { timeOut: 3000 });
+                $('#device-code-input').focus();
+                return;
+            }
+
+            button.prop('disabled', true).text('🔄 连接中...');
+
+            try {
+                const success = await connectWithCode(code);
+                if (success) {
+                    $('#device-code-input').val('');
+                    await updateDeviceIdentityStatus();
+                }
+            } finally {
+                button.prop('disabled', false).text(originalText);
+            }
+        });
+
+        // 连接码输入框事件
+        $('#device-code-input').on('input', function() {
+            // 只允许数字，最多6位
+            let value = this.value.replace(/[^0-9]/g, '');
+            if (value.length > 6) {
+                value = value.substring(0, 6);
+            }
+            this.value = value;
+        });
+
+        // 回车键连接
+        $('#device-code-input').on('keypress', function(e) {
+            if (e.which === 13) {
+                $('#connect-device-btn').click();
+            }
+        });
+
+        // 初始化时更新设备身份状态
+        setTimeout(updateDeviceIdentityStatus, 1000);
+    }
+
+    /**
+     * 更新设备身份状态显示
+     */
+    async function updateDeviceIdentityStatus() {
+        const statusElement = $('#device-identity-status');
+        const detailsElement = $('#device-identity-details');
+
+        statusElement.text('检查中...').css({
+            'background': '#666',
+            'color': 'white'
+        });
+        detailsElement.text('正在检查设备身份...');
+
+        try {
+            const identityStatus = await checkDeviceIdentity();
+
+            if (identityStatus.error) {
+                statusElement.text('检查失败').css({
+                    'background': '#e53e3e',
+                    'color': 'white'
+                });
+                detailsElement.text(`错误: ${identityStatus.error}`);
+            } else if (identityStatus.consistent) {
+                statusElement.text('身份正常').css({
+                    'background': '#48bb78',
+                    'color': 'white'
+                });
+                detailsElement.text(`用户ID: ${identityStatus.currentUserId || '未知'}`);
+            } else {
+                statusElement.text('身份不一致').css({
+                    'background': '#ed8936',
+                    'color': 'white'
+                });
+                detailsElement.html(`
+                    本地: ${identityStatus.localUserId || '无'}<br>
+                    Firebase: ${identityStatus.currentUserId || '无'}
+                `);
+            }
+        } catch (error) {
+            statusElement.text('检查失败').css({
+                'background': '#e53e3e',
+                'color': 'white'
+            });
+            detailsElement.text(`检查失败: ${error.message}`);
         }
     }
 
@@ -4867,6 +5010,132 @@ ${currentPersonality}
 
                         <small class="notes" style="margin-top: 10px; display: block;">
                             配置AI API用于生成个性化的宠物回复，AI会根据选择的人设来回应
+                        </small>
+
+                        <!-- 设备连接设置 -->
+                        <hr style="margin: 15px 0; border: none; border-top: 1px solid #444;">
+
+                        <div class="flex-container">
+                            <label style="display: block; margin-bottom: 8px; font-weight: bold;">
+                                🔗 设备连接与同步
+                            </label>
+                        </div>
+
+                        <div style="background: #2a2a2a; padding: 12px; border-radius: 6px; margin-bottom: 12px;">
+                            <div style="font-size: 0.9em; color: #ccc; margin-bottom: 8px;">
+                                <strong>💡 解决跨设备同步问题</strong>
+                            </div>
+                            <div style="font-size: 0.8em; color: #999; line-height: 1.4;">
+                                如果你的头像、设置无法在不同设备间同步，通常是因为每个设备都有独立的用户身份。
+                                使用设备连接功能让所有设备共享同一个身份，实现真正的跨设备同步。
+                            </div>
+                        </div>
+
+                        <!-- 设备身份状态 -->
+                        <div style="margin-bottom: 12px;">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                <span style="font-size: 0.9em; font-weight: bold;">📱 设备身份状态:</span>
+                                <span id="device-identity-status" style="
+                                    padding: 2px 8px;
+                                    border-radius: 12px;
+                                    font-size: 0.8em;
+                                    background: #666;
+                                    color: white;
+                                ">检查中...</span>
+                                <button id="refresh-identity-btn" style="
+                                    padding: 2px 6px;
+                                    background: #4a90e2;
+                                    color: white;
+                                    border: none;
+                                    border-radius: 3px;
+                                    cursor: pointer;
+                                    font-size: 0.7em;
+                                " title="刷新设备身份状态">🔄</button>
+                            </div>
+                            <div id="device-identity-details" style="font-size: 0.8em; color: #999; margin-left: 20px;">
+                                正在检查设备身份...
+                            </div>
+                        </div>
+
+                        <!-- 主设备：生成连接码 -->
+                        <div style="margin-bottom: 12px;">
+                            <div style="font-size: 0.9em; font-weight: bold; margin-bottom: 6px;">
+                                🖥️ 主设备操作
+                            </div>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <button id="generate-device-code-btn" style="
+                                    padding: 8px 12px;
+                                    background: #48bb78;
+                                    color: white;
+                                    border: none;
+                                    border-radius: 4px;
+                                    cursor: pointer;
+                                    font-size: 0.9em;
+                                    flex: 1;
+                                ">🔗 生成连接码</button>
+                                <div id="generated-code-display" style="
+                                    padding: 8px 12px;
+                                    background: #1a1a1a;
+                                    border: 2px dashed #666;
+                                    border-radius: 4px;
+                                    font-family: monospace;
+                                    font-size: 1.1em;
+                                    font-weight: bold;
+                                    color: #4a90e2;
+                                    min-width: 80px;
+                                    text-align: center;
+                                    display: none;
+                                ">------</div>
+                            </div>
+                            <div style="font-size: 0.8em; color: #999; margin-top: 4px;">
+                                在主设备上生成6位连接码，供其他设备使用
+                            </div>
+                        </div>
+
+                        <!-- 新设备：输入连接码 -->
+                        <div style="margin-bottom: 12px;">
+                            <div style="font-size: 0.9em; font-weight: bold; margin-bottom: 6px;">
+                                📱 新设备操作
+                            </div>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <input id="device-code-input" type="text" placeholder="输入6位连接码" maxlength="6" style="
+                                    padding: 8px 12px;
+                                    border: 1px solid #666;
+                                    border-radius: 4px;
+                                    background: #1a1a1a;
+                                    color: white;
+                                    font-family: monospace;
+                                    font-size: 1.1em;
+                                    text-align: center;
+                                    width: 120px;
+                                ">
+                                <button id="connect-device-btn" style="
+                                    padding: 8px 12px;
+                                    background: #e53e3e;
+                                    color: white;
+                                    border: none;
+                                    border-radius: 4px;
+                                    cursor: pointer;
+                                    font-size: 0.9em;
+                                    flex: 1;
+                                ">📱 连接设备</button>
+                            </div>
+                            <div style="font-size: 0.8em; color: #999; margin-top: 4px;">
+                                在新设备上输入主设备生成的连接码
+                            </div>
+                        </div>
+
+                        <!-- 连接状态显示 -->
+                        <div id="device-connection-status" style="
+                            padding: 8px 12px;
+                            border-radius: 4px;
+                            font-size: 0.8em;
+                            margin-top: 8px;
+                            display: none;
+                        "></div>
+
+                        <small class="notes" style="margin-top: 10px; display: block;">
+                            设备连接后，所有设置、头像、宠物数据将在设备间实时同步
                         </small>
                     </div>
                 </div>
@@ -13410,11 +13679,15 @@ ${currentPersonality}
     };
 
     /**
-     * 生成设备连接码
+     * 生成设备连接码 - 解决"双胞胎陌生人"问题
      */
     window.generateDeviceCode = async function() {
         try {
+            console.log('🔗 开始生成设备连接码...');
+            console.log('💡 这将解决不同设备间的"身份不一致"问题');
+
             if (!firebaseManager.currentUser) {
+                console.log('👤 用户未认证，正在认证...');
                 await firebaseManager.authenticateUser();
             }
 
@@ -13422,22 +13695,49 @@ ${currentPersonality}
                 throw new Error('用户认证失败');
             }
 
+            console.log(`👤 当前设备用户ID: ${firebaseManager.currentUser.uid}`);
+            console.log('📱 其他设备将获得相同的用户ID，实现数据同步');
+
             // 生成6位随机码
             const code = Math.floor(100000 + Math.random() * 900000).toString();
             const expiresAt = Date.now() + 5 * 60 * 1000; // 5分钟后过期
 
-            // 保存连接码到云端
-            await firebaseManager.db.collection('deviceCodes').doc(code).set({
+            const codeData = {
                 userId: firebaseManager.currentUser.uid,
                 expiresAt: expiresAt,
-                used: false
-            });
+                used: false,
+                createdAt: Date.now(),
+                createdBy: 'device_connection_system'
+            };
 
-            console.log('🔗 设备连接码已生成:', code);
+            // 保存连接码到云端（支持v9+ SDK）
+            if (typeof window.doc !== 'undefined' && typeof window.setDoc !== 'undefined') {
+                // v9+ 模块化SDK
+                const codeDocRef = window.doc(firebaseManager.db, 'deviceCodes', code);
+                await window.setDoc(codeDocRef, codeData);
+            } else {
+                // 兼容模式SDK
+                await firebaseManager.db.collection('deviceCodes').doc(code).set(codeData);
+            }
+
+            console.log('✅ 设备连接码已生成:', code);
             console.log('⏰ 有效期: 5分钟');
+            console.log('🔄 连接码将让其他设备获得相同的用户身份');
 
-            // 显示连接码
-            toastr.info(`设备连接码: ${code}<br>有效期: 5分钟`, '🔗 连接新设备', {
+            // 显示详细的连接指南
+            const message = `
+                <div style="text-align: left;">
+                    <strong>设备连接码: ${code}</strong><br>
+                    <small>有效期: 5分钟</small><br><br>
+                    <strong>📱 在其他设备上:</strong><br>
+                    1. 打开相同的插件<br>
+                    2. 运行 connectWithCode()<br>
+                    3. 输入连接码: ${code}<br>
+                    4. 完成设备身份同步
+                </div>
+            `;
+
+            toastr.info(message, '🔗 连接新设备', {
                 timeOut: 30000,
                 extendedTimeOut: 10000,
                 allowHtml: true
@@ -13445,27 +13745,45 @@ ${currentPersonality}
 
             return code;
         } catch (error) {
-            console.error('生成连接码失败:', error);
+            console.error('❌ 生成连接码失败:', error);
             toastr.error('生成连接码失败', '', { timeOut: 3000 });
             return null;
         }
     };
 
     /**
-     * 使用连接码连接设备
+     * 使用连接码连接设备 - 实现"身份转换"
      */
     window.connectWithCode = async function(code) {
         try {
+            console.log('📱 开始设备连接过程...');
+            console.log('🔄 这将让当前设备获得与主设备相同的用户身份');
+
             if (!code) {
                 code = prompt('请输入6位连接码:');
                 if (!code) return;
             }
 
-            // 验证连接码
-            const codeDoc = await firebaseManager.db.collection('deviceCodes').doc(code).get();
+            console.log(`🔍 验证连接码: ${code}`);
 
-            if (!codeDoc.exists) {
-                throw new Error('连接码不存在');
+            // 记录当前设备的旧身份
+            const oldUserId = firebaseManager.currentUser ? firebaseManager.currentUser.uid : '无';
+            console.log(`👤 当前设备身份: ${oldUserId}`);
+
+            // 验证连接码（支持v9+ SDK）
+            let codeDoc;
+
+            if (typeof window.doc !== 'undefined' && typeof window.getDoc !== 'undefined') {
+                // v9+ 模块化SDK
+                const codeDocRef = window.doc(firebaseManager.db, 'deviceCodes', code);
+                codeDoc = await window.getDoc(codeDocRef);
+            } else {
+                // 兼容模式SDK
+                codeDoc = await firebaseManager.db.collection('deviceCodes').doc(code).get();
+            }
+
+            if (!codeDoc.exists || (codeDoc.exists && !codeDoc.exists())) {
+                throw new Error('连接码不存在或已失效');
             }
 
             const codeData = codeDoc.data();
@@ -13478,26 +13796,76 @@ ${currentPersonality}
                 throw new Error('连接码已过期');
             }
 
-            // 保存用户ID到本地
-            await firebaseManager.saveLocalUserId(codeData.userId);
-            firebaseManager.currentUser = { uid: codeData.userId };
+            const newUserId = codeData.userId;
+            console.log(`🎯 目标身份: ${newUserId}`);
 
-            // 标记连接码为已使用
-            await firebaseManager.db.collection('deviceCodes').doc(code).update({
-                used: true
-            });
+            // 🔄 关键步骤：身份转换
+            console.log('🔄 开始身份转换...');
+            console.log('1️⃣ 清除旧身份...');
 
-            // 重新加载数据
+            // 保存新用户ID到本地（这会覆盖旧的）
+            await firebaseManager.saveLocalUserId(newUserId);
+            firebaseManager.currentUser = { uid: newUserId };
+
+            console.log('2️⃣ 设置新身份...');
+            console.log(`✅ 身份转换完成: ${oldUserId} → ${newUserId}`);
+
+            // 标记连接码为已使用（支持v9+ SDK）
+            if (typeof window.doc !== 'undefined' && typeof window.updateDoc !== 'undefined') {
+                // v9+ 模块化SDK
+                const codeDocRef = window.doc(firebaseManager.db, 'deviceCodes', code);
+                await window.updateDoc(codeDocRef, {
+                    used: true,
+                    usedAt: Date.now(),
+                    usedBy: newUserId
+                });
+            } else {
+                // 兼容模式SDK
+                await firebaseManager.db.collection('deviceCodes').doc(code).update({
+                    used: true,
+                    usedAt: Date.now(),
+                    usedBy: newUserId
+                });
+            }
+
+            console.log('3️⃣ 重新加载数据...');
+
+            // 重新加载数据（现在会从新身份的"储物柜"加载）
             await loadPetData();
             await loadCustomAvatar();
 
-            console.log('✅ 设备连接成功！');
-            toastr.success('🎉 设备连接成功！数据已同步', '', { timeOut: 5000 });
+            console.log('🎉 设备连接成功！');
+            console.log('💡 现在这台设备与主设备共享相同的用户身份');
+            console.log('🔄 所有数据（设置、头像等）将自动同步');
+
+            const successMessage = `
+                <div style="text-align: left;">
+                    <strong>🎉 设备连接成功！</strong><br><br>
+                    <strong>身份转换:</strong><br>
+                    旧身份: ${oldUserId}<br>
+                    新身份: ${newUserId}<br><br>
+                    <strong>✅ 现在可以:</strong><br>
+                    • 跨设备同步所有设置<br>
+                    • 跨设备同步自定义头像<br>
+                    • 实时查看其他设备的操作
+                </div>
+            `;
+
+            toastr.success(successMessage, '设备连接成功', {
+                timeOut: 8000,
+                allowHtml: true
+            });
 
             return true;
         } catch (error) {
-            console.error('设备连接失败:', error);
-            toastr.error(`设备连接失败: ${error.message}`, '', { timeOut: 3000 });
+            console.error('❌ 设备连接失败:', error);
+            console.error('💡 可能的原因:');
+            console.error('  - 连接码输入错误');
+            console.error('  - 连接码已过期（5分钟有效期）');
+            console.error('  - 连接码已被其他设备使用');
+            console.error('  - 网络连接问题');
+
+            toastr.error(`设备连接失败: ${error.message}`, '', { timeOut: 5000 });
             return false;
         }
     };
@@ -13758,6 +14126,338 @@ ${currentPersonality}
                 initialized: false,
                 authenticated: false,
                 fullyWorking: false,
+                error: error.message
+            };
+        }
+    };
+
+    /**
+     * 创建设备连接UI界面
+     */
+    function createDeviceConnectionUI() {
+        // 检查是否已存在UI
+        if ($('#device-connection-ui').length > 0) {
+            $('#device-connection-ui').remove();
+        }
+
+        const deviceConnectionHTML = `
+            <div id="device-connection-ui" style="
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border-radius: 16px;
+                padding: 24px;
+                box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+                z-index: 10000;
+                min-width: 400px;
+                max-width: 500px;
+                color: white;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            ">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <h3 style="margin: 0 0 8px 0; font-size: 20px; font-weight: 600;">
+                        🔗 设备连接中心
+                    </h3>
+                    <p style="margin: 0; opacity: 0.9; font-size: 14px;">
+                        解决跨设备同步问题
+                    </p>
+                </div>
+
+                <div style="background: rgba(255,255,255,0.1); border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+                    <h4 style="margin: 0 0 12px 0; font-size: 16px; display: flex; align-items: center;">
+                        <span style="margin-right: 8px;">📱</span>
+                        主设备操作
+                    </h4>
+                    <p style="margin: 0 0 12px 0; font-size: 13px; opacity: 0.9;">
+                        在你的主设备（如电脑）上生成连接码
+                    </p>
+                    <button id="generate-code-btn" style="
+                        width: 100%;
+                        padding: 12px;
+                        background: #4CAF50;
+                        color: white;
+                        border: none;
+                        border-radius: 8px;
+                        font-size: 14px;
+                        font-weight: 500;
+                        cursor: pointer;
+                        transition: all 0.3s ease;
+                    " onmouseover="this.style.background='#45a049'" onmouseout="this.style.background='#4CAF50'">
+                        🔗 生成设备连接码
+                    </button>
+                </div>
+
+                <div style="background: rgba(255,255,255,0.1); border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+                    <h4 style="margin: 0 0 12px 0; font-size: 16px; display: flex; align-items: center;">
+                        <span style="margin-right: 8px;">📲</span>
+                        新设备操作
+                    </h4>
+                    <p style="margin: 0 0 12px 0; font-size: 13px; opacity: 0.9;">
+                        在你的新设备上输入连接码
+                    </p>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="connection-code-input" placeholder="输入6位连接码" style="
+                            flex: 1;
+                            padding: 12px;
+                            border: 2px solid rgba(255,255,255,0.3);
+                            border-radius: 8px;
+                            background: rgba(255,255,255,0.1);
+                            color: white;
+                            font-size: 14px;
+                            text-align: center;
+                            letter-spacing: 2px;
+                        " maxlength="6">
+                        <button id="connect-device-btn" style="
+                            padding: 12px 16px;
+                            background: #2196F3;
+                            color: white;
+                            border: none;
+                            border-radius: 8px;
+                            font-size: 14px;
+                            font-weight: 500;
+                            cursor: pointer;
+                            transition: all 0.3s ease;
+                        " onmouseover="this.style.background='#1976D2'" onmouseout="this.style.background='#2196F3'">
+                            📱 连接
+                        </button>
+                    </div>
+                </div>
+
+                <div style="background: rgba(255,255,255,0.1); border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+                    <h4 style="margin: 0 0 12px 0; font-size: 16px; display: flex; align-items: center;">
+                        <span style="margin-right: 8px;">🔍</span>
+                        诊断工具
+                    </h4>
+                    <div style="display: flex; gap: 8px;">
+                        <button id="check-identity-btn" style="
+                            flex: 1;
+                            padding: 10px;
+                            background: #FF9800;
+                            color: white;
+                            border: none;
+                            border-radius: 8px;
+                            font-size: 13px;
+                            font-weight: 500;
+                            cursor: pointer;
+                            transition: all 0.3s ease;
+                        " onmouseover="this.style.background='#F57C00'" onmouseout="this.style.background='#FF9800'">
+                            🔍 检查身份
+                        </button>
+                        <button id="test-avatar-btn" style="
+                            flex: 1;
+                            padding: 10px;
+                            background: #9C27B0;
+                            color: white;
+                            border: none;
+                            border-radius: 8px;
+                            font-size: 13px;
+                            font-weight: 500;
+                            cursor: pointer;
+                            transition: all 0.3s ease;
+                        " onmouseover="this.style.background='#7B1FA2'" onmouseout="this.style.background='#9C27B0'">
+                            🚀 测试头像
+                        </button>
+                    </div>
+                </div>
+
+                <div style="text-align: center;">
+                    <button id="close-device-ui-btn" style="
+                        padding: 8px 16px;
+                        background: rgba(255,255,255,0.2);
+                        color: white;
+                        border: 1px solid rgba(255,255,255,0.3);
+                        border-radius: 8px;
+                        font-size: 13px;
+                        cursor: pointer;
+                        transition: all 0.3s ease;
+                    " onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.2)'">
+                        关闭
+                    </button>
+                </div>
+            </div>
+        `;
+
+        $('body').append(deviceConnectionHTML);
+
+        // 绑定事件
+        $('#generate-code-btn').click(async function() {
+            $(this).prop('disabled', true).text('🔄 生成中...');
+            try {
+                await generateDeviceCode();
+            } finally {
+                $(this).prop('disabled', false).text('🔗 生成设备连接码');
+            }
+        });
+
+        $('#connect-device-btn').click(async function() {
+            const code = $('#connection-code-input').val().trim();
+            if (!code) {
+                toastr.warning('请输入6位连接码', '提示');
+                return;
+            }
+
+            $(this).prop('disabled', true).text('🔄 连接中...');
+            try {
+                const success = await connectWithCode(code);
+                if (success) {
+                    $('#device-connection-ui').remove();
+                }
+            } finally {
+                $(this).prop('disabled', false).text('📱 连接');
+            }
+        });
+
+        $('#check-identity-btn').click(async function() {
+            $(this).prop('disabled', true).text('🔄 检查中...');
+            try {
+                await checkDeviceIdentity();
+            } finally {
+                $(this).prop('disabled', false).text('🔍 检查身份');
+            }
+        });
+
+        $('#test-avatar-btn').click(async function() {
+            $(this).prop('disabled', true).text('🔄 测试中...');
+            try {
+                await testAvatarUpload();
+            } finally {
+                $(this).prop('disabled', false).text('🚀 测试头像');
+            }
+        });
+
+        $('#close-device-ui-btn').click(function() {
+            $('#device-connection-ui').remove();
+        });
+
+        // 输入框只允许数字
+        $('#connection-code-input').on('input', function() {
+            this.value = this.value.replace(/[^0-9]/g, '');
+        });
+
+        // 回车键连接
+        $('#connection-code-input').keypress(function(e) {
+            if (e.which === 13) {
+                $('#connect-device-btn').click();
+            }
+        });
+    }
+
+    /**
+     * 显示设备连接UI
+     */
+    window.showDeviceConnection = function() {
+        createDeviceConnectionUI();
+
+        // 显示使用提示
+        console.log('🎨 设备连接UI已打开');
+        console.log('💡 使用说明:');
+        console.log('  1. 主设备: 点击"生成设备连接码"');
+        console.log('  2. 新设备: 输入连接码并点击"连接"');
+        console.log('  3. 诊断: 使用"检查身份"和"测试头像"按钮');
+    };
+
+    /**
+     * 检查设备身份状态 - 诊断"双胞胎陌生人"问题
+     */
+    window.checkDeviceIdentity = async function() {
+        console.log('🔍 检查设备身份状态...');
+        console.log('💡 这将帮助诊断跨设备同步问题');
+        console.log('');
+
+        try {
+            // 检查本地用户ID
+            console.log('📱 本地身份检查:');
+            const localUserId = await firebaseManager.getLocalUserId();
+            console.log(`- 本地存储的用户ID: ${localUserId || '❌ 未设置'}`);
+
+            // 检查当前Firebase用户
+            console.log('\n🔥 Firebase身份检查:');
+            const currentUserId = firebaseManager.currentUser ? firebaseManager.currentUser.uid : null;
+            console.log(`- 当前Firebase用户ID: ${currentUserId || '❌ 未认证'}`);
+
+            // 检查身份一致性
+            console.log('\n🔄 身份一致性检查:');
+            if (localUserId && currentUserId) {
+                if (localUserId === currentUserId) {
+                    console.log('✅ 本地身份与Firebase身份一致');
+                } else {
+                    console.log('⚠️ 身份不一致！');
+                    console.log(`  本地: ${localUserId}`);
+                    console.log(`  Firebase: ${currentUserId}`);
+                }
+            } else {
+                console.log('❌ 身份信息不完整');
+            }
+
+            // 检查云端数据
+            if (currentUserId) {
+                console.log('\n☁️ 云端数据检查:');
+
+                try {
+                    let userDoc;
+
+                    if (typeof window.doc !== 'undefined' && typeof window.getDoc !== 'undefined') {
+                        const userDocRef = window.doc(firebaseManager.db, 'users', currentUserId);
+                        userDoc = await window.getDoc(userDocRef);
+                    } else {
+                        userDoc = await firebaseManager.db.collection('users').doc(currentUserId).get();
+                    }
+
+                    if (userDoc.exists || (userDoc.exists && userDoc.exists())) {
+                        const userData = userDoc.data();
+                        console.log('✅ 云端用户数据存在');
+                        console.log(`- 宠物数据: ${userData.petData ? '✅ 存在' : '❌ 不存在'}`);
+                        console.log(`- 头像URL: ${userData.avatarURL ? '✅ 存在' : '❌ 不存在'}`);
+
+                        if (userData.petData && userData.petData.lastSyncTime) {
+                            const lastSync = new Date(userData.petData.lastSyncTime).toLocaleString();
+                            console.log(`- 最后同步时间: ${lastSync}`);
+                        }
+                    } else {
+                        console.log('❌ 云端用户数据不存在');
+                        console.log('💡 这可能意味着这是一个新的用户身份');
+                    }
+                } catch (cloudError) {
+                    console.log('❌ 云端数据检查失败:', cloudError.message);
+                }
+            }
+
+            // 提供解决方案建议
+            console.log('\n💡 问题诊断和解决方案:');
+
+            if (!localUserId && !currentUserId) {
+                console.log('🚨 问题: 设备没有任何身份');
+                console.log('🔧 解决方案:');
+                console.log('  1. 如果这是主设备，运行 generateDeviceCode() 建立身份');
+                console.log('  2. 如果这是新设备，运行 connectWithCode() 连接到主设备');
+            } else if (localUserId !== currentUserId) {
+                console.log('🚨 问题: 身份不一致');
+                console.log('🔧 解决方案:');
+                console.log('  1. 重新认证: await firebaseManager.authenticateUser()');
+                console.log('  2. 或使用连接码重新连接设备');
+            } else if (!firebaseManager.initialized) {
+                console.log('🚨 问题: Firebase未初始化');
+                console.log('🔧 解决方案: 检查Firebase配置和网络连接');
+            } else {
+                console.log('✅ 设备身份状态正常');
+                console.log('💡 如果仍有同步问题，可能是其他原因:');
+                console.log('  - 网络连接问题');
+                console.log('  - Firebase服务配置问题');
+                console.log('  - 实时监听器未正确设置');
+            }
+
+            return {
+                localUserId,
+                currentUserId,
+                consistent: localUserId === currentUserId,
+                firebaseInitialized: firebaseManager.initialized
+            };
+
+        } catch (error) {
+            console.error('❌ 设备身份检查失败:', error);
+            return {
                 error: error.message
             };
         }
@@ -14371,33 +15071,79 @@ ${currentPersonality}
     console.log("🔥 Firebase SDK管理:");
     console.log("🔥 运行 setupFirebaseV9() 来查看v9+ SDK配置指南");
     console.log("");
-    console.log("🔗 设备连接功能:");
-    console.log("🔗 运行 generateDeviceCode() 来生成设备连接码");
-    console.log("📱 运行 connectWithCode() 来连接新设备");
+    console.log("🔗 设备连接功能 - 解决跨设备同步问题:");
+    console.log("🎨 UI界面操作: 在扩展设置中找到'设备连接与同步'部分");
+    console.log("   - 查看设备身份状态");
+    console.log("   - 主设备: 点击'生成连接码'按钮");
+    console.log("   - 新设备: 输入连接码并点击'连接设备'按钮");
+    console.log("");
+    console.log("🔍 命令行操作:");
+    console.log("🔍 运行 checkDeviceIdentity() 来检查设备身份状态");
+    console.log("🔗 运行 generateDeviceCode() 来生成设备连接码（主设备）");
+    console.log("📱 运行 connectWithCode() 来连接新设备（新设备）");
+    console.log("");
+    console.log("💡 如果头像或设置无法跨设备同步，通常是因为:");
+    console.log("   每个设备都有独立的匿名用户ID（双胞胎陌生人问题）");
+    console.log("   解决方案: 使用设备连接码让所有设备共享同一个用户身份");
 
-    // iOS设备自动检测Firebase状态
-    if (isIOS) {
-        setTimeout(async () => {
-            console.log('\n🍎 自动检测iOS Firebase状态...');
+    // 自动检测设备身份和同步状态
+    setTimeout(async () => {
+        console.log('\n🔍 自动检测设备身份和同步状态...');
 
-            if (typeof firebase === 'undefined') {
+        try {
+            // 检查设备身份
+            const identityStatus = await checkDeviceIdentity();
+
+            if (!identityStatus.consistent) {
+                console.warn('⚠️ 检测到设备身份问题');
+                console.log('💡 这可能导致跨设备同步失败');
+                console.log('🔧 建议运行设备连接流程解决问题');
+
+                if (typeof toastr !== 'undefined') {
+                    const message = `
+                        <div style="text-align: left;">
+                            <strong>⚠️ 设备身份问题</strong><br><br>
+                            可能导致跨设备同步失败<br><br>
+                            <strong>解决方案:</strong><br>
+                            • 主设备: generateDeviceCode()<br>
+                            • 新设备: connectWithCode()
+                        </div>
+                    `;
+
+                    toastr.warning(message, '同步问题检测', {
+                        timeOut: 10000,
+                        allowHtml: true
+                    });
+                }
+            } else if (identityStatus.consistent) {
+                console.log('✅ 设备身份状态正常');
+
+                if (typeof toastr !== 'undefined') {
+                    toastr.success('🔄 设备身份正常，跨设备同步已就绪', '状态检测', { timeOut: 3000 });
+                }
+            }
+        } catch (error) {
+            console.warn('⚠️ 设备身份检测失败:', error.message);
+        }
+
+        // iOS设备额外检测
+        if (isIOS) {
+            console.log('\n🍎 iOS设备Firebase状态检测...');
+
+            if (typeof firebase === 'undefined' && typeof window.initializeApp === 'undefined') {
                 console.warn('⚠️ iOS设备上Firebase SDK未加载');
                 console.log('💡 这可能是正常的，插件会自动降级到本地存储模式');
                 console.log('🔧 如需云端同步，请运行 checkiOSFirebase() 查看解决方案');
 
                 if (typeof toastr !== 'undefined') {
-                    toastr.info('🍎 iOS设备检测到Firebase不可用<br>已自动切换到本地存储模式', 'iOS提示', {
+                    toastr.info('🍎 iOS设备Firebase不可用<br>已切换到本地存储模式', 'iOS提示', {
                         timeOut: 8000,
                         allowHtml: true
                     });
                 }
             } else {
                 console.log('✅ iOS设备Firebase SDK已加载');
-
-                if (typeof toastr !== 'undefined') {
-                    toastr.success('🍎 iOS Firebase工作正常', 'iOS状态', { timeOut: 3000 });
-                }
             }
-        }, 2000); // 延迟2秒，确保所有初始化完成
-    }
+        }
+    }, 3000); // 延迟3秒，确保所有初始化完成
 });

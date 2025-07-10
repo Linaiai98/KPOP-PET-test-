@@ -2105,12 +2105,12 @@ ${currentPersonality}
         if (hoursElapsed > 2) {
             console.log(`[${extensionName}] 检测到长时间未更新 (${hoursElapsed.toFixed(1)}小时)，应用初始化缓冲...`);
 
-            // 确保基础数值不会太低，影响用户体验
+            // 确保基础数值不会太低，影响用户体验（最高50）
             const minValues = {
-                hunger: 30,    // 最低饱食度30
-                energy: 25,    // 最低精力25
-                happiness: 20, // 最低快乐度20
-                health: 35     // 最低健康度35
+                hunger: 25,    // 最低饱食度25（不超过50）
+                energy: 20,    // 最低精力20（不超过50）
+                happiness: 15, // 最低快乐度15（不超过50）
+                health: 30     // 最低健康度30（不超过50）
             };
 
             let buffered = false;
@@ -3502,10 +3502,10 @@ ${currentPersonality}
             type: "cat",
             level: 1,
             experience: 0,
-            health: 25,    // 更低的起始值
-            happiness: 20, // 更低的起始值
-            hunger: 30,    // 更低的起始值
-            energy: 35,    // 更低的起始值
+            health: 20,    // 低起始值：最高50
+            happiness: 15, // 低起始值：最高50
+            hunger: 25,    // 低起始值：最高50
+            energy: 30,    // 低起始值：最高50
 
             // 拓麻歌子式属性
             lifeStage: "baby",
@@ -6585,6 +6585,7 @@ ${currentPersonality}
         console.log('- testHugFunctionComplete() - 完整测试抱抱功能（包括前后检查）');
         console.log('- quickVerifyHugFunction() - 快速验证抱抱功能是否完整');
         console.log('- diagnose75ValueIssue() - 诊断和修复75数值问题');
+        console.log('- apply50CapSystem() - 应用50上限系统（增强养成挑战性）');
 
         // 强制刷新UI
         if (typeof renderPetStatus === 'function') {
@@ -9027,12 +9028,12 @@ ${currentPersonality}
             if (hoursElapsed > 2) {
                 console.log(`检测到长时间未更新 (${hoursElapsed.toFixed(1)}小时)，应用急救缓冲...`);
 
-                // 急救包式的最低数值保证 - 防止宠物死亡但鼓励频繁互动
+                // 急救包式的最低数值保证 - 防止宠物死亡但鼓励频繁互动（最高50）
                 const minValues = {
-                    hunger: 35,    // 最低饱食度35 - 急救水平
-                    energy: 30,    // 最低精力30 - 急救水平
-                    happiness: 25, // 最低快乐度25 - 急救水平
-                    health: 40     // 最低健康度40 - 急救水平
+                    hunger: 30,    // 最低饱食度30 - 急救水平（不超过50）
+                    energy: 25,    // 最低精力25 - 急救水平（不超过50）
+                    happiness: 20, // 最低快乐度20 - 急救水平（不超过50）
+                    health: 35     // 最低健康度35 - 急救水平（不超过50）
                 };
 
                 let buffered = false;
@@ -9140,12 +9141,12 @@ ${currentPersonality}
         console.log(`- 饱食: ${petData.hunger}/100`);
         console.log(`- 精力: ${petData.energy}/100`);
 
-        // 设置更低的初始数值，增加成长感
+        // 设置更低的初始数值，增加成长感（最高50）
         const newValues = {
-            health: 25,    // 从35降到25 - 需要照顾才能健康
-            happiness: 20, // 从25降到20 - 需要互动才能快乐
-            hunger: 30,    // 从40降到30 - 需要喂食才能饱足
-            energy: 35     // 从50降到35 - 需要休息才能精力充沛
+            health: 20,    // 低起始值：最高50 - 需要持续照顾才能健康
+            happiness: 15, // 低起始值：最高50 - 需要频繁互动才能快乐
+            hunger: 25,    // 低起始值：最高50 - 需要定期喂食才能饱足
+            energy: 30     // 低起始值：最高50 - 需要充分休息才能精力充沛
         };
 
         console.log('\n🎯 新的初始数值:');
@@ -9238,39 +9239,40 @@ ${currentPersonality}
         petData.happiness = Math.min(100, petData.happiness + 5);
         console.log(`   饱食度: ${oldHunger} → ${petData.hunger} (+${petData.hunger - oldHunger})`);
         console.log(`   快乐度: ${oldHappiness1} → ${petData.happiness} (+${petData.happiness - oldHappiness1})`);
-        console.log(`   效果: ${petData.hunger >= 50 ? '✅ 饱足了' : '⚠️ 还需要更多食物'}`);
+        console.log(`   效果: ${petData.hunger >= 40 ? '✅ 饱足了' : '⚠️ 还需要更多食物'}`);
 
         // 模拟玩耍
         console.log('\n2. 🎮 玩耍效果:');
         const oldHappiness2 = petData.happiness;
         const oldEnergy = petData.energy;
-        petData.happiness = Math.min(100, petData.happiness + 15);
+        petData.happiness = Math.min(50, petData.happiness + 15); // 50上限
         petData.energy = Math.max(0, petData.energy - 10);
         console.log(`   快乐度: ${oldHappiness2} → ${petData.happiness} (+${petData.happiness - oldHappiness2})`);
         console.log(`   精力: ${oldEnergy} → ${petData.energy} (${petData.energy - oldEnergy})`);
-        console.log(`   效果: ${petData.happiness >= 50 ? '✅ 很开心' : '⚠️ 还需要更多互动'}`);
+        console.log(`   效果: ${petData.happiness >= 35 ? '✅ 很开心' : '⚠️ 还需要更多互动'}`);
 
         // 模拟睡觉
         console.log('\n3. 😴 睡觉效果:');
         const oldEnergy2 = petData.energy;
         const oldHealth = petData.health;
-        petData.energy = Math.min(100, petData.energy + 25);
-        petData.health = Math.min(100, petData.health + 10);
+        petData.energy = Math.min(50, petData.energy + 25); // 50上限
+        petData.health = Math.min(50, petData.health + 10); // 50上限
         console.log(`   精力: ${oldEnergy2} → ${petData.energy} (+${petData.energy - oldEnergy2})`);
         console.log(`   健康: ${oldHealth} → ${petData.health} (+${petData.health - oldHealth})`);
-        console.log(`   效果: ${petData.energy >= 60 ? '✅ 精力充沛' : '⚠️ 还需要更多休息'}`);
+        console.log(`   效果: ${petData.energy >= 45 ? '✅ 精力充沛' : '⚠️ 还需要更多休息'}`);
 
-        console.log('\n📈 照顾后状态:');
-        console.log(`- 健康: ${petData.health}/100 (${petData.health >= 50 ? '✅ 健康' : '⚠️ 需要更多照顾'})`);
-        console.log(`- 快乐: ${petData.happiness}/100 (${petData.happiness >= 50 ? '✅ 快乐' : '⚠️ 需要更多互动'})`);
-        console.log(`- 饱食: ${petData.hunger}/100 (${petData.hunger >= 50 ? '✅ 饱足' : '⚠️ 需要更多食物'})`);
-        console.log(`- 精力: ${petData.energy}/100 (${petData.energy >= 60 ? '✅ 充沛' : '⚠️ 需要更多休息'})`);
+        console.log('\n📈 照顾后状态 (50上限系统):');
+        console.log(`- 健康: ${petData.health}/50 (${petData.health >= 35 ? '✅ 健康' : '⚠️ 需要更多照顾'})`);
+        console.log(`- 快乐: ${petData.happiness}/50 (${petData.happiness >= 35 ? '✅ 快乐' : '⚠️ 需要更多互动'})`);
+        console.log(`- 饱食: ${petData.hunger}/50 (${petData.hunger >= 40 ? '✅ 饱足' : '⚠️ 需要更多食物'})`);
+        console.log(`- 精力: ${petData.energy}/50 (${petData.energy >= 45 ? '✅ 充沛' : '⚠️ 需要更多休息'})`);
 
-        console.log('\n💡 新数值平衡的优势:');
-        console.log('✅ 每次互动都有明显的改善效果');
+        console.log('\n💡 50上限系统的优势:');
+        console.log('✅ 每次互动都有显著的改善效果');
         console.log('✅ 玩家能清楚感受到照顾的价值');
-        console.log('✅ 从低数值到高数值有明显的成长感');
-        console.log('✅ 鼓励玩家进行多种类型的互动');
+        console.log('✅ 从低数值到50上限有明显的成长感');
+        console.log('✅ 更有挑战性，需要持续关注');
+        console.log('✅ 真正的养成体验，不会过于简单');
 
         // 保存测试后的状态
         savePetData();
@@ -9279,14 +9281,15 @@ ${currentPersonality}
         }
 
         return {
-            startValues: { health: 25, happiness: 20, hunger: 30, energy: 35 },
+            startValues: { health: 20, happiness: 15, hunger: 25, energy: 30 },
             endValues: {
                 health: petData.health,
                 happiness: petData.happiness,
                 hunger: petData.hunger,
                 energy: petData.energy
             },
-            improvement: '显著的成长感和照顾价值'
+            maxCap: 50,
+            improvement: '50上限系统：更有挑战性的养成体验'
         };
     };
 
@@ -12803,11 +12806,11 @@ ${currentPersonality}
         if (allAre75) {
             console.log('1. 重置为更合理的初始数值:');
 
-            // 设置更合理的数值
-            petData.health = 45;
-            petData.happiness = 40;
-            petData.hunger = 50;
-            petData.energy = 55;
+            // 设置更合理的数值（最高50）
+            petData.health = 35;
+            petData.happiness = 30;
+            petData.hunger = 40;
+            petData.energy = 45;
 
             // 更新时间戳
             petData.lastUpdateTime = now;
@@ -12855,6 +12858,96 @@ ${currentPersonality}
                 energy: petData.energy
             },
             hoursElapsed: hoursElapsed
+        };
+    };
+
+    /**
+     * 应用50上限设置，让初始体验更有挑战性
+     */
+    window.apply50CapSystem = function() {
+        console.log('🎯 应用50上限设置，增强养成挑战性...');
+
+        console.log('\n📊 当前数值:');
+        console.log(`- 健康: ${petData.health}/100`);
+        console.log(`- 快乐: ${petData.happiness}/100`);
+        console.log(`- 饱食: ${petData.hunger}/100`);
+        console.log(`- 精力: ${petData.energy}/100`);
+
+        // 应用50上限
+        const oldValues = {
+            health: petData.health,
+            happiness: petData.happiness,
+            hunger: petData.hunger,
+            energy: petData.energy
+        };
+
+        petData.health = Math.min(petData.health, 50);
+        petData.happiness = Math.min(petData.happiness, 50);
+        petData.hunger = Math.min(petData.hunger, 50);
+        petData.energy = Math.min(petData.energy, 50);
+
+        // 如果数值太高，降到合理范围
+        if (petData.health > 45) petData.health = Math.random() * 15 + 30; // 30-45
+        if (petData.happiness > 45) petData.happiness = Math.random() * 15 + 25; // 25-40
+        if (petData.hunger > 45) petData.hunger = Math.random() * 15 + 30; // 30-45
+        if (petData.energy > 45) petData.energy = Math.random() * 15 + 35; // 35-50
+
+        // 确保数值是整数
+        petData.health = Math.round(petData.health);
+        petData.happiness = Math.round(petData.happiness);
+        petData.hunger = Math.round(petData.hunger);
+        petData.energy = Math.round(petData.energy);
+
+        console.log('\n🎯 应用50上限后:');
+        console.log(`- 健康: ${oldValues.health} → ${petData.health} ${oldValues.health !== petData.health ? '(已调整)' : ''}`);
+        console.log(`- 快乐: ${oldValues.happiness} → ${petData.happiness} ${oldValues.happiness !== petData.happiness ? '(已调整)' : ''}`);
+        console.log(`- 饱食: ${oldValues.hunger} → ${petData.hunger} ${oldValues.hunger !== petData.hunger ? '(已调整)' : ''}`);
+        console.log(`- 精力: ${oldValues.energy} → ${petData.energy} ${oldValues.energy !== petData.energy ? '(已调整)' : ''}`);
+
+        // 重置时间戳，避免立即衰减
+        const now = Date.now();
+        petData.lastUpdateTime = now;
+        petData.lastFeedTime = now - 20000; // 20秒前，可以立即喂食
+        petData.lastPlayTime = now - 30000; // 30秒前，可以立即玩耍
+        petData.lastSleepTime = now - 60000; // 1分钟前，可以立即睡觉
+        petData.lastHugTime = now - 15000; // 15秒前，可以立即抱抱
+
+        // 保存数据
+        savePetData();
+
+        // 更新UI
+        if (typeof updateUnifiedUIStatus === 'function') {
+            updateUnifiedUIStatus();
+        }
+        if (typeof renderPetStatus === 'function') {
+            renderPetStatus();
+        }
+
+        console.log('\n💡 50上限系统特点:');
+        console.log('✅ 初始数值更低，增加成长感');
+        console.log('✅ 每次互动的改善更明显');
+        console.log('✅ 需要更多照顾才能达到良好状态');
+        console.log('✅ 真正的养成挑战体验');
+
+        console.log('\n🎮 推荐的照顾流程:');
+        console.log('1. 🍖 喂食: 提升饱食度到45-50');
+        console.log('2. 🎮 玩耍: 提升快乐度到40-45');
+        console.log('3. 😴 睡觉: 恢复精力到45-50');
+        console.log('4. 🤗 抱抱: 维持快乐和健康');
+        console.log('5. 持续照顾: 逐步提升到50上限');
+
+        toastr.success('🎯 已应用50上限系统！现在养成更有挑战性了', '', { timeOut: 5000 });
+
+        return {
+            oldValues,
+            newValues: {
+                health: petData.health,
+                happiness: petData.happiness,
+                hunger: petData.hunger,
+                energy: petData.energy
+            },
+            maxCap: 50,
+            improvement: '更有挑战性的养成体验'
         };
     };
 

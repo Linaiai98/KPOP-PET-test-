@@ -49,6 +49,297 @@ jQuery(async () => {
         notification: 10002 // 通知
     };
 
+    /**
+     * Firebase云端服务管理器 - 跨平台同步的核心
+     */
+    const firebaseManager = {
+        // Firebase配置
+        config: {
+            apiKey: "your-api-key",
+            authDomain: "virtual-pet-sync.firebaseapp.com",
+            projectId: "virtual-pet-sync",
+            storageBucket: "virtual-pet-sync.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "your-app-id"
+        },
+
+        // 初始化状态
+        initialized: false,
+        currentUser: null,
+        db: null,
+        storage: null,
+        listeners: new Map(),
+
+        /**
+         * 初始化Firebase服务
+         */
+        async init() {
+            try {
+                // 检查Firebase SDK是否可用
+                if (typeof firebase === 'undefined') {
+                    console.warn('[FirebaseManager] Firebase SDK未加载，使用本地存储降级');
+                    return false;
+                }
+
+                // 初始化Firebase
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(this.config);
+                }
+
+                this.db = firebase.firestore();
+                this.storage = firebase.storage();
+                this.initialized = true;
+
+                console.log('[FirebaseManager] Firebase初始化成功');
+                return true;
+            } catch (error) {
+                console.error('[FirebaseManager] Firebase初始化失败:', error);
+                return false;
+            }
+        },
+
+        /**
+         * 用户身份认证 - 匿名登录
+         */
+        async authenticateUser() {
+            try {
+                if (!this.initialized) {
+                    await this.init();
+                }
+
+                // 检查本地是否已有用户ID
+                const savedUserId = await this.getLocalUserId();
+                if (savedUserId) {
+                    console.log('[FirebaseManager] 使用已保存的用户ID:', savedUserId);
+                    this.currentUser = { uid: savedUserId };
+                    return savedUserId;
+                }
+
+                // 匿名登录创建新用户
+                const userCredential = await firebase.auth().signInAnonymously();
+                this.currentUser = userCredential.user;
+
+                // 保存用户ID到本地
+                await this.saveLocalUserId(this.currentUser.uid);
+
+                console.log('[FirebaseManager] 新用户创建成功:', this.currentUser.uid);
+                return this.currentUser.uid;
+            } catch (error) {
+                console.error('[FirebaseManager] 用户认证失败:', error);
+                return null;
+            }
+        },
+
+        /**
+         * 获取本地保存的用户ID
+         */
+        async getLocalUserId() {
+            try {
+                // 优先使用chrome.storage
+                if (chrome && chrome.storage && chrome.storage.local) {
+                    return new Promise((resolve) => {
+                        chrome.storage.local.get(['firebase_user_id'], (result) => {
+                            resolve(result.firebase_user_id || null);
+                        });
+                    });
+                } else {
+                    // 降级到localStorage
+                    return localStorage.getItem('firebase_user_id');
+                }
+            } catch (error) {
+                console.error('[FirebaseManager] 获取本地用户ID失败:', error);
+                return null;
+            }
+        },
+
+        /**
+         * 保存用户ID到本地
+         */
+        async saveLocalUserId(userId) {
+            try {
+                // 优先使用chrome.storage
+                if (chrome && chrome.storage && chrome.storage.local) {
+                    return new Promise((resolve) => {
+                        chrome.storage.local.set({ firebase_user_id: userId }, resolve);
+                    });
+                } else {
+                    // 降级到localStorage
+                    localStorage.setItem('firebase_user_id', userId);
+                }
+                console.log('[FirebaseManager] 用户ID已保存到本地');
+            } catch (error) {
+                console.error('[FirebaseManager] 保存用户ID失败:', error);
+            }
+        },
+
+        /**
+         * 保存宠物数据到云端
+         */
+        async savePetData(petData) {
+            try {
+                if (!this.currentUser) {
+                    await this.authenticateUser();
+                }
+
+                if (!this.currentUser) {
+                    throw new Error('用户认证失败');
+                }
+
+                const dataWithTimestamp = {
+                    ...petData,
+                    lastSyncTime: Date.now(),
+                    lastUpdateTime: Date.now()
+                };
+
+                await this.db.collection('users').doc(this.currentUser.uid).set({
+                    petData: dataWithTimestamp
+                }, { merge: true });
+
+                console.log('[FirebaseManager] 宠物数据已保存到云端');
+                return true;
+            } catch (error) {
+                console.error('[FirebaseManager] 保存宠物数据失败:', error);
+                return false;
+            }
+        },
+
+        /**
+         * 从云端加载宠物数据
+         */
+        async loadPetData() {
+            try {
+                if (!this.currentUser) {
+                    await this.authenticateUser();
+                }
+
+                if (!this.currentUser) {
+                    throw new Error('用户认证失败');
+                }
+
+                const doc = await this.db.collection('users').doc(this.currentUser.uid).get();
+
+                if (doc.exists) {
+                    const userData = doc.data();
+                    console.log('[FirebaseManager] 宠物数据已从云端加载');
+                    return userData.petData || null;
+                } else {
+                    console.log('[FirebaseManager] 云端无数据，返回null');
+                    return null;
+                }
+            } catch (error) {
+                console.error('[FirebaseManager] 加载宠物数据失败:', error);
+                return null;
+            }
+        },
+
+        /**
+         * 上传头像到云端存储
+         */
+        async uploadAvatar(imageData) {
+            try {
+                if (!this.currentUser) {
+                    await this.authenticateUser();
+                }
+
+                if (!this.currentUser) {
+                    throw new Error('用户认证失败');
+                }
+
+                // 将base64转换为Blob
+                const response = await fetch(imageData);
+                const blob = await response.blob();
+
+                // 上传到Firebase Storage
+                const storageRef = this.storage.ref();
+                const avatarRef = storageRef.child(`avatars/${this.currentUser.uid}/avatar.png`);
+
+                const snapshot = await avatarRef.put(blob);
+                const downloadURL = await snapshot.ref.getDownloadURL();
+
+                // 保存URL到用户文档
+                await this.db.collection('users').doc(this.currentUser.uid).set({
+                    avatarURL: downloadURL,
+                    avatarUpdatedAt: Date.now()
+                }, { merge: true });
+
+                console.log('[FirebaseManager] 头像已上传到云端:', downloadURL);
+                return downloadURL;
+            } catch (error) {
+                console.error('[FirebaseManager] 上传头像失败:', error);
+                return null;
+            }
+        },
+
+        /**
+         * 从云端加载头像
+         */
+        async loadAvatar() {
+            try {
+                if (!this.currentUser) {
+                    await this.authenticateUser();
+                }
+
+                if (!this.currentUser) {
+                    throw new Error('用户认证失败');
+                }
+
+                const doc = await this.db.collection('users').doc(this.currentUser.uid).get();
+
+                if (doc.exists) {
+                    const userData = doc.data();
+                    const avatarURL = userData.avatarURL;
+
+                    if (avatarURL) {
+                        // 下载头像并转换为base64
+                        const response = await fetch(avatarURL);
+                        const blob = await response.blob();
+
+                        return new Promise((resolve) => {
+                            const reader = new FileReader();
+                            reader.onload = () => resolve(reader.result);
+                            reader.readAsDataURL(blob);
+                        });
+                    }
+                }
+
+                console.log('[FirebaseManager] 云端无头像数据');
+                return null;
+            } catch (error) {
+                console.error('[FirebaseManager] 加载头像失败:', error);
+                return null;
+            }
+        },
+
+        /**
+         * 设置实时数据监听器
+         */
+        setupRealtimeListener(callback) {
+            try {
+                if (!this.currentUser) {
+                    console.warn('[FirebaseManager] 无用户，无法设置监听器');
+                    return null;
+                }
+
+                const unsubscribe = this.db.collection('users').doc(this.currentUser.uid)
+                    .onSnapshot((doc) => {
+                        if (doc.exists) {
+                            const userData = doc.data();
+                            console.log('[FirebaseManager] 检测到云端数据变化');
+                            callback(userData);
+                        }
+                    }, (error) => {
+                        console.error('[FirebaseManager] 实时监听器错误:', error);
+                    });
+
+                console.log('[FirebaseManager] 实时监听器已设置');
+                return unsubscribe;
+            } catch (error) {
+                console.error('[FirebaseManager] 设置监听器失败:', error);
+                return null;
+            }
+        }
+    };
+
     // 样式隔离前缀，确保不影响其他插件
     const STYLE_PREFIX = 'virtual-pet-';
 
@@ -1958,50 +2249,38 @@ ${currentPersonality}
     // -----------------------------------------------------------------
     
     /**
-     * 加载宠物数据（支持跨设备同步）
+     * 加载宠物数据 - 使用Firebase云端同步
      */
-    function loadPetData() {
-        // 首先尝试从同步存储加载
-        const syncData = loadFromSyncStorage();
-        const localData = localStorage.getItem(STORAGE_KEY_PET_DATA);
+    async function loadPetData() {
+        try {
+            // 优先从Firebase云端加载
+            const cloudData = await firebaseManager.loadPetData();
+            let savedData = null;
+            let dataSource = 'none';
 
-        let savedData = null;
-        let dataSource = 'none';
+            if (cloudData) {
+                savedData = cloudData;
+                dataSource = 'cloud';
+                console.log(`[${extensionName}] 使用云端数据`);
+            } else {
+                // 云端无数据，尝试本地数据
+                const localData = localStorage.getItem(STORAGE_KEY_PET_DATA);
+                if (localData) {
+                    try {
+                        savedData = JSON.parse(localData);
+                        dataSource = 'local';
+                        console.log(`[${extensionName}] 使用本地数据（云端无数据）`);
 
-        // 比较同步数据和本地数据，选择最新的
-        if (syncData && localData) {
-            try {
-                const syncParsed = typeof syncData === 'object' ? syncData : JSON.parse(syncData);
-                const localParsed = JSON.parse(localData);
-
-                const syncTime = syncParsed.lastSyncTime || 0;
-                const localTime = localParsed.lastSyncTime || 0;
-
-                if (syncTime > localTime) {
-                    savedData = syncParsed;
-                    dataSource = 'sync';
-                    console.log(`[${extensionName}] 使用同步数据（更新）`);
-                } else {
-                    savedData = localParsed;
-                    dataSource = 'local';
-                    console.log(`[${extensionName}] 使用本地数据（更新）`);
+                        // 将本地数据同步到云端
+                        await firebaseManager.savePetData(savedData);
+                        console.log(`[${extensionName}] 本地数据已同步到云端`);
+                    } catch (error) {
+                        console.warn(`[${extensionName}] 本地数据解析失败:`, error);
+                    }
                 }
-            } catch (error) {
-                console.warn(`[${extensionName}] 数据比较失败，使用本地数据:`, error);
-                savedData = JSON.parse(localData);
-                dataSource = 'local';
             }
-        } else if (syncData) {
-            savedData = typeof syncData === 'object' ? syncData : JSON.parse(syncData);
-            dataSource = 'sync';
-            console.log(`[${extensionName}] 使用同步数据（仅有同步）`);
-        } else if (localData) {
-            savedData = JSON.parse(localData);
-            dataSource = 'local';
-            console.log(`[${extensionName}] 使用本地数据（仅有本地）`);
-        }
 
-        if (savedData) {
+            if (savedData) {
             try {
                 // savedData 已经是解析后的对象，不需要再次解析
 
@@ -2088,15 +2367,24 @@ ${currentPersonality}
             }
         } else {
             // 没有保存的数据，首次使用
-            petData.dataVersion = 4.0;
-            petData.personality = getCurrentPersonality(); // 设置初始人设
-            applyTamagotchiSystem();
-            applyFirstTimeRandomization(); // 首次随机化
-            savePetData();
-        }
+                // 没有保存的数据，首次使用
+                petData.dataVersion = 4.0;
+                petData.personality = getCurrentPersonality();
+                applyTamagotchiSystem();
+                applyFirstTimeRandomization();
+                await savePetData(); // 保存到云端
+            }
 
-        // 添加初始化缓冲机制
-        applyInitializationBuffer();
+            // 添加初始化缓冲机制
+            applyInitializationBuffer();
+        } catch (error) {
+            console.error(`[${extensionName}] 加载宠物数据失败:`, error);
+            // 异常时使用默认数据
+            petData.dataVersion = 4.0;
+            petData.personality = getCurrentPersonality();
+            applyTamagotchiSystem();
+            applyFirstTimeRandomization();
+        }
     }
 
     /**
@@ -2160,23 +2448,36 @@ ${currentPersonality}
     }
     
     /**
-     * 保存宠物数据
+     * 保存宠物数据 - 使用Firebase云端同步
      */
-    function savePetData() {
+    async function savePetData() {
         try {
-            // 添加时间戳用于同步
-            const dataWithTimestamp = {
-                ...petData,
-                lastSyncTime: Date.now()
-            };
+            // 优先保存到Firebase云端
+            const cloudSaved = await firebaseManager.savePetData(petData);
 
-            localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(dataWithTimestamp));
-
-            // 同时保存到全局同步存储（如果可用）
-            saveToSyncStorage(dataWithTimestamp);
-
+            if (cloudSaved) {
+                console.log(`[${extensionName}] 宠物数据已保存到云端`);
+            } else {
+                // 云端保存失败，降级到本地存储
+                console.warn(`[${extensionName}] 云端保存失败，使用本地存储`);
+                const dataWithTimestamp = {
+                    ...petData,
+                    lastSyncTime: Date.now()
+                };
+                localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(dataWithTimestamp));
+            }
         } catch (error) {
-            console.error(`[${extensionName}] Error saving pet data:`, error);
+            console.error(`[${extensionName}] 保存宠物数据失败:`, error);
+            // 异常时也降级到本地存储
+            try {
+                const dataWithTimestamp = {
+                    ...petData,
+                    lastSyncTime: Date.now()
+                };
+                localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(dataWithTimestamp));
+            } catch (localError) {
+                console.error(`[${extensionName}] 本地存储也失败:`, localError);
+            }
         }
     }
 
@@ -3303,64 +3604,87 @@ ${currentPersonality}
     }
 
     /**
-     * 加载自定义头像数据 - 支持多端同步
+     * 加载自定义头像数据 - 使用Firebase云端存储
      */
-    function loadCustomAvatar() {
+    async function loadCustomAvatar() {
         try {
-            // 首先尝试从同步存储加载
-            const syncAvatar = loadAvatarFromSync();
-            const localAvatar = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
+            // 优先从Firebase云端加载
+            const cloudAvatar = await firebaseManager.loadAvatar();
 
-            // 比较同步数据和本地数据，选择最新的
-            if (syncAvatar && localAvatar) {
-                // 如果都存在，优先使用同步数据
-                customAvatarData = syncAvatar;
-                // 同步到本地存储
-                localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, syncAvatar);
-                console.log(`[${extensionName}] 使用同步的头像数据并更新本地`);
-            } else if (syncAvatar) {
-                customAvatarData = syncAvatar;
-                // 同步到本地存储
-                localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, syncAvatar);
-                console.log(`[${extensionName}] 使用同步的头像数据（仅有同步）并保存到本地`);
-            } else if (localAvatar) {
-                customAvatarData = localAvatar;
-                console.log(`[${extensionName}] 使用本地头像数据（仅有本地）`);
+            if (cloudAvatar) {
+                customAvatarData = cloudAvatar;
+                console.log(`[${extensionName}] 头像已从云端加载, 大小: ${Math.round(cloudAvatar.length/1024)}KB`);
+            } else {
+                // 云端无头像，尝试本地数据
+                const localAvatar = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
+                if (localAvatar) {
+                    customAvatarData = localAvatar;
+                    console.log(`[${extensionName}] 使用本地头像数据（云端无数据）`);
+
+                    // 将本地头像同步到云端
+                    await firebaseManager.uploadAvatar(localAvatar);
+                    console.log(`[${extensionName}] 本地头像已同步到云端`);
+                } else {
+                    console.log(`[${extensionName}] 未找到头像数据`);
+                }
             }
 
             if (customAvatarData) {
-                console.log(`[${extensionName}] Custom avatar loaded, size: ${Math.round(customAvatarData.length/1024)}KB`);
-
                 // 确保头像显示更新
                 setTimeout(() => {
                     updateAvatarDisplay();
                     updateFloatingButtonAvatar();
                 }, 100);
-            } else {
-                console.log(`[${extensionName}] No custom avatar found`);
             }
         } catch (error) {
-            console.warn(`[${extensionName}] Failed to load custom avatar:`, error);
+            console.warn(`[${extensionName}] 加载头像失败:`, error);
+            // 异常时尝试本地数据
+            try {
+                const localAvatar = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
+                if (localAvatar) {
+                    customAvatarData = localAvatar;
+                    console.log(`[${extensionName}] 降级使用本地头像数据`);
+                    setTimeout(() => {
+                        updateAvatarDisplay();
+                        updateFloatingButtonAvatar();
+                    }, 100);
+                }
+            } catch (localError) {
+                console.error(`[${extensionName}] 本地头像加载也失败:`, localError);
+            }
         }
     }
 
     /**
-     * 保存自定义头像数据 - 支持多端同步
+     * 保存自定义头像数据 - 使用Firebase云端存储
      */
-    function saveCustomAvatar(imageData) {
+    async function saveCustomAvatar(imageData) {
         try {
-            // 保存到本地存储
-            localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, imageData);
-            customAvatarData = imageData;
+            // 优先上传到Firebase云端存储
+            const avatarURL = await firebaseManager.uploadAvatar(imageData);
 
-            // 保存到同步存储
-            saveAvatarToSync(imageData);
-
-            console.log(`[${extensionName}] Custom avatar saved and synced`);
-            return true;
+            if (avatarURL) {
+                customAvatarData = imageData;
+                console.log(`[${extensionName}] 头像已上传到云端存储`);
+                return true;
+            } else {
+                // 云端上传失败，降级到本地存储
+                console.warn(`[${extensionName}] 云端上传失败，使用本地存储`);
+                localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, imageData);
+                customAvatarData = imageData;
+                return true;
+            }
         } catch (error) {
-            console.error(`[${extensionName}] Failed to save custom avatar:`, error);
-            return false;
+            console.error(`[${extensionName}] 保存头像失败:`, error);
+            // 异常时降级到本地存储
+            try {
+                localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, imageData);
+                customAvatarData = imageData;
+                return true;
+            } catch (localError) {
+                console.error(`[${extensionName}] 本地存储也失败:`, localError);
+                return false;
+            }
         }
     }
 
@@ -4291,17 +4615,65 @@ ${currentPersonality}
             petContainer = $("#pet-status-container");
         }
 
-        // 4. 加载宠物数据
-        loadPetData();
+        // 4. 初始化Firebase并加载数据
+        initializeFirebaseSystem();
 
-        // 4.1 确保拓麻歌子系统已应用
-        if (petData.dataVersion >= 4.0) {
-            applyTamagotchiSystem();
-        } else {
-            // 旧版本数据自动升级到拓麻歌子系统
-            petData.dataVersion = 4.0;
-            applyTamagotchiSystem();
-            savePetData();
+        async function initializeFirebaseSystem() {
+            try {
+                // 初始化Firebase
+                await firebaseManager.init();
+                await firebaseManager.authenticateUser();
+
+                // 设置实时监听器
+                const unsubscribe = firebaseManager.setupRealtimeListener((userData) => {
+                    if (userData.petData && userData.petData.lastSyncTime !== petData.lastSyncTime) {
+                        console.log('[Firebase] 检测到云端宠物数据变化，更新本地');
+                        petData = { ...petData, ...userData.petData };
+
+                        // 更新UI
+                        if (typeof updateUnifiedUIStatus === 'function') {
+                            updateUnifiedUIStatus();
+                        }
+                        if (typeof renderPetStatus === 'function') {
+                            renderPetStatus();
+                        }
+
+                        toastr.info('🔄 宠物数据已从其他设备同步', '', { timeOut: 3000 });
+                    }
+
+                    if (userData.avatarURL) {
+                        console.log('[Firebase] 检测到云端头像变化，重新加载');
+                        loadCustomAvatar().then(() => {
+                            toastr.info('🎨 头像已从其他设备同步', '', { timeOut: 3000 });
+                        });
+                    }
+                });
+
+                // 加载宠物数据
+                await loadPetData();
+
+                // 加载头像数据
+                await loadCustomAvatar();
+
+                // 确保拓麻歌子系统已应用
+                if (petData.dataVersion >= 4.0) {
+                    applyTamagotchiSystem();
+                }
+
+                console.log('[Firebase] 跨平台同步系统初始化完成');
+            } catch (error) {
+                console.error('[Firebase] 初始化失败，使用本地模式:', error);
+                // 降级到本地模式
+                const localData = localStorage.getItem(STORAGE_KEY_PET_DATA);
+                if (localData) {
+                    try {
+                        petData = { ...petData, ...JSON.parse(localData) };
+                    } catch (e) {
+                        console.error('本地数据解析失败:', e);
+                    }
+                }
+                applyTamagotchiSystem();
+            }
         }
 
         // 5. 加载自定义头像数据
@@ -12864,6 +13236,175 @@ ${currentPersonality}
         toastr.info('随机化标记已重置', '', { timeOut: 2000 });
     };
 
+    /**
+     * 测试Firebase跨平台同步系统
+     */
+    window.testFirebaseSync = async function() {
+        console.log('🔥 测试Firebase跨平台同步系统...');
+
+        try {
+            // 测试Firebase初始化
+            console.log('\n🚀 测试Firebase初始化:');
+            const initResult = await firebaseManager.init();
+            console.log(`- Firebase初始化: ${initResult ? '✅ 成功' : '❌ 失败'}`);
+
+            // 测试用户认证
+            console.log('\n👤 测试用户认证:');
+            const userId = await firebaseManager.authenticateUser();
+            console.log(`- 用户认证: ${userId ? '✅ 成功' : '❌ 失败'}`);
+            console.log(`- 用户ID: ${userId || '无'}`);
+
+            if (userId) {
+                // 测试宠物数据同步
+                console.log('\n📱 测试宠物数据同步:');
+                const testData = {
+                    ...petData,
+                    testTimestamp: Date.now(),
+                    lastSyncTime: Date.now()
+                };
+
+                const saveResult = await firebaseManager.savePetData(testData);
+                console.log(`- 保存到云端: ${saveResult ? '✅ 成功' : '❌ 失败'}`);
+
+                const loadResult = await firebaseManager.loadPetData();
+                console.log(`- 从云端加载: ${loadResult ? '✅ 成功' : '❌ 失败'}`);
+
+                if (loadResult && loadResult.testTimestamp === testData.testTimestamp) {
+                    console.log('✅ 宠物数据同步测试通过');
+                } else {
+                    console.log('❌ 宠物数据同步测试失败');
+                }
+
+                // 测试头像同步
+                console.log('\n🎨 测试头像同步:');
+                const testAvatar = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+
+                const uploadResult = await firebaseManager.uploadAvatar(testAvatar);
+                console.log(`- 上传头像: ${uploadResult ? '✅ 成功' : '❌ 失败'}`);
+
+                const downloadResult = await firebaseManager.loadAvatar();
+                console.log(`- 下载头像: ${downloadResult ? '✅ 成功' : '❌ 失败'}`);
+
+                // 测试实时监听器
+                console.log('\n🔄 测试实时监听器:');
+                const unsubscribe = firebaseManager.setupRealtimeListener((userData) => {
+                    console.log('✅ 实时监听器触发:', Object.keys(userData));
+                });
+                console.log(`- 监听器设置: ${unsubscribe ? '✅ 成功' : '❌ 失败'}`);
+
+                console.log('\n🎉 Firebase同步系统测试完成！');
+                console.log('💡 系统特点:');
+                console.log('  - 跨平台数据同步（PC ↔ 手机）');
+                console.log('  - 云端头像存储（无大小限制）');
+                console.log('  - 实时数据监听（自动同步）');
+                console.log('  - 匿名用户认证（无需注册）');
+                console.log('  - 自动降级到本地存储');
+
+                toastr.success('🔥 Firebase同步系统测试通过！', '', { timeOut: 3000 });
+            }
+
+        } catch (error) {
+            console.error('❌ Firebase同步系统测试失败:', error);
+            toastr.error('Firebase同步系统测试失败', '', { timeOut: 3000 });
+        }
+    };
+
+    /**
+     * 生成设备连接码
+     */
+    window.generateDeviceCode = async function() {
+        try {
+            if (!firebaseManager.currentUser) {
+                await firebaseManager.authenticateUser();
+            }
+
+            if (!firebaseManager.currentUser) {
+                throw new Error('用户认证失败');
+            }
+
+            // 生成6位随机码
+            const code = Math.floor(100000 + Math.random() * 900000).toString();
+            const expiresAt = Date.now() + 5 * 60 * 1000; // 5分钟后过期
+
+            // 保存连接码到云端
+            await firebaseManager.db.collection('deviceCodes').doc(code).set({
+                userId: firebaseManager.currentUser.uid,
+                expiresAt: expiresAt,
+                used: false
+            });
+
+            console.log('🔗 设备连接码已生成:', code);
+            console.log('⏰ 有效期: 5分钟');
+
+            // 显示连接码
+            toastr.info(`设备连接码: ${code}<br>有效期: 5分钟`, '🔗 连接新设备', {
+                timeOut: 30000,
+                extendedTimeOut: 10000,
+                allowHtml: true
+            });
+
+            return code;
+        } catch (error) {
+            console.error('生成连接码失败:', error);
+            toastr.error('生成连接码失败', '', { timeOut: 3000 });
+            return null;
+        }
+    };
+
+    /**
+     * 使用连接码连接设备
+     */
+    window.connectWithCode = async function(code) {
+        try {
+            if (!code) {
+                code = prompt('请输入6位连接码:');
+                if (!code) return;
+            }
+
+            // 验证连接码
+            const codeDoc = await firebaseManager.db.collection('deviceCodes').doc(code).get();
+
+            if (!codeDoc.exists) {
+                throw new Error('连接码不存在');
+            }
+
+            const codeData = codeDoc.data();
+
+            if (codeData.used) {
+                throw new Error('连接码已被使用');
+            }
+
+            if (Date.now() > codeData.expiresAt) {
+                throw new Error('连接码已过期');
+            }
+
+            // 保存用户ID到本地
+            await firebaseManager.saveLocalUserId(codeData.userId);
+            firebaseManager.currentUser = { uid: codeData.userId };
+
+            // 标记连接码为已使用
+            await firebaseManager.db.collection('deviceCodes').doc(code).update({
+                used: true
+            });
+
+            // 重新加载数据
+            await loadPetData();
+            await loadCustomAvatar();
+
+            console.log('✅ 设备连接成功！');
+            toastr.success('🎉 设备连接成功！数据已同步', '', { timeOut: 5000 });
+
+            return true;
+        } catch (error) {
+            console.error('设备连接失败:', error);
+            toastr.error(`设备连接失败: ${error.message}`, '', { timeOut: 3000 });
+            return false;
+        }
+    };
+
     console.log("🐾 虚拟宠物系统脚本已加载完成");
-    console.log("🎲 智能初始化系统：首次打开随机化到50以下，后续自然衰减到100");
+    console.log("🔥 Firebase跨平台同步系统已启用");
+    console.log("🧪 运行 testFirebaseSync() 来测试同步功能");
+    console.log("🔗 运行 generateDeviceCode() 来生成设备连接码");
+    console.log("📱 运行 connectWithCode() 来连接新设备");
 });

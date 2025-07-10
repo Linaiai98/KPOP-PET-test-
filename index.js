@@ -6586,6 +6586,7 @@ ${currentPersonality}
         console.log('- quickVerifyHugFunction() - 快速验证抱抱功能是否完整');
         console.log('- diagnose75ValueIssue() - 诊断和修复75数值问题');
         console.log('- apply50CapSystem() - 应用50上限系统（增强养成挑战性）');
+        console.log('- diagnoseValueResetIssue() - 诊断数值重置问题（检查为什么数值会变化）');
 
         // 强制刷新UI
         if (typeof renderPetStatus === 'function') {
@@ -12948,6 +12949,118 @@ ${currentPersonality}
             },
             maxCap: 50,
             improvement: '更有挑战性的养成体验'
+        };
+    };
+
+    /**
+     * 诊断数值重置问题
+     */
+    window.diagnoseValueResetIssue = function() {
+        console.log('🔍 诊断数值重置问题...');
+
+        // 检查当前数据版本
+        console.log('\n📊 当前数据状态:');
+        console.log(`- 数据版本: ${petData.dataVersion}`);
+        console.log(`- 健康: ${petData.health}/100`);
+        console.log(`- 快乐: ${petData.happiness}/100`);
+        console.log(`- 饱食: ${petData.hunger}/100`);
+        console.log(`- 精力: ${petData.energy}/100`);
+
+        // 检查存储的数据
+        console.log('\n💾 存储数据检查:');
+        const localData = localStorage.getItem(STORAGE_KEY_PET_DATA);
+        const syncData = loadFromSyncStorage();
+
+        console.log(`- 本地存储: ${localData ? '✅ 存在' : '❌ 不存在'}`);
+        console.log(`- 同步存储: ${syncData ? '✅ 存在' : '❌ 不存在'}`);
+
+        if (localData) {
+            try {
+                const parsed = JSON.parse(localData);
+                console.log(`- 本地数据版本: ${parsed.dataVersion}`);
+                console.log(`- 本地数值: 健康${parsed.health}, 快乐${parsed.happiness}, 饱食${parsed.hunger}, 精力${parsed.energy}`);
+            } catch (e) {
+                console.log('- 本地数据解析失败');
+            }
+        }
+
+        if (syncData) {
+            try {
+                const parsed = typeof syncData === 'object' ? syncData : JSON.parse(syncData);
+                console.log(`- 同步数据版本: ${parsed.dataVersion}`);
+                console.log(`- 同步数值: 健康${parsed.health}, 快乐${parsed.happiness}, 饱食${parsed.hunger}, 精力${parsed.energy}`);
+            } catch (e) {
+                console.log('- 同步数据解析失败');
+            }
+        }
+
+        // 检查时间信息
+        console.log('\n⏰ 时间信息:');
+        const now = Date.now();
+        const timeSinceLastUpdate = now - (petData.lastUpdateTime || now);
+        const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
+        console.log(`- 距离上次更新: ${hoursElapsed.toFixed(1)}小时`);
+        console.log(`- 上次更新时间: ${new Date(petData.lastUpdateTime || 0).toLocaleString()}`);
+
+        // 分析可能的重置原因
+        console.log('\n🔍 可能的重置原因分析:');
+
+        if (!petData.dataVersion || petData.dataVersion < 4.0) {
+            console.log('❌ 数据版本过低，会触发迁移重置');
+        } else {
+            console.log('✅ 数据版本正常，不会触发迁移');
+        }
+
+        if (hoursElapsed > 2) {
+            console.log('⚠️ 长时间离线，会触发初始化缓冲');
+        } else {
+            console.log('✅ 离线时间正常，不会触发缓冲');
+        }
+
+        // 检查是否有数值限制
+        const hasValueCaps = petData.health > 50 || petData.happiness > 50 ||
+                            petData.hunger > 50 || petData.energy > 50;
+
+        if (hasValueCaps) {
+            console.log('⚠️ 检测到数值超过50上限');
+        } else {
+            console.log('✅ 数值在50上限范围内');
+        }
+
+        console.log('\n💡 建议解决方案:');
+
+        if (!petData.dataVersion || petData.dataVersion < 4.0) {
+            console.log('1. 数据版本问题 - 运行: petData.dataVersion = 4.0; savePetData();');
+        }
+
+        if (hoursElapsed > 2) {
+            console.log('2. 缓冲机制问题 - 运行: petData.lastUpdateTime = Date.now(); savePetData();');
+        }
+
+        if (hasValueCaps) {
+            console.log('3. 数值超限问题 - 运行: apply50CapSystem();');
+        }
+
+        console.log('\n🧪 测试步骤:');
+        console.log('1. 记录当前数值');
+        console.log('2. 关闭并重新打开SillyTavern');
+        console.log('3. 观察数值是否发生变化');
+        console.log('4. 如果变化，运行此诊断函数查看原因');
+
+        return {
+            dataVersion: petData.dataVersion,
+            currentValues: {
+                health: petData.health,
+                happiness: petData.happiness,
+                hunger: petData.hunger,
+                energy: petData.energy
+            },
+            hoursElapsed: hoursElapsed,
+            hasLocalData: !!localData,
+            hasSyncData: !!syncData,
+            needsMigration: !petData.dataVersion || petData.dataVersion < 4.0,
+            needsBuffer: hoursElapsed > 2,
+            hasValueCaps: hasValueCaps
         };
     };
 

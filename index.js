@@ -2733,9 +2733,27 @@ ${currentPersonality}
             const button = $(this);
             const originalText = button.text();
 
-            button.prop('disabled', true).text('🔄 生成中...');
+            button.prop('disabled', true).text('🔄 检查中...');
 
             try {
+                // 先进行快速的前置条件检查
+                console.log('🔍 生成连接码前置条件检查...');
+
+                if (!firebaseManager.initialized) {
+                    toastr.warning('Firebase未初始化，请稍后再试', '提示', { timeOut: 3000 });
+                    return;
+                }
+
+                if (!firebaseManager.currentUser) {
+                    button.text('🔄 认证中...');
+                    const userId = await firebaseManager.authenticateUser();
+                    if (!userId) {
+                        toastr.error('用户认证失败，无法生成连接码', '错误', { timeOut: 3000 });
+                        return;
+                    }
+                }
+
+                button.text('🔄 生成中...');
                 const code = await generateDeviceCode();
                 if (code) {
                     // 显示生成的连接码
@@ -2746,6 +2764,9 @@ ${currentPersonality}
                         $('#generated-code-display').hide().text('------');
                     }, 5 * 60 * 1000);
                 }
+            } catch (error) {
+                console.error('生成连接码按钮错误:', error);
+                toastr.error('生成连接码失败，请查看控制台', '错误', { timeOut: 3000 });
             } finally {
                 button.prop('disabled', false).text(originalText);
             }
@@ -13679,21 +13700,54 @@ ${currentPersonality}
     };
 
     /**
-     * 生成设备连接码 - 解决"双胞胎陌生人"问题
+     * 生成设备连接码 - 解决"双胞胎陌生人"问题（增强版）
      */
     window.generateDeviceCode = async function() {
         try {
             console.log('🔗 开始生成设备连接码...');
             console.log('💡 这将解决不同设备间的"身份不一致"问题');
 
+            // 🛡️ 守卫检查1：Firebase管理器初始化状态
+            console.log('🔍 检查Firebase管理器状态...');
+            if (!firebaseManager.initialized) {
+                console.log('⚠️ Firebase管理器未初始化，正在初始化...');
+                const initSuccess = await firebaseManager.init();
+                if (!initSuccess) {
+                    throw new Error('Firebase初始化失败，无法生成连接码');
+                }
+            }
+            console.log('✅ Firebase管理器已初始化');
+
+            // 🛡️ 守卫检查2：用户认证状态
+            console.log('🔍 检查用户认证状态...');
             if (!firebaseManager.currentUser) {
                 console.log('👤 用户未认证，正在认证...');
-                await firebaseManager.authenticateUser();
+                const userId = await firebaseManager.authenticateUser();
+                if (!userId) {
+                    throw new Error('用户认证失败，无法生成连接码');
+                }
+                console.log(`✅ 用户认证成功: ${userId}`);
+            } else {
+                console.log(`✅ 用户已认证: ${firebaseManager.currentUser.uid}`);
             }
 
-            if (!firebaseManager.currentUser) {
-                throw new Error('用户认证失败');
+            // 🛡️ 守卫检查3：Firebase Auth实例状态（v9+ SDK）
+            if (typeof window.getAuth !== 'undefined') {
+                console.log('🔍 检查Firebase Auth实例状态（v9+ SDK）...');
+                const auth = window.getAuth ? window.getAuth() : null;
+                if (auth && auth.currentUser) {
+                    console.log(`✅ Firebase Auth实例正常: ${auth.currentUser.uid}`);
+                } else {
+                    console.warn('⚠️ Firebase Auth实例状态异常，但firebaseManager有用户');
+                }
             }
+
+            // 🛡️ 守卫检查4：数据库连接状态
+            console.log('🔍 检查数据库连接状态...');
+            if (!firebaseManager.db) {
+                throw new Error('Firestore数据库未初始化');
+            }
+            console.log('✅ Firestore数据库连接正常');
 
             console.log(`👤 当前设备用户ID: ${firebaseManager.currentUser.uid}`);
             console.log('📱 其他设备将获得相同的用户ID，实现数据同步');
@@ -13710,14 +13764,54 @@ ${currentPersonality}
                 createdBy: 'device_connection_system'
             };
 
+            console.log('📝 准备写入连接码到Firestore...');
+            console.log(`📊 连接码数据:`, codeData);
+
             // 保存连接码到云端（支持v9+ SDK）
-            if (typeof window.doc !== 'undefined' && typeof window.setDoc !== 'undefined') {
-                // v9+ 模块化SDK
-                const codeDocRef = window.doc(firebaseManager.db, 'deviceCodes', code);
-                await window.setDoc(codeDocRef, codeData);
-            } else {
-                // 兼容模式SDK
-                await firebaseManager.db.collection('deviceCodes').doc(code).set(codeData);
+            try {
+                if (typeof window.doc !== 'undefined' && typeof window.setDoc !== 'undefined') {
+                    // v9+ 模块化SDK
+                    console.log('🔥 使用v9+ SDK写入连接码...');
+                    const codeDocRef = window.doc(firebaseManager.db, 'deviceCodes', code);
+                    await window.setDoc(codeDocRef, codeData);
+                    console.log('✅ v9+ SDK写入成功');
+                } else {
+                    // 兼容模式SDK
+                    console.log('🔥 使用兼容模式SDK写入连接码...');
+                    await firebaseManager.db.collection('deviceCodes').doc(code).set(codeData);
+                    console.log('✅ 兼容模式SDK写入成功');
+                }
+            } catch (writeError) {
+                console.error('❌ Firestore写入失败:', writeError);
+                console.error('🔍 错误详情:');
+                console.error('  - 错误代码:', writeError.code);
+                console.error('  - 错误消息:', writeError.message);
+
+                if (writeError.code === 'permission-denied') {
+                    console.error('🚨 权限被拒绝！可能的原因:');
+                    console.error('  1. 用户认证状态在写入时失效');
+                    console.error('  2. Firebase安全规则配置问题');
+                    console.error('  3. 时序问题：认证未完全完成');
+
+                    // 尝试重新认证
+                    console.log('🔄 尝试重新认证...');
+                    const retryUserId = await firebaseManager.authenticateUser();
+                    if (retryUserId) {
+                        console.log('✅ 重新认证成功，再次尝试写入...');
+
+                        if (typeof window.doc !== 'undefined' && typeof window.setDoc !== 'undefined') {
+                            const codeDocRef = window.doc(firebaseManager.db, 'deviceCodes', code);
+                            await window.setDoc(codeDocRef, codeData);
+                        } else {
+                            await firebaseManager.db.collection('deviceCodes').doc(code).set(codeData);
+                        }
+                        console.log('✅ 重试写入成功');
+                    } else {
+                        throw new Error('重新认证失败，无法写入连接码');
+                    }
+                } else {
+                    throw writeError;
+                }
             }
 
             console.log('✅ 设备连接码已生成:', code);
@@ -13731,13 +13825,13 @@ ${currentPersonality}
                     <small>有效期: 5分钟</small><br><br>
                     <strong>📱 在其他设备上:</strong><br>
                     1. 打开相同的插件<br>
-                    2. 运行 connectWithCode()<br>
+                    2. 在设置中找到设备连接区域<br>
                     3. 输入连接码: ${code}<br>
-                    4. 完成设备身份同步
+                    4. 点击连接设备按钮
                 </div>
             `;
 
-            toastr.info(message, '🔗 连接新设备', {
+            toastr.success(message, '🔗 连接码生成成功', {
                 timeOut: 30000,
                 extendedTimeOut: 10000,
                 allowHtml: true
@@ -13746,7 +13840,18 @@ ${currentPersonality}
             return code;
         } catch (error) {
             console.error('❌ 生成连接码失败:', error);
-            toastr.error('生成连接码失败', '', { timeOut: 3000 });
+            console.error('🔍 完整错误信息:', error);
+
+            let errorMessage = '生成连接码失败';
+            if (error.code === 'permission-denied') {
+                errorMessage = '权限不足：用户认证可能未完成';
+            } else if (error.message.includes('网络')) {
+                errorMessage = '网络连接问题，请检查网络';
+            } else if (error.message.includes('初始化')) {
+                errorMessage = 'Firebase初始化失败';
+            }
+
+            toastr.error(errorMessage, '连接码生成失败', { timeOut: 5000 });
             return null;
         }
     };
@@ -14356,6 +14461,207 @@ ${currentPersonality}
         console.log('  1. 主设备: 点击"生成设备连接码"');
         console.log('  2. 新设备: 输入连接码并点击"连接"');
         console.log('  3. 诊断: 使用"检查身份"和"测试头像"按钮');
+    };
+
+    /**
+     * 诊断连接码生成问题 - 检查所有前置条件
+     */
+    window.diagnoseDeviceCodeGeneration = async function() {
+        console.log('🔍 诊断连接码生成问题...');
+        console.log('💡 这将检查生成连接码所需的所有前置条件');
+        console.log('');
+
+        let allChecksPass = true;
+        const issues = [];
+
+        try {
+            // 检查1：Firebase管理器初始化
+            console.log('1️⃣ Firebase管理器初始化检查:');
+            if (firebaseManager.initialized) {
+                console.log('✅ Firebase管理器已初始化');
+            } else {
+                console.log('❌ Firebase管理器未初始化');
+                allChecksPass = false;
+                issues.push('Firebase管理器未初始化');
+            }
+
+            // 检查2：用户认证状态
+            console.log('\n2️⃣ 用户认证状态检查:');
+            if (firebaseManager.currentUser) {
+                console.log(`✅ 用户已认证: ${firebaseManager.currentUser.uid}`);
+            } else {
+                console.log('❌ 用户未认证');
+                allChecksPass = false;
+                issues.push('用户未认证');
+
+                // 尝试认证
+                console.log('🔄 尝试自动认证...');
+                try {
+                    const userId = await firebaseManager.authenticateUser();
+                    if (userId) {
+                        console.log(`✅ 自动认证成功: ${userId}`);
+                    } else {
+                        console.log('❌ 自动认证失败');
+                        issues.push('自动认证失败');
+                    }
+                } catch (authError) {
+                    console.log('❌ 认证过程出错:', authError.message);
+                    issues.push(`认证错误: ${authError.message}`);
+                }
+            }
+
+            // 检查3：Firestore数据库连接
+            console.log('\n3️⃣ Firestore数据库连接检查:');
+            if (firebaseManager.db) {
+                console.log('✅ Firestore数据库实例存在');
+
+                // 尝试简单的读取操作
+                try {
+                    console.log('🔍 测试数据库连接...');
+                    if (typeof window.doc !== 'undefined' && typeof window.getDoc !== 'undefined') {
+                        // v9+ SDK
+                        const testDocRef = window.doc(firebaseManager.db, 'test', 'connection');
+                        await window.getDoc(testDocRef);
+                    } else {
+                        // 兼容模式SDK
+                        await firebaseManager.db.collection('test').doc('connection').get();
+                    }
+                    console.log('✅ 数据库连接测试成功');
+                } catch (dbError) {
+                    console.log('⚠️ 数据库连接测试失败:', dbError.message);
+                    if (dbError.code === 'permission-denied') {
+                        console.log('💡 这可能是正常的（测试文档权限限制）');
+                    } else {
+                        allChecksPass = false;
+                        issues.push(`数据库连接问题: ${dbError.message}`);
+                    }
+                }
+            } else {
+                console.log('❌ Firestore数据库实例不存在');
+                allChecksPass = false;
+                issues.push('Firestore数据库未初始化');
+            }
+
+            // 检查4：Firebase Auth实例（v9+ SDK）
+            console.log('\n4️⃣ Firebase Auth实例检查:');
+            if (typeof window.getAuth !== 'undefined') {
+                try {
+                    const auth = window.getAuth();
+                    if (auth && auth.currentUser) {
+                        console.log(`✅ Firebase Auth实例正常: ${auth.currentUser.uid}`);
+                    } else {
+                        console.log('⚠️ Firebase Auth实例无当前用户');
+                        console.log('💡 这可能是时序问题或认证状态同步延迟');
+                    }
+                } catch (authError) {
+                    console.log('❌ Firebase Auth实例错误:', authError.message);
+                    issues.push(`Auth实例错误: ${authError.message}`);
+                }
+            } else {
+                console.log('ℹ️ 使用兼容模式SDK，跳过v9+ Auth检查');
+            }
+
+            // 检查5：网络连接
+            console.log('\n5️⃣ 网络连接检查:');
+            try {
+                await fetch('https://firestore.googleapis.com/', {
+                    method: 'HEAD',
+                    mode: 'no-cors'
+                });
+                console.log('✅ Firebase服务网络连接正常');
+            } catch (networkError) {
+                console.log('❌ Firebase服务网络连接失败');
+                allChecksPass = false;
+                issues.push('网络连接问题');
+            }
+
+            // 检查6：权限测试（尝试写入测试数据）
+            console.log('\n6️⃣ 权限测试:');
+            if (firebaseManager.currentUser) {
+                try {
+                    console.log('🔍 测试deviceCodes集合写入权限...');
+                    const testCode = 'TEST' + Date.now();
+                    const testData = {
+                        userId: firebaseManager.currentUser.uid,
+                        expiresAt: Date.now() + 1000, // 1秒后过期
+                        used: false,
+                        createdAt: Date.now(),
+                        createdBy: 'permission_test'
+                    };
+
+                    if (typeof window.doc !== 'undefined' && typeof window.setDoc !== 'undefined') {
+                        const testDocRef = window.doc(firebaseManager.db, 'deviceCodes', testCode);
+                        await window.setDoc(testDocRef, testData);
+                    } else {
+                        await firebaseManager.db.collection('deviceCodes').doc(testCode).set(testData);
+                    }
+
+                    console.log('✅ deviceCodes写入权限测试成功');
+
+                    // 清理测试数据
+                    setTimeout(async () => {
+                        try {
+                            if (typeof window.doc !== 'undefined' && typeof window.deleteDoc !== 'undefined') {
+                                const testDocRef = window.doc(firebaseManager.db, 'deviceCodes', testCode);
+                                await window.deleteDoc(testDocRef);
+                            } else {
+                                await firebaseManager.db.collection('deviceCodes').doc(testCode).delete();
+                            }
+                        } catch (cleanupError) {
+                            console.log('ℹ️ 测试数据清理失败（可忽略）:', cleanupError.message);
+                        }
+                    }, 2000);
+
+                } catch (permissionError) {
+                    console.log('❌ deviceCodes写入权限测试失败:', permissionError.message);
+                    allChecksPass = false;
+                    issues.push(`权限问题: ${permissionError.message}`);
+
+                    if (permissionError.code === 'permission-denied') {
+                        console.log('🚨 权限被拒绝！可能的原因:');
+                        console.log('  1. Firebase安全规则配置问题');
+                        console.log('  2. 用户认证状态异常');
+                        console.log('  3. 时序问题：认证状态未完全同步');
+                    }
+                }
+            } else {
+                console.log('⚠️ 跳过权限测试（用户未认证）');
+            }
+
+            // 总结
+            console.log('\n📋 诊断总结:');
+            if (allChecksPass) {
+                console.log('🎉 所有检查通过！连接码生成应该正常工作');
+                toastr.success('所有检查通过，连接码生成就绪', '诊断完成', { timeOut: 3000 });
+            } else {
+                console.log('🚨 发现问题，连接码生成可能失败');
+                console.log('❌ 问题列表:');
+                issues.forEach((issue, index) => {
+                    console.log(`  ${index + 1}. ${issue}`);
+                });
+
+                console.log('\n🔧 建议的解决步骤:');
+                console.log('  1. 刷新页面重新初始化');
+                console.log('  2. 检查网络连接');
+                console.log('  3. 检查Firebase配置');
+                console.log('  4. 运行 checkFirebaseStatus() 进行详细检查');
+
+                toastr.warning(`发现 ${issues.length} 个问题，请查看控制台`, '诊断完成', { timeOut: 5000 });
+            }
+
+            return {
+                success: allChecksPass,
+                issues: issues
+            };
+
+        } catch (error) {
+            console.error('❌ 诊断过程出错:', error);
+            toastr.error('诊断过程出错', '诊断失败', { timeOut: 3000 });
+            return {
+                success: false,
+                error: error.message
+            };
+        }
     };
 
     /**
@@ -15067,6 +15373,10 @@ ${currentPersonality}
     console.log("🚀 运行 testAvatarUpload() 来测试头像上传功能");
     console.log("🚀 运行 diagnoseAvatarSync() 来诊断头像同步问题");
     console.log("💡 如果头像无法跨设备同步，这些函数会帮你找到问题");
+    console.log("");
+    console.log("🔗 设备连接诊断:");
+    console.log("🔗 运行 diagnoseDeviceCodeGeneration() 来诊断连接码生成问题");
+    console.log("💡 如果无法生成连接码，这个函数会检查所有前置条件");
     console.log("");
     console.log("🔥 Firebase SDK管理:");
     console.log("🔥 运行 setupFirebaseV9() 来查看v9+ SDK配置指南");

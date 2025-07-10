@@ -19,162 +19,6 @@ jQuery(async () => {
     const STORAGE_KEY_ENABLED = "virtual-pet-enabled";
     const STORAGE_KEY_PET_DATA = "virtual-pet-data";
     const STORAGE_KEY_CUSTOM_AVATAR = "virtual-pet-custom-avatar";
-    const STORAGE_KEY_AI_SETTINGS = "virtual-pet-ai-settings";
-    const STORAGE_KEY_PERSONALITY = "virtual-pet-personality";
-
-    /**
-     * 统一存储管理器 - 跨设备同步的核心
-     */
-    const storageManager = {
-        /**
-         * 写入数据到同步存储
-         */
-        async set(data) {
-            try {
-                if (chrome && chrome.storage && chrome.storage.sync) {
-                    return new Promise((resolve, reject) => {
-                        chrome.storage.sync.set(data, () => {
-                            if (chrome.runtime.lastError) {
-                                console.error('[StorageManager] 同步存储写入失败:', chrome.runtime.lastError);
-                                reject(chrome.runtime.lastError);
-                            } else {
-                                console.log('[StorageManager] 同步存储写入成功:', Object.keys(data));
-                                resolve();
-                            }
-                        });
-                    });
-                } else {
-                    // 降级到localStorage
-                    console.warn('[StorageManager] chrome.storage.sync不可用，降级到localStorage');
-                    Object.entries(data).forEach(([key, value]) => {
-                        localStorage.setItem(key, JSON.stringify(value));
-                    });
-                    return Promise.resolve();
-                }
-            } catch (error) {
-                console.error('[StorageManager] 存储写入异常:', error);
-                throw error;
-            }
-        },
-
-        /**
-         * 从同步存储读取数据
-         */
-        async get(keys) {
-            try {
-                if (chrome && chrome.storage && chrome.storage.sync) {
-                    return new Promise((resolve, reject) => {
-                        chrome.storage.sync.get(keys, (result) => {
-                            if (chrome.runtime.lastError) {
-                                console.error('[StorageManager] 同步存储读取失败:', chrome.runtime.lastError);
-                                reject(chrome.runtime.lastError);
-                            } else {
-                                console.log('[StorageManager] 同步存储读取成功:', Object.keys(result));
-                                resolve(result);
-                            }
-                        });
-                    });
-                } else {
-                    // 降级到localStorage
-                    console.warn('[StorageManager] chrome.storage.sync不可用，降级到localStorage');
-                    const result = {};
-                    keys.forEach(key => {
-                        const value = localStorage.getItem(key);
-                        if (value) {
-                            try {
-                                result[key] = JSON.parse(value);
-                            } catch (e) {
-                                result[key] = value;
-                            }
-                        }
-                    });
-                    return Promise.resolve(result);
-                }
-            } catch (error) {
-                console.error('[StorageManager] 存储读取异常:', error);
-                throw error;
-            }
-        },
-
-        /**
-         * 从同步存储删除数据
-         */
-        async remove(keys) {
-            try {
-                if (chrome && chrome.storage && chrome.storage.sync) {
-                    return new Promise((resolve, reject) => {
-                        chrome.storage.sync.remove(keys, () => {
-                            if (chrome.runtime.lastError) {
-                                console.error('[StorageManager] 同步存储删除失败:', chrome.runtime.lastError);
-                                reject(chrome.runtime.lastError);
-                            } else {
-                                console.log('[StorageManager] 同步存储删除成功:', keys);
-                                resolve();
-                            }
-                        });
-                    });
-                } else {
-                    // 降级到localStorage
-                    console.warn('[StorageManager] chrome.storage.sync不可用，降级到localStorage');
-                    if (Array.isArray(keys)) {
-                        keys.forEach(key => localStorage.removeItem(key));
-                    } else {
-                        localStorage.removeItem(keys);
-                    }
-                    return Promise.resolve();
-                }
-            } catch (error) {
-                console.error('[StorageManager] 存储删除异常:', error);
-                throw error;
-            }
-        }
-    };
-
-    /**
-     * 初始化实时同步监听器
-     */
-    function initSyncListener() {
-        if (chrome && chrome.storage && chrome.storage.onChanged) {
-            chrome.storage.onChanged.addListener((changes, areaName) => {
-                if (areaName !== 'sync') return;
-
-                console.log('[SyncListener] 检测到同步存储变化:', Object.keys(changes));
-
-                // 处理宠物数据变化
-                if (changes[STORAGE_KEY_PET_DATA]) {
-                    const newData = changes[STORAGE_KEY_PET_DATA].newValue;
-                    if (newData && newData.lastSyncTime !== petData.lastSyncTime) {
-                        console.log('[SyncListener] 宠物数据已更新，刷新UI');
-                        petData = { ...petData, ...newData };
-
-                        // 更新UI
-                        if (typeof updateUnifiedUIStatus === 'function') {
-                            updateUnifiedUIStatus();
-                        }
-                        if (typeof renderPetStatus === 'function') {
-                            renderPetStatus();
-                        }
-
-                        toastr.info('🔄 宠物数据已从其他设备同步', '', { timeOut: 3000 });
-                    }
-                }
-
-                // 处理头像数据变化
-                if (changes[`${STORAGE_KEY_CUSTOM_AVATAR}_manifest`]) {
-                    console.log('[SyncListener] 头像数据已更新，重新加载');
-                    loadCustomAvatar().then(() => {
-                        toastr.info('🎨 头像已从其他设备同步', '', { timeOut: 3000 });
-                    }).catch(error => {
-                        console.error('[SyncListener] 头像同步失败:', error);
-                    });
-                }
-            });
-
-            console.log('[SyncListener] 实时同步监听器已启动');
-        } else {
-            console.warn('[SyncListener] chrome.storage.onChanged不可用，无法启用实时同步');
-        }
-    }
     
     // DOM IDs and Selectors
     const BUTTON_ID = "virtual-pet-button";
@@ -2116,15 +1960,51 @@ ${currentPersonality}
     /**
      * 加载宠物数据（支持跨设备同步）
      */
-    async function loadPetData() {
-        try {
-            // 使用统一存储管理器从同步存储加载
-            const result = await storageManager.get([STORAGE_KEY_PET_DATA]);
-            const savedData = result[STORAGE_KEY_PET_DATA];
+    function loadPetData() {
+        // 首先尝试从同步存储加载
+        const syncData = loadFromSyncStorage();
+        const localData = localStorage.getItem(STORAGE_KEY_PET_DATA);
 
-            console.log(`[${extensionName}] 从同步存储加载数据:`, savedData ? '✅ 存在' : '❌ 不存在');
+        let savedData = null;
+        let dataSource = 'none';
 
-            if (savedData) {
+        // 比较同步数据和本地数据，选择最新的
+        if (syncData && localData) {
+            try {
+                const syncParsed = typeof syncData === 'object' ? syncData : JSON.parse(syncData);
+                const localParsed = JSON.parse(localData);
+
+                const syncTime = syncParsed.lastSyncTime || 0;
+                const localTime = localParsed.lastSyncTime || 0;
+
+                if (syncTime > localTime) {
+                    savedData = syncParsed;
+                    dataSource = 'sync';
+                    console.log(`[${extensionName}] 使用同步数据（更新）`);
+                } else {
+                    savedData = localParsed;
+                    dataSource = 'local';
+                    console.log(`[${extensionName}] 使用本地数据（更新）`);
+                }
+            } catch (error) {
+                console.warn(`[${extensionName}] 数据比较失败，使用本地数据:`, error);
+                savedData = JSON.parse(localData);
+                dataSource = 'local';
+            }
+        } else if (syncData) {
+            savedData = typeof syncData === 'object' ? syncData : JSON.parse(syncData);
+            dataSource = 'sync';
+            console.log(`[${extensionName}] 使用同步数据（仅有同步）`);
+        } else if (localData) {
+            savedData = JSON.parse(localData);
+            dataSource = 'local';
+            console.log(`[${extensionName}] 使用本地数据（仅有本地）`);
+        }
+
+        if (savedData) {
+            try {
+                // savedData 已经是解析后的对象，不需要再次解析
+
                 // 检查是否需要数据迁移到拓麻歌子系统
                 const needsMigration = !savedData.dataVersion || savedData.dataVersion < 4.0;
 
@@ -2203,7 +2083,10 @@ ${currentPersonality}
                 if (!petData.personality) {
                     petData.personality = getCurrentPersonality();
                 }
-            } else {
+            } catch (error) {
+                console.error(`[${extensionName}] Error loading pet data:`, error);
+            }
+        } else {
             // 没有保存的数据，首次使用
             petData.dataVersion = 4.0;
             petData.personality = getCurrentPersonality(); // 设置初始人设
@@ -2212,11 +2095,8 @@ ${currentPersonality}
             savePetData();
         }
 
-            // 添加初始化缓冲机制
-            applyInitializationBuffer();
-        } catch (error) {
-            console.error(`[${extensionName}] 加载宠物数据失败:`, error);
-        }
+        // 添加初始化缓冲机制
+        applyInitializationBuffer();
     }
 
     /**
@@ -2280,9 +2160,9 @@ ${currentPersonality}
     }
     
     /**
-     * 保存宠物数据 - 使用统一存储管理器
+     * 保存宠物数据
      */
-    async function savePetData() {
+    function savePetData() {
         try {
             // 添加时间戳用于同步
             const dataWithTimestamp = {
@@ -2290,14 +2170,13 @@ ${currentPersonality}
                 lastSyncTime: Date.now()
             };
 
-            // 使用统一存储管理器保存到同步存储
-            await storageManager.set({
-                [STORAGE_KEY_PET_DATA]: dataWithTimestamp
-            });
+            localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(dataWithTimestamp));
 
-            console.log(`[${extensionName}] 宠物数据已保存到同步存储`);
+            // 同时保存到全局同步存储（如果可用）
+            saveToSyncStorage(dataWithTimestamp);
+
         } catch (error) {
-            console.error(`[${extensionName}] 保存宠物数据失败:`, error);
+            console.error(`[${extensionName}] Error saving pet data:`, error);
         }
     }
 
@@ -3424,129 +3303,83 @@ ${currentPersonality}
     }
 
     /**
-     * 加载自定义头像数据 - 使用分块存储支持多端同步
+     * 加载自定义头像数据 - 支持多端同步
      */
-    async function loadCustomAvatar() {
+    function loadCustomAvatar() {
         try {
-            // 使用统一存储管理器加载头像清单
-            const manifestResult = await storageManager.get([`${STORAGE_KEY_CUSTOM_AVATAR}_manifest`]);
-            const manifest = manifestResult[`${STORAGE_KEY_CUSTOM_AVATAR}_manifest`];
+            // 首先尝试从同步存储加载
+            const syncAvatar = loadAvatarFromSync();
+            const localAvatar = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
 
-            if (!manifest) {
-                console.log(`[${extensionName}] 没有找到头像数据`);
-                return;
+            // 比较同步数据和本地数据，选择最新的
+            if (syncAvatar && localAvatar) {
+                // 如果都存在，优先使用同步数据
+                customAvatarData = syncAvatar;
+                // 同步到本地存储
+                localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, syncAvatar);
+                console.log(`[${extensionName}] 使用同步的头像数据并更新本地`);
+            } else if (syncAvatar) {
+                customAvatarData = syncAvatar;
+                // 同步到本地存储
+                localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, syncAvatar);
+                console.log(`[${extensionName}] 使用同步的头像数据（仅有同步）并保存到本地`);
+            } else if (localAvatar) {
+                customAvatarData = localAvatar;
+                console.log(`[${extensionName}] 使用本地头像数据（仅有本地）`);
             }
 
-            // 构建所有数据块的键名
-            const chunkKeys = [];
-            for (let i = 0; i < manifest.totalChunks; i++) {
-                chunkKeys.push(`${STORAGE_KEY_CUSTOM_AVATAR}_chunk_${i}`);
+            if (customAvatarData) {
+                console.log(`[${extensionName}] Custom avatar loaded, size: ${Math.round(customAvatarData.length/1024)}KB`);
+
+                // 确保头像显示更新
+                setTimeout(() => {
+                    updateAvatarDisplay();
+                    updateFloatingButtonAvatar();
+                }, 100);
+            } else {
+                console.log(`[${extensionName}] No custom avatar found`);
             }
-
-            // 批量获取所有数据块
-            const chunksResult = await storageManager.get(chunkKeys);
-
-            // 重新组装头像数据
-            let avatarData = '';
-            for (let i = 0; i < manifest.totalChunks; i++) {
-                const chunkKey = `${STORAGE_KEY_CUSTOM_AVATAR}_chunk_${i}`;
-                const chunk = chunksResult[chunkKey];
-                if (chunk) {
-                    avatarData += chunk;
-                } else {
-                    console.error(`[${extensionName}] 缺少头像数据块 ${i}`);
-                    return;
-                }
-            }
-
-            // 验证数据完整性
-            if (avatarData.length !== manifest.size) {
-                console.error(`[${extensionName}] 头像数据大小不匹配: 期望${manifest.size}, 实际${avatarData.length}`);
-                return;
-            }
-
-            customAvatarData = avatarData;
-            console.log(`[${extensionName}] 头像加载成功, 大小: ${Math.round(avatarData.length/1024)}KB (${manifest.totalChunks}个数据块)`);
-
-            // 确保头像显示更新
-            setTimeout(() => {
-                updateAvatarDisplay();
-                updateFloatingButtonAvatar();
-            }, 100);
-
         } catch (error) {
-            console.warn(`[${extensionName}] 加载自定义头像失败:`, error);
+            console.warn(`[${extensionName}] Failed to load custom avatar:`, error);
         }
     }
 
     /**
-     * 保存自定义头像数据 - 使用分块存储支持多端同步
+     * 保存自定义头像数据 - 支持多端同步
      */
-    async function saveCustomAvatar(imageData) {
+    function saveCustomAvatar(imageData) {
         try {
-            // 头像分块存储（解决8KB限制）
-            const chunks = [];
-            const chunkSize = 7000; // 小于8KB限制
-
-            for (let i = 0; i < imageData.length; i += chunkSize) {
-                chunks.push(imageData.slice(i, i + chunkSize));
-            }
-
-            // 创建头像清单
-            const manifest = {
-                totalChunks: chunks.length,
-                timestamp: Date.now(),
-                size: imageData.length
-            };
-
-            // 准备存储数据
-            const storageData = {
-                [`${STORAGE_KEY_CUSTOM_AVATAR}_manifest`]: manifest
-            };
-
-            // 添加所有数据块
-            chunks.forEach((chunk, index) => {
-                storageData[`${STORAGE_KEY_CUSTOM_AVATAR}_chunk_${index}`] = chunk;
-            });
-
-            // 使用统一存储管理器保存
-            await storageManager.set(storageData);
-
+            // 保存到本地存储
+            localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, imageData);
             customAvatarData = imageData;
-            console.log(`[${extensionName}] 自定义头像已保存（${chunks.length}个数据块）`);
+
+            // 保存到同步存储
+            saveAvatarToSync(imageData);
+
+            console.log(`[${extensionName}] Custom avatar saved and synced`);
             return true;
         } catch (error) {
-            console.error(`[${extensionName}] 保存自定义头像失败:`, error);
+            console.error(`[${extensionName}] Failed to save custom avatar:`, error);
             return false;
         }
     }
 
     /**
-     * 清除自定义头像 - 使用统一存储管理器
+     * 清除自定义头像 - 支持多端同步
      */
-    async function clearCustomAvatar() {
+    function clearCustomAvatar() {
         try {
-            // 首先获取清单以确定需要删除的数据块
-            const manifestResult = await storageManager.get([`${STORAGE_KEY_CUSTOM_AVATAR}_manifest`]);
-            const manifest = manifestResult[`${STORAGE_KEY_CUSTOM_AVATAR}_manifest`];
-
-            const keysToRemove = [`${STORAGE_KEY_CUSTOM_AVATAR}_manifest`];
-
-            // 如果有清单，添加所有数据块键名
-            if (manifest && manifest.totalChunks) {
-                for (let i = 0; i < manifest.totalChunks; i++) {
-                    keysToRemove.push(`${STORAGE_KEY_CUSTOM_AVATAR}_chunk_${i}`);
-                }
-            }
-
-            // 批量删除所有相关数据
-            await storageManager.remove(keysToRemove);
-
+            // 清除本地存储
+            localStorage.removeItem(STORAGE_KEY_CUSTOM_AVATAR);
             customAvatarData = null;
-            console.log(`[${extensionName}] 自定义头像已清除（删除了${keysToRemove.length}个数据项）`);
+
+            // 清除同步存储
+            clearAvatarFromSync();
+
+            console.log(`[${extensionName}] Custom avatar cleared and synced`);
             return true;
         } catch (error) {
-            console.error(`[${extensionName}] 清除自定义头像失败:`, error);
+            console.error(`[${extensionName}] Failed to clear custom avatar:`, error);
             return false;
         }
     }
@@ -4458,25 +4291,18 @@ ${currentPersonality}
             petContainer = $("#pet-status-container");
         }
 
-        // 4. 初始化同步系统
-        initSyncListener();
+        // 4. 加载宠物数据
+        loadPetData();
 
-        // 5. 加载宠物数据（异步）
-        loadPetData().then(() => {
-            console.log(`[${extensionName}] 宠物数据加载完成`);
-
-            // 确保拓麻歌子系统已应用
-            if (petData.dataVersion >= 4.0) {
-                applyTamagotchiSystem();
-            }
-        }).catch(error => {
-            console.error(`[${extensionName}] 加载宠物数据失败:`, error);
-        });
-
-        // 6. 加载头像数据（异步）
-        loadCustomAvatar().catch(error => {
-            console.error(`[${extensionName}] 加载头像数据失败:`, error);
-        });
+        // 4.1 确保拓麻歌子系统已应用
+        if (petData.dataVersion >= 4.0) {
+            applyTamagotchiSystem();
+        } else {
+            // 旧版本数据自动升级到拓麻歌子系统
+            petData.dataVersion = 4.0;
+            applyTamagotchiSystem();
+            savePetData();
+        }
 
         // 5. 加载自定义头像数据
         loadCustomAvatar();
@@ -13038,60 +12864,6 @@ ${currentPersonality}
         toastr.info('随机化标记已重置', '', { timeOut: 2000 });
     };
 
-    /**
-     * 测试新的跨设备同步系统
-     */
-    window.testSyncSystem = async function() {
-        console.log('🔄 测试跨设备同步系统...');
-
-        try {
-            // 测试宠物数据同步
-            console.log('\n📱 测试宠物数据同步:');
-            const testData = {
-                ...petData,
-                testTimestamp: Date.now(),
-                lastSyncTime: Date.now()
-            };
-
-            await storageManager.set({ [STORAGE_KEY_PET_DATA]: testData });
-            console.log('✅ 宠物数据写入成功');
-
-            const result = await storageManager.get([STORAGE_KEY_PET_DATA]);
-            const loadedData = result[STORAGE_KEY_PET_DATA];
-
-            if (loadedData && loadedData.testTimestamp === testData.testTimestamp) {
-                console.log('✅ 宠物数据读取成功');
-            } else {
-                console.log('❌ 宠物数据读取失败');
-            }
-
-            // 测试头像分块存储
-            console.log('\n🎨 测试头像分块存储:');
-            const testAvatar = 'data:image/png;base64,' + 'A'.repeat(10000); // 模拟大头像
-
-            await saveCustomAvatar(testAvatar);
-            console.log('✅ 头像保存成功');
-
-            // 清除测试头像
-            await clearCustomAvatar();
-            console.log('✅ 头像清除成功');
-
-            console.log('\n🎉 同步系统测试完成！');
-            console.log('💡 特点:');
-            console.log('  - 使用chrome.storage.sync进行跨设备同步');
-            console.log('  - 头像分块存储解决8KB限制');
-            console.log('  - 实时监听器支持自动同步');
-            console.log('  - 降级到localStorage作为备选方案');
-
-            toastr.success('🔄 同步系统测试通过！', '', { timeOut: 3000 });
-
-        } catch (error) {
-            console.error('❌ 同步系统测试失败:', error);
-            toastr.error('同步系统测试失败', '', { timeOut: 3000 });
-        }
-    };
-
     console.log("🐾 虚拟宠物系统脚本已加载完成");
-    console.log("🔄 跨设备同步系统已启用 - 使用chrome.storage.sync");
-    console.log("🧪 运行 testSyncSystem() 来测试同步功能");
+    console.log("🎲 智能初始化系统：首次打开随机化到50以下，后续自然衰减到100");
 });

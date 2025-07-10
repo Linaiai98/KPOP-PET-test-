@@ -334,16 +334,16 @@ jQuery(async () => {
         experience: '#A29BFE'    // 经验 - 薰衣草紫
     };
     
-    // 宠物数据结构 - 拓麻歌子式设计
+    // 宠物数据结构 - 智能初始化系统
     let petData = {
         name: "小宠物",
         type: "cat", // cat, dog, dragon, etc.
         level: 1,
         experience: 0,
-        health: 20,      // 低起始值：最高50，需要持续照顾才能成长
-        happiness: 15,   // 低起始值：最高50，需要频繁互动才能快乐
-        hunger: 25,      // 低起始值：最高50，需要定期喂食才能饱足
-        energy: 30,      // 低起始值：最高50，需要充分休息才能精力充沛
+        health: 35,      // 初始值，首次打开会随机化到50以下
+        happiness: 30,   // 初始值，首次打开会随机化到50以下
+        hunger: 40,      // 初始值，首次打开会随机化到50以下
+        energy: 45,      // 初始值，首次打开会随机化到50以下
 
         // 拓麻歌子式生命状态
         lifeStage: "baby",    // baby, child, teen, adult, senior
@@ -2066,9 +2066,14 @@ ${currentPersonality}
 
                     toastr.info('🥚 欢迎来到拓麻歌子世界！你的宠物现在需要真正的照顾，请定期关注它的状态！', '', { timeOut: 8000 });
                 } else {
-                    // 数据版本正确，直接加载（移除过高数值检测，让自然衰减处理）
+                    // 数据版本正确，直接加载
                     petData = { ...petData, ...savedData };
-                    console.log(`[${extensionName}] 加载已有的拓麻歌子数据`);
+                    console.log(`[${extensionName}] 加载已有数据`);
+
+                    // 检查是否需要应用首次打开的随机化
+                    if (!savedData.hasBeenRandomized) {
+                        applyFirstTimeRandomization();
+                    }
 
                     // 确保拓麻歌子系统已应用
                     applyTamagotchiSystem();
@@ -2082,10 +2087,11 @@ ${currentPersonality}
                 console.error(`[${extensionName}] Error loading pet data:`, error);
             }
         } else {
-            // 没有保存的数据，添加版本标记并应用拓麻歌子系统
+            // 没有保存的数据，首次使用
             petData.dataVersion = 4.0;
             petData.personality = getCurrentPersonality(); // 设置初始人设
             applyTamagotchiSystem();
+            applyFirstTimeRandomization(); // 首次随机化
             savePetData();
         }
 
@@ -2094,7 +2100,27 @@ ${currentPersonality}
     }
 
     /**
-     * 初始化缓冲机制 - 避免第一次打开时状态过低
+     * 首次打开随机化 - 数值随机但不超过50
+     */
+    function applyFirstTimeRandomization() {
+        console.log(`[${extensionName}] 应用首次打开随机化...`);
+
+        // 随机化数值，但不超过50，且保证一定的平衡性
+        petData.health = Math.floor(Math.random() * 20) + 30;      // 30-49
+        petData.happiness = Math.floor(Math.random() * 20) + 25;   // 25-44
+        petData.hunger = Math.floor(Math.random() * 20) + 30;      // 30-49
+        petData.energy = Math.floor(Math.random() * 20) + 25;      // 25-44
+
+        // 标记已经随机化过
+        petData.hasBeenRandomized = true;
+
+        console.log(`[${extensionName}] 随机化完成: 健康${petData.health}, 快乐${petData.happiness}, 饱食${petData.hunger}, 精力${petData.energy}`);
+
+        toastr.info('🎲 欢迎！你的宠物状态已随机初始化', '', { timeOut: 4000 });
+    }
+
+    /**
+     * 初始化缓冲机制 - 避免长时间离线后状态过低
      */
     function applyInitializationBuffer() {
         const now = Date.now();
@@ -2105,12 +2131,12 @@ ${currentPersonality}
         if (hoursElapsed > 2) {
             console.log(`[${extensionName}] 检测到长时间未更新 (${hoursElapsed.toFixed(1)}小时)，应用初始化缓冲...`);
 
-            // 确保基础数值不会太低，影响用户体验（最高50）
+            // 基础缓冲数值（防止过低但不强制重置）
             const minValues = {
-                hunger: 25,    // 最低饱食度25（不超过50）
-                energy: 20,    // 最低精力20（不超过50）
-                happiness: 15, // 最低快乐度15（不超过50）
-                health: 30     // 最低健康度30（不超过50）
+                hunger: 25,    // 最低饱食度25
+                energy: 20,    // 最低精力20
+                happiness: 15, // 最低快乐度15
+                health: 30     // 最低健康度30
             };
 
             let buffered = false;
@@ -2400,7 +2426,7 @@ ${currentPersonality}
      * 验证并修复数值范围
      */
     function validateAndFixValues() {
-        // 确保所有数值都是数字且在合理范围内
+        // 确保所有数值都在0-100范围内
         petData.health = Math.max(0, Math.min(100, Number(petData.health) || 0));
         petData.happiness = Math.max(0, Math.min(100, Number(petData.happiness) || 0));
         petData.hunger = Math.max(0, Math.min(100, Number(petData.hunger) || 0));
@@ -2462,11 +2488,7 @@ ${currentPersonality}
         }
     }
     
-    // 旧版本feedPet函数已删除，使用拓麻歌子版本
-    
-    // 旧版本playWithPet函数已删除，使用拓麻歌子版本
-    
-    // 旧版本petSleep函数已删除，使用拓麻歌子版本
+
     
     /**
      * 获得经验值
@@ -3496,16 +3518,16 @@ ${currentPersonality}
             return;
         }
 
-        // 重置为拓麻歌子式初始状态
+        // 重置为智能初始化系统
         petData = {
             name: "小宠物",
             type: "cat",
             level: 1,
             experience: 0,
-            health: 20,    // 低起始值：最高50
-            happiness: 15, // 低起始值：最高50
-            hunger: 25,    // 低起始值：最高50
-            energy: 30,    // 低起始值：最高50
+            health: 35,    // 智能系统：会在首次打开时随机化
+            happiness: 30, // 智能系统：会在首次打开时随机化
+            hunger: 40,    // 智能系统：会在首次打开时随机化
+            energy: 45,    // 智能系统：会在首次打开时随机化
 
             // 拓麻歌子式属性
             lifeStage: "baby",
@@ -3528,11 +3550,13 @@ ${currentPersonality}
             careNeglectCount: 0,
             sicknessDuration: 0,
 
-            dataVersion: 4.0 // 拓麻歌子系统版本
+            dataVersion: 4.0, // 拓麻歌子系统版本
+            hasBeenRandomized: false // 重置后需要重新随机化
         };
 
-        // 应用拓麻歌子系统
+        // 应用拓麻歌子系统和随机化
         applyTamagotchiSystem();
+        applyFirstTimeRandomization();
 
         savePetData();
         renderSettings();
@@ -5386,27 +5410,7 @@ ${currentPersonality}
         }, 100);
     };
 
-    // 重置为新的初始数值进行测试
-    window.resetToNewInitialValues = function() {
-        console.log("🔄 重置为新的初始数值...");
 
-        petData.health = 40;
-        petData.happiness = 30;
-        petData.hunger = 50;
-        petData.energy = 60;
-        petData.level = 1;
-        petData.experience = 0;
-
-        savePetData();
-        updateUnifiedUIStatus();
-
-        console.log("✅ 已重置为新的初始数值:");
-        console.log(`健康: ${petData.health}/100`);
-        console.log(`快乐度: ${petData.happiness}/100`);
-        console.log(`饱食度: ${petData.hunger}/100`);
-        console.log(`精力: ${petData.energy}/100`);
-        console.log("现在可以测试新的数值平衡了！");
-    };
 
     // 模拟时间流逝测试
     window.testTimeDecay = function() {
@@ -6574,19 +6578,17 @@ ${currentPersonality}
         console.log('- testUIAfterCooldown() - 等待冷却时间后测试UI按钮');
         console.log('- inspectUIFeedPet() - 检查UI实际调用的函数并强制修复');
         console.log('- forceUIRefresh() - 强制刷新UI显示（解决金币显示延迟）');
-        console.log('- forceOverrideOldFunctions() - 强制覆盖旧版本函数（解决金币不增加问题）');
-        console.log('- verifyOldVersionsRemoved() - 验证旧版本函数已删除');
-        console.log('- testRewardDisplay() - 测试新的奖励显示系统');
-        console.log('- adjustDecaySystem() - 调整衰减速度和缓冲机制（解决数值过高问题）');
-        console.log('- testNewDecaySystem() - 测试新的衰减系统效果（预测离线影响）');
-        console.log('- adjustInitialValues() - 调整初始数值到更合理的水平（增加成长感）');
-        console.log('- testNewValueBalance() - 测试新的数值平衡体验（完整的照顾流程）');
+        console.log('- testRewardDisplay() - 测试奖励显示系统');
+        console.log('- adjustDecaySystem() - 调整衰减速度');
+        console.log('- testNewDecaySystem() - 测试衰减效果');
+        console.log('- testNewValueBalance() - 测试智能初始化系统的数值平衡');
         console.log('- testHugFunction() - 测试抱抱功能（检查按钮、函数、奖励）');
         console.log('- testHugFunctionComplete() - 完整测试抱抱功能（包括前后检查）');
         console.log('- quickVerifyHugFunction() - 快速验证抱抱功能是否完整');
         console.log('- diagnose75ValueIssue() - 诊断和修复75数值问题');
-        console.log('- apply50CapSystem() - 应用50上限系统（增强养成挑战性）');
-        console.log('- diagnoseValueResetIssue() - 诊断数值重置问题（检查为什么数值会变化）');
+        console.log('- testSmartInitSystem() - 测试智能初始化系统');
+        console.log('- resetRandomizationFlag() - 重置随机化标记（测试用）');
+        console.log('- diagnoseValueResetIssue() - 诊断数值重置问题');
 
         // 强制刷新UI
         if (typeof renderPetStatus === 'function') {
@@ -7760,7 +7762,7 @@ ${currentPersonality}
         }
     }
 
-    // 平衡版本已删除，只保留拓麻歌子版本
+
 
     /**
      * 强制应用拓麻歌子系统（确保金币功能正常）
@@ -8830,112 +8832,9 @@ ${currentPersonality}
         }
     };
 
-    /**
-     * 强制覆盖旧版本函数，确保使用拓麻歌子版本
-     */
-    window.forceOverrideOldFunctions = function() {
-        console.log('🔧 强制覆盖旧版本函数...');
 
-        // 强制应用拓麻歌子系统
-        applyTamagotchiSystem();
 
-        // 确保全局作用域也使用拓麻歌子版本
-        if (typeof window.feedPet === 'function') {
-            // 覆盖全局的feedPet
-            feedPet = window.feedPet;
-            console.log('✅ 已覆盖全局feedPet函数');
-        }
 
-        if (typeof window.playWithPet === 'function') {
-            playWithPet = window.playWithPet;
-            console.log('✅ 已覆盖全局playWithPet函数');
-        }
-
-        if (typeof window.petSleep === 'function') {
-            petSleep = window.petSleep;
-            console.log('✅ 已覆盖全局petSleep函数');
-        }
-
-        // 验证覆盖结果
-        console.log('\n🔍 验证覆盖结果:');
-        const feedPetCode = feedPet.toString();
-        console.log(`- feedPet包含gainCoins: ${feedPetCode.includes('gainCoins') ? '✅' : '❌'}`);
-        console.log(`- feedPet包含gainExperience: ${feedPetCode.includes('gainExperience') ? '✅' : '❌'}`);
-        console.log(`- feedPet冷却时间: ${feedPetCode.includes('30000') ? '30秒(拓麻歌子)' : '45秒(旧版本)'}`);
-
-        // 重新绑定UI事件
-        if (typeof bindUnifiedUIEvents === 'function') {
-            bindUnifiedUIEvents();
-            console.log('✅ UI事件已重新绑定');
-        }
-
-        console.log('🎉 函数覆盖完成！现在应该使用包含金币奖励的版本了');
-
-        return true;
-    };
-
-    /**
-     * 验证旧版本函数已删除
-     */
-    window.verifyOldVersionsRemoved = function() {
-        console.log('🔍 验证旧版本函数已删除...');
-
-        // 检查当前的互动函数
-        console.log('\n📋 当前互动函数检查:');
-
-        if (typeof feedPet === 'function') {
-            const feedPetCode = feedPet.toString();
-            console.log('🍖 feedPet函数:');
-            console.log(`  - 包含gainCoins: ${feedPetCode.includes('gainCoins') ? '✅' : '❌'}`);
-            console.log(`  - 包含gainExperience: ${feedPetCode.includes('gainExperience') ? '✅' : '❌'}`);
-            console.log(`  - 冷却时间: ${feedPetCode.includes('30000') ? '30秒(拓麻歌子)' : feedPetCode.includes('45000') ? '45秒(旧版本)' : '未知'}`);
-        }
-
-        if (typeof playWithPet === 'function') {
-            const playCode = playWithPet.toString();
-            console.log('🎮 playWithPet函数:');
-            console.log(`  - 包含gainCoins: ${playCode.includes('gainCoins') ? '✅' : '❌'}`);
-            console.log(`  - 包含gainExperience: ${playCode.includes('gainExperience') ? '✅' : '❌'}`);
-            console.log(`  - 冷却时间: ${playCode.includes('45000') ? '45秒(拓麻歌子)' : playCode.includes('60000') ? '60秒(旧版本)' : '未知'}`);
-        }
-
-        if (typeof petSleep === 'function') {
-            const sleepCode = petSleep.toString();
-            console.log('😴 petSleep函数:');
-            console.log(`  - 包含gainCoins: ${sleepCode.includes('gainCoins') ? '✅' : '❌'}`);
-            console.log(`  - 包含gainExperience: ${sleepCode.includes('gainExperience') ? '✅' : '❌'}`);
-            console.log(`  - 冷却时间: ${sleepCode.includes('120000') ? '120秒(拓麻歌子)' : sleepCode.includes('80000') ? '80秒(旧版本)' : '未知'}`);
-        }
-
-        if (typeof hugPet === 'function') {
-            const hugCode = hugPet.toString();
-            console.log('🤗 hugPet函数:');
-            console.log(`  - 包含gainCoins: ${hugCode.includes('gainCoins') ? '✅' : '❌'}`);
-            console.log(`  - 包含gainExperience: ${hugCode.includes('gainExperience') ? '✅' : '❌'}`);
-            console.log(`  - 冷却时间: ${hugCode.includes('25000') ? '25秒(拓麻歌子)' : '未知'}`);
-        }
-
-        // 判断版本状态
-        const feedHasCoins = typeof feedPet === 'function' && feedPet.toString().includes('gainCoins');
-        const playHasCoins = typeof playWithPet === 'function' && playWithPet.toString().includes('gainCoins');
-        const sleepHasCoins = typeof petSleep === 'function' && petSleep.toString().includes('gainCoins');
-
-        console.log('\n🎯 版本状态:');
-        if (feedHasCoins && playHasCoins && sleepHasCoins) {
-            console.log('✅ 所有函数都是拓麻歌子版本，旧版本已成功删除！');
-            console.log('💰 金币系统应该正常工作');
-        } else {
-            console.log('❌ 仍有函数不包含金币奖励');
-            console.log('💡 可能需要运行: forceApplyTamagotchiSystem()');
-        }
-
-        return {
-            feedHasCoins,
-            playHasCoins,
-            sleepHasCoins,
-            allGood: feedHasCoins && playHasCoins && sleepHasCoins
-        };
-    };
 
     /**
      * 测试新的奖励显示系统
@@ -9029,12 +8928,12 @@ ${currentPersonality}
             if (hoursElapsed > 2) {
                 console.log(`检测到长时间未更新 (${hoursElapsed.toFixed(1)}小时)，应用急救缓冲...`);
 
-                // 急救包式的最低数值保证 - 防止宠物死亡但鼓励频繁互动（最高50）
+                // 50上限系统：急救缓冲数值
                 const minValues = {
-                    hunger: 30,    // 最低饱食度30 - 急救水平（不超过50）
-                    energy: 25,    // 最低精力25 - 急救水平（不超过50）
-                    happiness: 20, // 最低快乐度20 - 急救水平（不超过50）
-                    health: 35     // 最低健康度35 - 急救水平（不超过50）
+                    hunger: 25,    // 50上限系统：急救饱食度25
+                    energy: 20,    // 50上限系统：急救精力20
+                    happiness: 15, // 50上限系统：急救快乐度15
+                    health: 30     // 50上限系统：急救健康度30
                 };
 
                 let buffered = false;
@@ -9131,91 +9030,6 @@ ${currentPersonality}
     };
 
     /**
-     * 调整初始数值到更合理的水平
-     */
-    window.adjustInitialValues = function() {
-        console.log('⚖️ 调整初始数值到更合理的水平...');
-
-        console.log('\n📊 当前数值:');
-        console.log(`- 健康: ${petData.health}/100`);
-        console.log(`- 快乐: ${petData.happiness}/100`);
-        console.log(`- 饱食: ${petData.hunger}/100`);
-        console.log(`- 精力: ${petData.energy}/100`);
-
-        // 设置更低的初始数值，增加成长感（最高50）
-        const newValues = {
-            health: 20,    // 低起始值：最高50 - 需要持续照顾才能健康
-            happiness: 15, // 低起始值：最高50 - 需要频繁互动才能快乐
-            hunger: 25,    // 低起始值：最高50 - 需要定期喂食才能饱足
-            energy: 30     // 低起始值：最高50 - 需要充分休息才能精力充沛
-        };
-
-        console.log('\n🎯 新的初始数值:');
-        Object.entries(newValues).forEach(([key, value]) => {
-            const oldValue = petData[key];
-            petData[key] = value;
-            console.log(`- ${key}: ${oldValue} → ${value} (${value - oldValue > 0 ? '+' : ''}${value - oldValue})`);
-        });
-
-        // 重置等级和经验，让玩家从头开始
-        petData.level = 1;
-        petData.experience = 0;
-
-        // 重置时间戳，避免立即衰减
-        const now = Date.now();
-        petData.lastFeedTime = now;
-        petData.lastPlayTime = now;
-        petData.lastSleepTime = now;
-        petData.lastUpdateTime = now;
-        petData.lastCareTime = now;
-
-        // 确保宠物是活着的
-        petData.isAlive = true;
-        petData.deathReason = null;
-
-        // 重置拓麻歌子属性
-        petData.lifeStage = "baby";
-        petData.age = 0;
-        petData.weight = 30;
-        petData.sickness = 0;
-        petData.discipline = 50;
-        petData.careNeglectCount = 0;
-
-        // 保存数据
-        savePetData();
-
-        // 更新UI
-        if (typeof updateUnifiedUIStatus === 'function') {
-            updateUnifiedUIStatus();
-        }
-        if (typeof renderPetStatus === 'function') {
-            renderPetStatus();
-        }
-
-        console.log('\n💡 设计理念:');
-        console.log('✅ 更低的起始数值增加成长感');
-        console.log('✅ 玩家需要通过互动来提升宠物状态');
-        console.log('✅ 每次照顾都有明显的改善效果');
-        console.log('✅ 创造真正的养成体验');
-
-        console.log('\n🎮 建议的游戏流程:');
-        console.log('1. 先喂食提升饱食度 (30→50)');
-        console.log('2. 玩耍提升快乐度 (20→35)');
-        console.log('3. 睡觉恢复精力 (35→60)');
-        console.log('4. 持续照顾提升健康度 (25→45+)');
-
-        toastr.success('🎯 初始数值已调整！现在需要更多照顾才能让宠物茁壮成长！', '', { timeOut: 5000 });
-
-        return {
-            oldValues: {
-                health: 35, happiness: 25, hunger: 40, energy: 50
-            },
-            newValues: newValues,
-            improvement: '降低了起始数值，增加成长感和照顾的必要性'
-        };
-    };
-
-    /**
      * 测试新的数值平衡体验
      */
     window.testNewValueBalance = function() {
@@ -9246,34 +9060,34 @@ ${currentPersonality}
         console.log('\n2. 🎮 玩耍效果:');
         const oldHappiness2 = petData.happiness;
         const oldEnergy = petData.energy;
-        petData.happiness = Math.min(50, petData.happiness + 15); // 50上限
+        petData.happiness = Math.min(100, petData.happiness + 15);
         petData.energy = Math.max(0, petData.energy - 10);
         console.log(`   快乐度: ${oldHappiness2} → ${petData.happiness} (+${petData.happiness - oldHappiness2})`);
         console.log(`   精力: ${oldEnergy} → ${petData.energy} (${petData.energy - oldEnergy})`);
-        console.log(`   效果: ${petData.happiness >= 35 ? '✅ 很开心' : '⚠️ 还需要更多互动'}`);
+        console.log(`   效果: ${petData.happiness >= 50 ? '✅ 很开心' : '⚠️ 还需要更多互动'}`);
 
         // 模拟睡觉
         console.log('\n3. 😴 睡觉效果:');
         const oldEnergy2 = petData.energy;
         const oldHealth = petData.health;
-        petData.energy = Math.min(50, petData.energy + 25); // 50上限
-        petData.health = Math.min(50, petData.health + 10); // 50上限
+        petData.energy = Math.min(100, petData.energy + 25);
+        petData.health = Math.min(100, petData.health + 10);
         console.log(`   精力: ${oldEnergy2} → ${petData.energy} (+${petData.energy - oldEnergy2})`);
         console.log(`   健康: ${oldHealth} → ${petData.health} (+${petData.health - oldHealth})`);
-        console.log(`   效果: ${petData.energy >= 45 ? '✅ 精力充沛' : '⚠️ 还需要更多休息'}`);
+        console.log(`   效果: ${petData.energy >= 60 ? '✅ 精力充沛' : '⚠️ 还需要更多休息'}`);
 
-        console.log('\n📈 照顾后状态 (50上限系统):');
-        console.log(`- 健康: ${petData.health}/50 (${petData.health >= 35 ? '✅ 健康' : '⚠️ 需要更多照顾'})`);
-        console.log(`- 快乐: ${petData.happiness}/50 (${petData.happiness >= 35 ? '✅ 快乐' : '⚠️ 需要更多互动'})`);
-        console.log(`- 饱食: ${petData.hunger}/50 (${petData.hunger >= 40 ? '✅ 饱足' : '⚠️ 需要更多食物'})`);
-        console.log(`- 精力: ${petData.energy}/50 (${petData.energy >= 45 ? '✅ 充沛' : '⚠️ 需要更多休息'})`);
+        console.log('\n📈 照顾后状态:');
+        console.log(`- 健康: ${petData.health}/100 (${petData.health >= 50 ? '✅ 健康' : '⚠️ 需要更多照顾'})`);
+        console.log(`- 快乐: ${petData.happiness}/100 (${petData.happiness >= 50 ? '✅ 快乐' : '⚠️ 需要更多互动'})`);
+        console.log(`- 饱食: ${petData.hunger}/100 (${petData.hunger >= 50 ? '✅ 饱足' : '⚠️ 需要更多食物'})`);
+        console.log(`- 精力: ${petData.energy}/100 (${petData.energy >= 60 ? '✅ 充沛' : '⚠️ 需要更多休息'})`);
 
-        console.log('\n💡 50上限系统的优势:');
+        console.log('\n💡 智能初始化系统的优势:');
+        console.log('✅ 首次打开随机化到50以下，后续可达100');
         console.log('✅ 每次互动都有显著的改善效果');
         console.log('✅ 玩家能清楚感受到照顾的价值');
-        console.log('✅ 从低数值到50上限有明显的成长感');
-        console.log('✅ 更有挑战性，需要持续关注');
-        console.log('✅ 真正的养成体验，不会过于简单');
+        console.log('✅ 自然的时间衰减，不强制重置');
+        console.log('✅ 平衡的挑战性和成长感');
 
         // 保存测试后的状态
         savePetData();
@@ -9282,15 +9096,15 @@ ${currentPersonality}
         }
 
         return {
-            startValues: { health: 20, happiness: 15, hunger: 25, energy: 30 },
+            startValues: { health: 35, happiness: 30, hunger: 40, energy: 45 },
             endValues: {
                 health: petData.health,
                 happiness: petData.happiness,
                 hunger: petData.hunger,
                 energy: petData.energy
             },
-            maxCap: 50,
-            improvement: '50上限系统：更有挑战性的养成体验'
+            maxCap: 100,
+            improvement: '智能初始化系统：首次随机化，后续自然衰减'
         };
     };
 
@@ -12807,11 +12621,11 @@ ${currentPersonality}
         if (allAre75) {
             console.log('1. 重置为更合理的初始数值:');
 
-            // 设置更合理的数值（最高50）
-            petData.health = 35;
-            petData.happiness = 30;
-            petData.hunger = 40;
-            petData.energy = 45;
+            // 设置50上限系统标准数值
+            petData.health = 30;
+            petData.happiness = 25;
+            petData.hunger = 35;
+            petData.energy = 40;
 
             // 更新时间戳
             petData.lastUpdateTime = now;
@@ -12862,95 +12676,7 @@ ${currentPersonality}
         };
     };
 
-    /**
-     * 应用50上限设置，让初始体验更有挑战性
-     */
-    window.apply50CapSystem = function() {
-        console.log('🎯 应用50上限设置，增强养成挑战性...');
 
-        console.log('\n📊 当前数值:');
-        console.log(`- 健康: ${petData.health}/100`);
-        console.log(`- 快乐: ${petData.happiness}/100`);
-        console.log(`- 饱食: ${petData.hunger}/100`);
-        console.log(`- 精力: ${petData.energy}/100`);
-
-        // 应用50上限
-        const oldValues = {
-            health: petData.health,
-            happiness: petData.happiness,
-            hunger: petData.hunger,
-            energy: petData.energy
-        };
-
-        petData.health = Math.min(petData.health, 50);
-        petData.happiness = Math.min(petData.happiness, 50);
-        petData.hunger = Math.min(petData.hunger, 50);
-        petData.energy = Math.min(petData.energy, 50);
-
-        // 如果数值太高，降到合理范围
-        if (petData.health > 45) petData.health = Math.random() * 15 + 30; // 30-45
-        if (petData.happiness > 45) petData.happiness = Math.random() * 15 + 25; // 25-40
-        if (petData.hunger > 45) petData.hunger = Math.random() * 15 + 30; // 30-45
-        if (petData.energy > 45) petData.energy = Math.random() * 15 + 35; // 35-50
-
-        // 确保数值是整数
-        petData.health = Math.round(petData.health);
-        petData.happiness = Math.round(petData.happiness);
-        petData.hunger = Math.round(petData.hunger);
-        petData.energy = Math.round(petData.energy);
-
-        console.log('\n🎯 应用50上限后:');
-        console.log(`- 健康: ${oldValues.health} → ${petData.health} ${oldValues.health !== petData.health ? '(已调整)' : ''}`);
-        console.log(`- 快乐: ${oldValues.happiness} → ${petData.happiness} ${oldValues.happiness !== petData.happiness ? '(已调整)' : ''}`);
-        console.log(`- 饱食: ${oldValues.hunger} → ${petData.hunger} ${oldValues.hunger !== petData.hunger ? '(已调整)' : ''}`);
-        console.log(`- 精力: ${oldValues.energy} → ${petData.energy} ${oldValues.energy !== petData.energy ? '(已调整)' : ''}`);
-
-        // 重置时间戳，避免立即衰减
-        const now = Date.now();
-        petData.lastUpdateTime = now;
-        petData.lastFeedTime = now - 20000; // 20秒前，可以立即喂食
-        petData.lastPlayTime = now - 30000; // 30秒前，可以立即玩耍
-        petData.lastSleepTime = now - 60000; // 1分钟前，可以立即睡觉
-        petData.lastHugTime = now - 15000; // 15秒前，可以立即抱抱
-
-        // 保存数据
-        savePetData();
-
-        // 更新UI
-        if (typeof updateUnifiedUIStatus === 'function') {
-            updateUnifiedUIStatus();
-        }
-        if (typeof renderPetStatus === 'function') {
-            renderPetStatus();
-        }
-
-        console.log('\n💡 50上限系统特点:');
-        console.log('✅ 初始数值更低，增加成长感');
-        console.log('✅ 每次互动的改善更明显');
-        console.log('✅ 需要更多照顾才能达到良好状态');
-        console.log('✅ 真正的养成挑战体验');
-
-        console.log('\n🎮 推荐的照顾流程:');
-        console.log('1. 🍖 喂食: 提升饱食度到45-50');
-        console.log('2. 🎮 玩耍: 提升快乐度到40-45');
-        console.log('3. 😴 睡觉: 恢复精力到45-50');
-        console.log('4. 🤗 抱抱: 维持快乐和健康');
-        console.log('5. 持续照顾: 逐步提升到50上限');
-
-        toastr.success('🎯 已应用50上限系统！现在养成更有挑战性了', '', { timeOut: 5000 });
-
-        return {
-            oldValues,
-            newValues: {
-                health: petData.health,
-                happiness: petData.happiness,
-                hunger: petData.hunger,
-                energy: petData.energy
-            },
-            maxCap: 50,
-            improvement: '更有挑战性的养成体验'
-        };
-    };
 
     /**
      * 诊断数值重置问题
@@ -13038,7 +12764,7 @@ ${currentPersonality}
         }
 
         if (hasValueCaps) {
-            console.log('3. 数值超限问题 - 运行: apply50CapSystem();');
+            console.log('3. 数值超限问题 - 运行: testSmartInitSystem();');
         }
 
         console.log('\n🧪 测试步骤:');
@@ -13064,5 +12790,80 @@ ${currentPersonality}
         };
     };
 
+
+
+    /**
+     * 测试智能初始化系统
+     */
+    window.testSmartInitSystem = function() {
+        console.log('🧪 测试智能初始化系统...');
+
+        console.log('\n📊 当前状态:');
+        console.log(`- 健康: ${petData.health}/100`);
+        console.log(`- 快乐: ${petData.happiness}/100`);
+        console.log(`- 饱食: ${petData.hunger}/100`);
+        console.log(`- 精力: ${petData.energy}/100`);
+        console.log(`- 已随机化: ${petData.hasBeenRandomized ? '✅' : '❌'}`);
+
+        console.log('\n🎲 模拟首次打开随机化:');
+        const oldValues = {
+            health: petData.health,
+            happiness: petData.happiness,
+            hunger: petData.hunger,
+            energy: petData.energy
+        };
+
+        // 重置随机化标记
+        petData.hasBeenRandomized = false;
+
+        // 应用随机化
+        applyFirstTimeRandomization();
+
+        console.log('随机化结果:');
+        console.log(`- 健康: ${oldValues.health} → ${petData.health} (${petData.health <= 50 ? '✅' : '❌'} ≤50)`);
+        console.log(`- 快乐: ${oldValues.happiness} → ${petData.happiness} (${petData.happiness <= 50 ? '✅' : '❌'} ≤50)`);
+        console.log(`- 饱食: ${oldValues.hunger} → ${petData.hunger} (${petData.hunger <= 50 ? '✅' : '❌'} ≤50)`);
+        console.log(`- 精力: ${oldValues.energy} → ${petData.energy} (${petData.energy <= 50 ? '✅' : '❌'} ≤50)`);
+
+        // 保存数据
+        savePetData();
+
+        console.log('\n💡 系统特点:');
+        console.log('✅ 首次打开：数值随机化到50以下');
+        console.log('✅ 后续使用：数值自然衰减，不再强制重置');
+        console.log('✅ 满值上限：100（可以通过互动达到）');
+        console.log('✅ 长期离线：有缓冲保护机制');
+
+        console.log('\n🎮 使用流程:');
+        console.log('1. 首次打开 → 随机化到50以下');
+        console.log('2. 互动提升 → 可以超过50，最高100');
+        console.log('3. 时间衰减 → 根据离线时间自然下降');
+        console.log('4. 重新打开 → 不再重置，保持衰减后的数值');
+
+        return {
+            system: '智能初始化系统',
+            firstTimeRandomized: petData.hasBeenRandomized,
+            currentValues: {
+                health: petData.health,
+                happiness: petData.happiness,
+                hunger: petData.hunger,
+                energy: petData.energy
+            },
+            maxValues: 100,
+            firstTimeCap: 50
+        };
+    };
+
+    /**
+     * 重置随机化标记（用于测试）
+     */
+    window.resetRandomizationFlag = function() {
+        petData.hasBeenRandomized = false;
+        savePetData();
+        console.log('✅ 随机化标记已重置，下次加载数据时会重新随机化');
+        toastr.info('随机化标记已重置', '', { timeOut: 2000 });
+    };
+
     console.log("🐾 虚拟宠物系统脚本已加载完成");
+    console.log("🎲 智能初始化系统：首次打开随机化到50以下，后续自然衰减到100");
 });

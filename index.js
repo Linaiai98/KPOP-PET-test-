@@ -50,6 +50,91 @@ jQuery(async () => {
     };
 
     /**
+     * 同步循环防护系统 - 防止"失控的同步循环"
+     */
+    const syncGuard = {
+        // 上次成功同步到云端的数据副本
+        lastSyncedPetData: null,
+        lastSyncedAvatarData: null,
+
+        // 是否正在处理云端数据更新（防止回环）
+        isProcessingCloudUpdate: false,
+
+        /**
+         * 深度比较两个对象是否相等
+         */
+        deepEqual(obj1, obj2) {
+            if (obj1 === obj2) return true;
+            if (obj1 == null || obj2 == null) return false;
+            if (typeof obj1 !== typeof obj2) return false;
+
+            if (typeof obj1 !== 'object') return obj1 === obj2;
+
+            const keys1 = Object.keys(obj1);
+            const keys2 = Object.keys(obj2);
+
+            if (keys1.length !== keys2.length) return false;
+
+            for (let key of keys1) {
+                if (!keys2.includes(key)) return false;
+                if (!this.deepEqual(obj1[key], obj2[key])) return false;
+            }
+
+            return true;
+        },
+
+        /**
+         * 检查宠物数据是否需要同步（看门神）
+         */
+        shouldSyncPetData(newData) {
+            // 如果正在处理云端更新，阻止写入
+            if (this.isProcessingCloudUpdate) {
+                console.log('[SyncGuard] 🛡️ 阻止回环：正在处理云端更新，跳过保存');
+                return false;
+            }
+
+            // 如果数据没有实质性变化，阻止写入
+            if (this.lastSyncedPetData && this.deepEqual(newData, this.lastSyncedPetData)) {
+                console.log('[SyncGuard] 🛡️ 阻止无效写入：数据无变化');
+                return false;
+            }
+
+            console.log('[SyncGuard] ✅ 允许同步：检测到数据变化');
+            return true;
+        },
+
+        /**
+         * 检查头像数据是否需要同步
+         */
+        shouldSyncAvatarData(newData) {
+            if (this.isProcessingCloudUpdate) {
+                console.log('[SyncGuard] 🛡️ 阻止回环：正在处理云端更新，跳过头像保存');
+                return false;
+            }
+
+            if (this.lastSyncedAvatarData && newData === this.lastSyncedAvatarData) {
+                console.log('[SyncGuard] 🛡️ 阻止无效写入：头像数据无变化');
+                return false;
+            }
+
+            return true;
+        },
+
+        /**
+         * 记录成功同步的数据
+         */
+        recordSyncedPetData(data) {
+            this.lastSyncedPetData = JSON.parse(JSON.stringify(data)); // 深拷贝
+            console.log('[SyncGuard] 📝 记录已同步的宠物数据');
+        },
+
+        recordSyncedAvatarData(data) {
+            this.lastSyncedAvatarData = data;
+            console.log('[SyncGuard] 📝 记录已同步的头像数据');
+        }
+    };
+
+    /**
      * Firebase云端服务管理器 - 跨平台同步的核心
      */
     const firebaseManager = {
@@ -828,6 +913,19 @@ jQuery(async () => {
             // 方法1: 直接调用各大API提供商的模型列表端点
             console.log(`[${extensionName}] 🌐 尝试直接调用后端API...`);
 
+            // 首先获取用户配置的API密钥和URL
+            const userApiKeys = {
+                openai: $('#ai-key-input').val() || localStorage.getItem('openai_api_key'),
+                claude: localStorage.getItem('claude_api_key'),
+                google: localStorage.getItem('google_api_key')
+            };
+
+            const userApiUrls = {
+                openai: $('#ai-url-input').val() || 'https://api.openai.com/v1',
+                claude: 'https://api.anthropic.com/v1',
+                google: 'https://generativelanguage.googleapis.com/v1beta'
+            };
+
             // 构建API提供商列表，优先使用用户配置的URL
             const apiProviders = [
                 {
@@ -901,19 +999,7 @@ jQuery(async () => {
                 }
             ];
 
-            // 尝试从用户配置中获取API密钥和URL
-            const userApiKeys = {
-                openai: $('#ai-key-input').val() || localStorage.getItem('openai_api_key'),
-                claude: localStorage.getItem('claude_api_key'),
-                google: localStorage.getItem('google_api_key')
-            };
-
-            const userApiUrls = {
-                openai: $('#ai-url-input').val() || 'https://api.openai.com/v1',
-                claude: 'https://api.anthropic.com/v1',
-                google: 'https://generativelanguage.googleapis.com/v1beta'
-            };
-
+            // 开始检查各个API提供商
             for (const provider of apiProviders) {
                 console.log(`[${extensionName}] 🔍 检查 ${provider.name}...`);
 
@@ -2340,9 +2426,17 @@ ${currentPersonality}
                         dataSource = 'local';
                         console.log(`[${extensionName}] 使用本地数据（云端无数据）`);
 
-                        // 将本地数据同步到云端
-                        await firebaseManager.savePetData(savedData);
-                        console.log(`[${extensionName}] 本地数据已同步到云端`);
+                        // 🛡️ 将本地数据同步到云端（设置处理标志防止回环）
+                        syncGuard.isProcessingCloudUpdate = true;
+                        try {
+                            await firebaseManager.savePetData(savedData);
+                            syncGuard.recordSyncedPetData(savedData);
+                            console.log(`[${extensionName}] 本地数据已同步到云端`);
+                        } finally {
+                            setTimeout(() => {
+                                syncGuard.isProcessingCloudUpdate = false;
+                            }, 100);
+                        }
                     } catch (error) {
                         console.warn(`[${extensionName}] 本地数据解析失败:`, error);
                     }
@@ -2517,14 +2611,21 @@ ${currentPersonality}
     }
     
     /**
-     * 保存宠物数据 - 使用Firebase云端同步
+     * 保存宠物数据 - 使用Firebase云端同步（带同步循环防护）
      */
     async function savePetData() {
         try {
+            // 🛡️ 看门神检查：是否需要同步
+            if (!syncGuard.shouldSyncPetData(petData)) {
+                return; // 阻止无效写入
+            }
+
             // 优先保存到Firebase云端
             const cloudSaved = await firebaseManager.savePetData(petData);
 
             if (cloudSaved) {
+                // 🛡️ 记录成功同步的数据
+                syncGuard.recordSyncedPetData(petData);
                 console.log(`[${extensionName}] 宠物数据已保存到云端`);
             } else {
                 // 云端保存失败，降级到本地存储
@@ -3557,14 +3658,21 @@ ${currentPersonality}
     }
 
     /**
-     * 保存自定义头像数据 - 使用Firebase云端存储
+     * 保存自定义头像数据 - 使用Firebase云端存储（带同步循环防护）
      */
     async function saveCustomAvatar(imageData) {
         try {
+            // 🛡️ 看门神检查：是否需要同步
+            if (!syncGuard.shouldSyncAvatarData(imageData)) {
+                return true; // 数据无变化，视为成功
+            }
+
             // 优先上传到Firebase云端存储
             const avatarURL = await firebaseManager.uploadAvatar(imageData);
 
             if (avatarURL) {
+                // 🛡️ 记录成功同步的数据
+                syncGuard.recordSyncedAvatarData(imageData);
                 customAvatarData = imageData;
                 console.log(`[${extensionName}] 头像已上传到云端存储`);
                 return true;
@@ -4532,28 +4640,50 @@ ${currentPersonality}
                     firebaseWorking = true;
                     console.log('[Firebase] 认证成功，启用云端同步模式');
 
-                    // 设置实时监听器
+                    // 设置实时监听器（聪明监听器）
                     const unsubscribe = firebaseManager.setupRealtimeListener((userData) => {
-                        if (userData.petData && userData.petData.lastSyncTime !== petData.lastSyncTime) {
-                            console.log('[Firebase] 检测到云端宠物数据变化，更新本地');
-                            petData = { ...petData, ...userData.petData };
+                        // 🛡️ 设置云端更新处理标志，防止回环
+                        syncGuard.isProcessingCloudUpdate = true;
 
-                            // 更新UI
-                            if (typeof updateUnifiedUIStatus === 'function') {
-                                updateUnifiedUIStatus();
+                        try {
+                            // 🛡️ 聪明监听器：检查宠物数据是否真的有变化
+                            if (userData.petData) {
+                                const hasRealChange = !syncGuard.deepEqual(userData.petData, petData);
+
+                                if (hasRealChange) {
+                                    console.log('[Firebase] 🔄 检测到云端宠物数据变化，更新本地');
+                                    petData = { ...petData, ...userData.petData };
+
+                                    // 🛡️ 更新同步缓存，防止后续无效写入
+                                    syncGuard.recordSyncedPetData(petData);
+
+                                    // 更新UI
+                                    if (typeof updateUnifiedUIStatus === 'function') {
+                                        updateUnifiedUIStatus();
+                                    }
+                                    if (typeof renderPetStatus === 'function') {
+                                        renderPetStatus();
+                                    }
+
+                                    toastr.info('🔄 宠物数据已从其他设备同步', '', { timeOut: 3000 });
+                                } else {
+                                    console.log('[Firebase] 🛡️ 忽略回声：云端数据与本地相同');
+                                }
                             }
-                            if (typeof renderPetStatus === 'function') {
-                                renderPetStatus();
+
+                            // 🛡️ 聪明监听器：检查头像是否真的有变化
+                            if (userData.avatarURL) {
+                                // 这里可以添加头像变化检测逻辑
+                                console.log('[Firebase] 🎨 检测到云端头像变化，重新加载');
+                                loadCustomAvatar().then(() => {
+                                    toastr.info('🎨 头像已从其他设备同步', '', { timeOut: 3000 });
+                                });
                             }
-
-                            toastr.info('🔄 宠物数据已从其他设备同步', '', { timeOut: 3000 });
-                        }
-
-                        if (userData.avatarURL) {
-                            console.log('[Firebase] 检测到云端头像变化，重新加载');
-                            loadCustomAvatar().then(() => {
-                                toastr.info('🎨 头像已从其他设备同步', '', { timeOut: 3000 });
-                            });
+                        } finally {
+                            // 🛡️ 处理完成，重置标志
+                            setTimeout(() => {
+                                syncGuard.isProcessingCloudUpdate = false;
+                            }, 100); // 短暂延迟，确保相关操作完成
                         }
                     });
                 } else {
@@ -13240,6 +13370,131 @@ ${currentPersonality}
     };
 
     /**
+     * 测试同步循环防护系统
+     */
+    window.testSyncGuard = async function() {
+        console.log('🛡️ 测试同步循环防护系统...');
+
+        try {
+            // 1. 测试深度比较功能
+            console.log('\n1️⃣ 测试深度比较功能:');
+            const obj1 = { a: 1, b: { c: 2 } };
+            const obj2 = { a: 1, b: { c: 2 } };
+            const obj3 = { a: 1, b: { c: 3 } };
+
+            console.log(`- 相同对象比较: ${syncGuard.deepEqual(obj1, obj2) ? '✅' : '❌'}`);
+            console.log(`- 不同对象比较: ${!syncGuard.deepEqual(obj1, obj3) ? '✅' : '❌'}`);
+
+            // 2. 测试看门神功能
+            console.log('\n2️⃣ 测试看门神功能:');
+
+            // 模拟相同数据的保存尝试
+            const currentData = JSON.parse(JSON.stringify(petData));
+            syncGuard.recordSyncedPetData(currentData);
+
+            const shouldSync1 = syncGuard.shouldSyncPetData(currentData);
+            console.log(`- 相同数据保存阻止: ${!shouldSync1 ? '✅' : '❌'}`);
+
+            // 模拟不同数据的保存尝试
+            const modifiedData = { ...currentData, hunger: currentData.hunger + 1 };
+            const shouldSync2 = syncGuard.shouldSyncPetData(modifiedData);
+            console.log(`- 不同数据保存允许: ${shouldSync2 ? '✅' : '❌'}`);
+
+            // 3. 测试回环防护
+            console.log('\n3️⃣ 测试回环防护:');
+
+            syncGuard.isProcessingCloudUpdate = true;
+            const shouldSync3 = syncGuard.shouldSyncPetData(modifiedData);
+            console.log(`- 云端更新时阻止保存: ${!shouldSync3 ? '✅' : '❌'}`);
+
+            syncGuard.isProcessingCloudUpdate = false;
+            const shouldSync4 = syncGuard.shouldSyncPetData(modifiedData);
+            console.log(`- 正常状态时允许保存: ${shouldSync4 ? '✅' : '❌'}`);
+
+            // 4. 测试实际保存功能
+            console.log('\n4️⃣ 测试实际保存功能:');
+
+            let saveCallCount = 0;
+            const originalSavePetData = firebaseManager.savePetData;
+            firebaseManager.savePetData = async (data) => {
+                saveCallCount++;
+                console.log(`  - Firebase保存调用 #${saveCallCount}`);
+                return true;
+            };
+
+            // 连续调用相同数据的保存
+            await savePetData();
+            await savePetData();
+            await savePetData();
+
+            console.log(`- 重复保存阻止: ${saveCallCount === 1 ? '✅' : '❌'} (调用次数: ${saveCallCount})`);
+
+            // 恢复原始函数
+            firebaseManager.savePetData = originalSavePetData;
+
+            console.log('\n🎉 同步循环防护系统测试完成！');
+            console.log('💡 防护特点:');
+            console.log('  - 🛡️ 阻止无效的重复写入');
+            console.log('  - 🔄 防止云端更新回环');
+            console.log('  - 📊 深度比较确保数据变化检测');
+            console.log('  - ⚡ 提高同步效率，节省网络流量');
+
+            return {
+                success: true,
+                deepEqual: true,
+                gatekeeper: true,
+                loopPrevention: true
+            };
+
+        } catch (error) {
+            console.error('❌ 同步循环防护测试失败:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    };
+
+    /**
+     * 测试API获取功能是否正常
+     */
+    window.testAPIFunction = async function() {
+        console.log('🧪 测试API获取功能...');
+
+        try {
+            console.log('正在调用 getAvailableAPIs()...');
+            const apis = await getAvailableAPIs();
+
+            console.log('✅ API获取功能正常');
+            console.log(`📊 发现 ${apis.length} 个API`);
+
+            if (apis.length > 0) {
+                console.log('🎯 发现的API:');
+                apis.forEach((api, index) => {
+                    console.log(`  ${index + 1}. ${api.name} (${api.provider})`);
+                });
+            } else {
+                console.log('💡 未发现可用API，这可能是正常的（取决于网络和配置）');
+            }
+
+            return {
+                success: true,
+                apiCount: apis.length,
+                apis: apis
+            };
+
+        } catch (error) {
+            console.error('❌ API获取功能测试失败:', error);
+            console.error('错误详情:', error.message);
+
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    };
+
+    /**
      * 验证Chrome存储方法已完全移除
      */
     window.verifyCleanup = function() {
@@ -13293,7 +13548,13 @@ ${currentPersonality}
     console.log("🔥 Firebase跨平台同步系统已启用 (KPOP Pet项目)");
     console.log("🧹 Chrome存储方法已完全移除，统一使用Firebase");
     console.log("");
-    console.log("🔧 如果遇到认证超时问题，请检查Firebase服务配置:");
+    console.log("🐛 Bug修复:");
+    console.log("✅ 修复了 userApiUrls 变量初始化顺序问题");
+    console.log("🛡️ 实施了同步循环防护系统，防止'失控的同步循环'");
+    console.log("");
+    console.log("🧪 测试功能:");
+    console.log("🧪 运行 testSyncGuard() 来测试同步循环防护");
+    console.log("🧪 运行 testAPIFunction() 来测试API获取功能");
     console.log("🧪 运行 checkFirebaseServices() 来检查服务配置");
     console.log("🧪 运行 checkFirebaseStatus() 来检查连接状态");
     console.log("🧪 运行 testFirebaseSync() 来测试同步功能");

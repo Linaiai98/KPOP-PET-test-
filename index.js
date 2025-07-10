@@ -340,10 +340,10 @@ jQuery(async () => {
         type: "cat", // cat, dog, dragon, etc.
         level: 1,
         experience: 0,
-        health: 25,      // 更低的起始值：需要照顾才能成长
-        happiness: 20,   // 更低的起始值：需要互动才能快乐
-        hunger: 30,      // 更低的起始值：需要喂食才能饱足
-        energy: 35,      // 更低的起始值：需要休息才能精力充沛
+        health: 20,      // 低起始值：最高50，需要持续照顾才能成长
+        happiness: 15,   // 低起始值：最高50，需要频繁互动才能快乐
+        hunger: 25,      // 低起始值：最高50，需要定期喂食才能饱足
+        energy: 30,      // 低起始值：最高50，需要充分休息才能精力充沛
 
         // 拓麻歌子式生命状态
         lifeStage: "baby",    // baby, child, teen, adult, senior

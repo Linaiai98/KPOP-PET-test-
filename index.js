@@ -135,7 +135,7 @@ jQuery(async () => {
     };
 
     /**
-     * Firebase云端服务管理器 - 跨平台同步的核心
+     * Firebase云端服务管理器 - 跨平台同步的核心 (v9+ 模块化SDK)
      */
     const firebaseManager = {
         // Firebase配置 - KPOP Pet项目
@@ -143,7 +143,7 @@ jQuery(async () => {
             apiKey: "AIzaSyDkalkcfsqeGUp1umyjVL-UXEh5-xR28MI",
             authDomain: "kpop-pet.firebaseapp.com",
             projectId: "kpop-pet",
-            storageBucket: "kpop-pet.firebasestorage.app",
+            storageBucket: "kpop-pet.appspot.com", // 修正为标准格式
             messagingSenderId: "695150172164",
             appId: "1:695150172164:web:15c194d777d9005fd3bd51",
             measurementId: "G-68P4FH08DM"
@@ -152,66 +152,264 @@ jQuery(async () => {
         // 初始化状态
         initialized: false,
         currentUser: null,
+        app: null,
+        auth: null,
         db: null,
         storage: null,
         listeners: new Map(),
 
         /**
-         * 初始化Firebase服务
+         * 初始化Firebase服务 - iOS优化版本
          */
         async init() {
             try {
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                console.log(`[FirebaseManager] 开始初始化 (iOS: ${isIOS})`);
+
                 // 检查Firebase SDK是否可用
                 if (typeof firebase === 'undefined') {
                     console.warn('[FirebaseManager] Firebase SDK未加载，尝试动态加载...');
+
+                    // iOS设备显示加载提示
+                    if (isIOS) {
+                        console.log('[FirebaseManager] 🍎 iOS设备检测到，使用优化加载策略...');
+                        // 可以在这里添加用户友好的加载提示
+                        if (typeof toastr !== 'undefined') {
+                            toastr.info('🔄 正在加载云端同步组件...', 'iOS优化', { timeOut: 3000 });
+                        }
+                    }
 
                     // 尝试动态加载Firebase SDK
                     const sdkLoaded = await this.loadFirebaseSDK();
                     if (!sdkLoaded) {
                         console.warn('[FirebaseManager] Firebase SDK加载失败，使用本地存储降级');
+
+                        if (isIOS && typeof toastr !== 'undefined') {
+                            toastr.warning('云端同步不可用，将使用本地存储', 'iOS提示', { timeOut: 5000 });
+                        }
                         return false;
+                    }
+
+                    if (isIOS && typeof toastr !== 'undefined') {
+                        toastr.success('✅ 云端同步组件加载成功', 'iOS优化', { timeOut: 2000 });
                     }
                 }
 
                 // 初始化Firebase
                 if (!firebase.apps.length) {
                     firebase.initializeApp(this.config);
+                    console.log('[FirebaseManager] Firebase应用已初始化');
+                } else {
+                    console.log('[FirebaseManager] Firebase应用已存在，跳过初始化');
                 }
 
+                // 初始化服务
                 this.db = firebase.firestore();
                 this.storage = firebase.storage();
                 this.initialized = true;
 
-                console.log('[FirebaseManager] Firebase初始化成功');
+                console.log('[FirebaseManager] ✅ Firebase初始化成功');
                 console.log('[FirebaseManager] 项目ID:', this.config.projectId);
+
+                // iOS设备额外验证
+                if (isIOS) {
+                    console.log('[FirebaseManager] 🍎 iOS设备Firebase服务验证:');
+                    console.log('  - Firestore:', typeof this.db !== 'undefined' ? '✅' : '❌');
+                    console.log('  - Storage:', typeof this.storage !== 'undefined' ? '✅' : '❌');
+                    console.log('  - Auth:', typeof firebase.auth !== 'undefined' ? '✅' : '❌');
+                }
+
                 return true;
             } catch (error) {
                 console.error('[FirebaseManager] Firebase初始化失败:', error);
+
+                // iOS设备特殊错误处理
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                if (isIOS) {
+                    console.error('[FirebaseManager] 🍎 iOS设备初始化失败，可能的原因:');
+                    console.error('  - 网络连接不稳定');
+                    console.error('  - Safari安全策略限制');
+                    console.error('  - 脚本加载被阻止');
+
+                    if (typeof toastr !== 'undefined') {
+                        toastr.error('云端同步初始化失败，请检查网络连接', 'iOS提示', { timeOut: 5000 });
+                    }
+                }
+
                 return false;
             }
         },
 
         /**
-         * 动态加载Firebase SDK
+         * 动态加载Firebase v9+ 模块化SDK
+         */
+        async loadFirebaseV9SDK() {
+            try {
+                console.log('[FirebaseManager] 动态加载Firebase v9+ 模块化SDK...');
+
+                // 检测设备类型
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                console.log(`[FirebaseManager] 设备检测: iOS=${isIOS}`);
+
+                // Firebase v9+ SDK URLs - 模块化版本
+                const sdkUrls = [
+                    'https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js',
+                    'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js',
+                    'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js',
+                    'https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js'
+                ];
+
+                // iOS设备使用更长的超时时间
+                const timeout = isIOS ? 15000 : 10000;
+                const maxRetries = isIOS ? 3 : 2;
+
+                for (let retry = 0; retry < maxRetries; retry++) {
+                    try {
+                        console.log(`[FirebaseManager] 尝试加载 v9+ SDK (第${retry + 1}次)...`);
+
+                        // 串行加载模块
+                        for (const url of sdkUrls) {
+                            await this.loadModuleScript(url, timeout);
+                            console.log(`[FirebaseManager] ✅ 已加载: ${url.split('/').pop()}`);
+                        }
+
+                        // 等待模块初始化
+                        await new Promise(resolve => setTimeout(resolve, isIOS ? 1000 : 500));
+
+                        // 检查v9+函数是否可用
+                        if (typeof window.initializeApp !== 'undefined' &&
+                            typeof window.getAuth !== 'undefined') {
+                            console.log('[FirebaseManager] ✅ Firebase v9+ SDK动态加载成功');
+                            return true;
+                        } else {
+                            throw new Error('Firebase v9+ 函数未定义');
+                        }
+
+                    } catch (error) {
+                        console.warn(`[FirebaseManager] 第${retry + 1}次v9+加载失败:`, error.message);
+
+                        if (retry < maxRetries - 1) {
+                            const delay = (retry + 1) * 2000;
+                            console.log(`[FirebaseManager] ${delay}ms后重试...`);
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                        }
+                    }
+                }
+
+                console.error('[FirebaseManager] ❌ Firebase v9+ SDK动态加载失败');
+                return false;
+
+            } catch (error) {
+                console.error('[FirebaseManager] 动态加载Firebase v9+ SDK异常:', error);
+                return false;
+            }
+        },
+
+        /**
+         * 加载模块化脚本
+         */
+        loadModuleScript(src, timeout = 10000) {
+            return new Promise((resolve, reject) => {
+                // 检查是否已经加载
+                const existingScript = document.querySelector(`script[src="${src}"]`);
+                if (existingScript) {
+                    console.log(`[FirebaseManager] 模块已存在: ${src.split('/').pop()}`);
+                    resolve();
+                    return;
+                }
+
+                const script = document.createElement('script');
+                script.src = src;
+                script.type = 'module'; // 重要：设置为模块类型
+                script.async = true;
+
+                // iOS优化
+                if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
+                    script.crossOrigin = 'anonymous';
+                }
+
+                // 设置超时
+                const timeoutId = setTimeout(() => {
+                    script.remove();
+                    reject(new Error(`模块加载超时: ${src}`));
+                }, timeout);
+
+                script.onload = () => {
+                    clearTimeout(timeoutId);
+                    console.log(`[FirebaseManager] 模块加载成功: ${src.split('/').pop()}`);
+                    resolve();
+                };
+
+                script.onerror = (error) => {
+                    clearTimeout(timeoutId);
+                    script.remove();
+                    reject(new Error(`模块加载失败: ${src} - ${error.message || 'Unknown error'}`));
+                };
+
+                document.head.appendChild(script);
+            });
+        },
+
+        /**
+         * 动态加载Firebase SDK - iOS优化版本 (兼容模式备选)
          */
         async loadFirebaseSDK() {
             try {
-                console.log('[FirebaseManager] 动态加载Firebase SDK...');
+                console.log('[FirebaseManager] 动态加载Firebase SDK (iOS优化)...');
 
-                // 加载Firebase核心SDK
-                await this.loadScript('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js');
-                await this.loadScript('https://www.gstatic.com/firebasejs/9.0.0/firebase-auth-compat.js');
-                await this.loadScript('https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore-compat.js');
-                await this.loadScript('https://www.gstatic.com/firebasejs/9.0.0/firebase-storage-compat.js');
+                // 检测设备类型
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-                // 检查是否加载成功
-                if (typeof firebase !== 'undefined') {
-                    console.log('[FirebaseManager] Firebase SDK动态加载成功');
-                    return true;
-                } else {
-                    console.error('[FirebaseManager] Firebase SDK动态加载失败');
-                    return false;
+                console.log(`[FirebaseManager] 设备检测: iOS=${isIOS}, Mobile=${isMobile}`);
+
+                // Firebase SDK URLs - 使用稳定版本
+                const sdkUrls = [
+                    'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
+                    'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js',
+                    'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js',
+                    'https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js'
+                ];
+
+                // iOS设备使用更长的超时时间和重试机制
+                const timeout = isIOS ? 15000 : 10000;
+                const maxRetries = isIOS ? 3 : 2;
+
+                for (let retry = 0; retry < maxRetries; retry++) {
+                    try {
+                        console.log(`[FirebaseManager] 尝试加载 (第${retry + 1}次)...`);
+
+                        // 串行加载，避免并发问题
+                        for (const url of sdkUrls) {
+                            await this.loadScriptWithTimeout(url, timeout);
+                            console.log(`[FirebaseManager] ✅ 已加载: ${url.split('/').pop()}`);
+                        }
+
+                        // 等待一小段时间确保脚本完全初始化
+                        await new Promise(resolve => setTimeout(resolve, isIOS ? 1000 : 500));
+
+                        // 检查是否加载成功
+                        if (typeof firebase !== 'undefined') {
+                            console.log('[FirebaseManager] ✅ Firebase SDK动态加载成功');
+                            return true;
+                        } else {
+                            throw new Error('Firebase对象未定义');
+                        }
+
+                    } catch (error) {
+                        console.warn(`[FirebaseManager] 第${retry + 1}次加载失败:`, error.message);
+
+                        if (retry < maxRetries - 1) {
+                            const delay = (retry + 1) * 2000; // 递增延迟
+                            console.log(`[FirebaseManager] ${delay}ms后重试...`);
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                        }
+                    }
                 }
+
+                console.error('[FirebaseManager] ❌ Firebase SDK动态加载失败，已达最大重试次数');
+                return false;
+
             } catch (error) {
                 console.error('[FirebaseManager] 动态加载Firebase SDK异常:', error);
                 return false;
@@ -219,20 +417,47 @@ jQuery(async () => {
         },
 
         /**
-         * 加载外部脚本
+         * 加载外部脚本 - 带超时和iOS优化
          */
-        loadScript(src) {
+        loadScriptWithTimeout(src, timeout = 10000) {
             return new Promise((resolve, reject) => {
                 // 检查是否已经加载
-                if (document.querySelector(`script[src="${src}"]`)) {
+                const existingScript = document.querySelector(`script[src="${src}"]`);
+                if (existingScript) {
+                    console.log(`[FirebaseManager] 脚本已存在: ${src.split('/').pop()}`);
                     resolve();
                     return;
                 }
 
                 const script = document.createElement('script');
                 script.src = src;
-                script.onload = resolve;
-                script.onerror = reject;
+                script.type = 'text/javascript';
+                script.async = true;
+
+                // iOS优化：添加crossorigin属性
+                if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
+                    script.crossOrigin = 'anonymous';
+                }
+
+                // 设置超时
+                const timeoutId = setTimeout(() => {
+                    script.remove();
+                    reject(new Error(`脚本加载超时: ${src}`));
+                }, timeout);
+
+                script.onload = () => {
+                    clearTimeout(timeoutId);
+                    console.log(`[FirebaseManager] 脚本加载成功: ${src.split('/').pop()}`);
+                    resolve();
+                };
+
+                script.onerror = (error) => {
+                    clearTimeout(timeoutId);
+                    script.remove();
+                    reject(new Error(`脚本加载失败: ${src} - ${error.message || 'Unknown error'}`));
+                };
+
+                // 添加到head
                 document.head.appendChild(script);
             });
         },
@@ -260,7 +485,20 @@ jQuery(async () => {
                 console.log('[FirebaseManager] 开始匿名登录...');
 
                 // 设置超时时间为10秒
-                const authPromise = firebase.auth().signInAnonymously();
+                let authPromise;
+
+                // 检查是否使用v9+ SDK
+                if (this.auth && typeof window.signInAnonymously !== 'undefined') {
+                    // v9+ 模块化SDK
+                    const signInAnonymously = window.signInAnonymously;
+                    authPromise = signInAnonymously(this.auth);
+                } else if (typeof firebase !== 'undefined' && firebase.auth) {
+                    // 兼容模式SDK
+                    authPromise = firebase.auth().signInAnonymously();
+                } else {
+                    throw new Error('Firebase Auth不可用');
+                }
+
                 const timeoutPromise = new Promise((_, reject) => {
                     setTimeout(() => reject(new Error('认证超时')), 10000);
                 });
@@ -345,9 +583,21 @@ jQuery(async () => {
                     lastUpdateTime: Date.now()
                 };
 
-                await this.db.collection('users').doc(this.currentUser.uid).set({
-                    petData: dataWithTimestamp
-                }, { merge: true });
+                // 检查是否使用v9+ SDK
+                if (typeof window.doc !== 'undefined' && typeof window.setDoc !== 'undefined') {
+                    // v9+ 模块化SDK
+                    const doc = window.doc;
+                    const setDoc = window.setDoc;
+                    const userDocRef = doc(this.db, 'users', this.currentUser.uid);
+                    await setDoc(userDocRef, {
+                        petData: dataWithTimestamp
+                    }, { merge: true });
+                } else {
+                    // 兼容模式SDK
+                    await this.db.collection('users').doc(this.currentUser.uid).set({
+                        petData: dataWithTimestamp
+                    }, { merge: true });
+                }
 
                 console.log('[FirebaseManager] 宠物数据已保存到云端');
                 return true;
@@ -370,10 +620,22 @@ jQuery(async () => {
                     throw new Error('用户认证失败');
                 }
 
-                const doc = await this.db.collection('users').doc(this.currentUser.uid).get();
+                let docSnapshot;
 
-                if (doc.exists) {
-                    const userData = doc.data();
+                // 检查是否使用v9+ SDK
+                if (typeof window.doc !== 'undefined' && typeof window.getDoc !== 'undefined') {
+                    // v9+ 模块化SDK
+                    const doc = window.doc;
+                    const getDoc = window.getDoc;
+                    const userDocRef = doc(this.db, 'users', this.currentUser.uid);
+                    docSnapshot = await getDoc(userDocRef);
+                } else {
+                    // 兼容模式SDK
+                    docSnapshot = await this.db.collection('users').doc(this.currentUser.uid).get();
+                }
+
+                if (docSnapshot.exists || (docSnapshot.exists && docSnapshot.exists())) {
+                    const userData = docSnapshot.data();
                     console.log('[FirebaseManager] 宠物数据已从云端加载');
                     return userData.petData || null;
                 } else {
@@ -13195,6 +13457,92 @@ ${currentPersonality}
     };
 
     /**
+     * iOS设备专用的Firebase诊断工具
+     */
+    window.diagnoseIOSFirebase = async function() {
+        console.log('🍎 iOS Firebase诊断工具...');
+
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        if (!isIOS) {
+            console.log('❌ 当前设备不是iOS，请在iOS设备上运行此诊断');
+            return;
+        }
+
+        console.log('✅ iOS设备确认');
+
+        try {
+            // 1. 网络连接检测
+            console.log('\n🌐 网络连接检测:');
+
+            const networkTests = [
+                'https://www.google.com/favicon.ico',
+                'https://firebase.google.com/favicon.ico',
+                'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js'
+            ];
+
+            for (const url of networkTests) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'HEAD',
+                        mode: 'no-cors',
+                        cache: 'no-cache'
+                    });
+                    console.log(`✅ ${url.split('/')[2]}: 可访问`);
+                } catch (error) {
+                    console.log(`❌ ${url.split('/')[2]}: 不可访问 (${error.message})`);
+                }
+            }
+
+            // 2. Safari特性检测
+            console.log('\n🧭 Safari特性检测:');
+            console.log(`- User Agent: ${navigator.userAgent}`);
+            console.log(`- 是否支持fetch: ${typeof fetch !== 'undefined' ? '✅' : '❌'}`);
+            console.log(`- 是否支持Promise: ${typeof Promise !== 'undefined' ? '✅' : '❌'}`);
+            console.log(`- 是否支持ES6模块: ${typeof Symbol !== 'undefined' ? '✅' : '❌'}`);
+            console.log(`- 本地存储: ${typeof localStorage !== 'undefined' ? '✅' : '❌'}`);
+
+            // 3. Firebase SDK加载测试
+            console.log('\n🔥 Firebase SDK加载测试:');
+
+            if (typeof firebase === 'undefined') {
+                console.log('Firebase SDK未加载，尝试动态加载...');
+                const loadResult = await firebaseManager.loadFirebaseSDK();
+                console.log(`动态加载结果: ${loadResult ? '✅ 成功' : '❌ 失败'}`);
+            } else {
+                console.log('✅ Firebase SDK已加载');
+            }
+
+            // 4. Firebase服务测试
+            if (typeof firebase !== 'undefined') {
+                console.log('\n🔧 Firebase服务测试:');
+
+                try {
+                    const initResult = await firebaseManager.init();
+                    console.log(`初始化结果: ${initResult ? '✅ 成功' : '❌ 失败'}`);
+
+                    if (initResult) {
+                        const authResult = await firebaseManager.authenticateUser();
+                        console.log(`认证结果: ${authResult ? '✅ 成功' : '❌ 失败'}`);
+                    }
+                } catch (error) {
+                    console.log(`❌ 服务测试失败: ${error.message}`);
+                }
+            }
+
+            // 5. iOS特殊建议
+            console.log('\n💡 iOS优化建议:');
+            console.log('1. 确保网络连接稳定');
+            console.log('2. 尝试刷新页面重新加载');
+            console.log('3. 检查Safari的"阻止跨站跟踪"设置');
+            console.log('4. 如果使用VPN，尝试断开后重试');
+            console.log('5. 清除Safari缓存后重试');
+
+        } catch (error) {
+            console.error('❌ iOS诊断过程中出错:', error);
+        }
+    };
+
+    /**
      * 检查Firebase服务配置状态
      */
     window.checkFirebaseServices = async function() {
@@ -13367,6 +13715,180 @@ ${currentPersonality}
                 error: error.message
             };
         }
+    };
+
+    /**
+     * Firebase v9+ SDK使用指南
+     */
+    window.setupFirebaseV9 = function() {
+        console.log('🔥 Firebase v9+ 模块化SDK使用指南');
+        console.log('');
+        console.log('📋 在HTML中添加以下代码:');
+        console.log('');
+        console.log('```html');
+        console.log('<!-- Firebase v9+ 模块化SDK -->');
+        console.log('<script type="module">');
+        console.log('  // Import the functions you need from the SDKs you need');
+        console.log('  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";');
+        console.log('  import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";');
+        console.log('  import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";');
+        console.log('  import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";');
+        console.log('');
+        console.log('  // Your web app\'s Firebase configuration');
+        console.log('  const firebaseConfig = {');
+        console.log('    apiKey: "AIzaSyDkalkcfsqeGUp1umyjVL-UXEh5-xR28MI",');
+        console.log('    authDomain: "kpop-pet.firebaseapp.com",');
+        console.log('    projectId: "kpop-pet",');
+        console.log('    storageBucket: "kpop-pet.appspot.com",');
+        console.log('    messagingSenderId: "695150172164",');
+        console.log('    appId: "1:695150172164:web:15c194d777d9005fd3bd51",');
+        console.log('    measurementId: "G-68P4FH08DM"');
+        console.log('  };');
+        console.log('');
+        console.log('  // Initialize Firebase');
+        console.log('  const app = initializeApp(firebaseConfig);');
+        console.log('  const auth = getAuth(app);');
+        console.log('  const db = getFirestore(app);');
+        console.log('  const storage = getStorage(app);');
+        console.log('');
+        console.log('  // Make functions available globally for the plugin');
+        console.log('  window.initializeApp = initializeApp;');
+        console.log('  window.getAuth = getAuth;');
+        console.log('  window.signInAnonymously = signInAnonymously;');
+        console.log('  window.getFirestore = getFirestore;');
+        console.log('  window.doc = doc;');
+        console.log('  window.setDoc = setDoc;');
+        console.log('  window.getDoc = getDoc;');
+        console.log('  window.getStorage = getStorage;');
+        console.log('  window.ref = ref;');
+        console.log('  window.uploadBytes = uploadBytes;');
+        console.log('  window.getDownloadURL = getDownloadURL;');
+        console.log('');
+        console.log('  console.log("🔥 Firebase v9+ SDK已加载并配置完成");');
+        console.log('</script>');
+        console.log('```');
+        console.log('');
+        console.log('💡 优势:');
+        console.log('  - 🚀 更小的包体积（模块化加载）');
+        console.log('  - 🔒 更好的类型安全');
+        console.log('  - 📱 更好的移动端兼容性');
+        console.log('  - 🍎 iOS Safari优化支持');
+        console.log('');
+        console.log('🔧 使用方法:');
+        console.log('  1. 将上述代码添加到HTML的<head>部分');
+        console.log('  2. 重新加载页面');
+        console.log('  3. 插件会自动检测并使用v9+ SDK');
+
+        if (typeof toastr !== 'undefined') {
+            toastr.info('📋 Firebase v9+ 使用指南已显示在控制台', 'SDK升级', { timeOut: 5000 });
+        }
+    };
+
+    /**
+     * iOS Firebase状态检测和解决方案
+     */
+    window.checkiOSFirebase = async function() {
+        console.log('🍎 iOS Firebase状态检测...');
+
+        // 检测设备
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+        console.log('\n📱 设备信息:');
+        console.log(`- 设备类型: ${isIOS ? 'iOS' : '非iOS'}`);
+        console.log(`- 浏览器: ${isSafari ? 'Safari' : '其他'}`);
+        console.log(`- User Agent: ${navigator.userAgent}`);
+
+        if (!isIOS) {
+            console.log('ℹ️ 当前不是iOS设备，Firebase应该正常工作');
+            return;
+        }
+
+        console.log('\n🔍 Firebase SDK检测:');
+        console.log(`- Firebase核心: ${typeof firebase !== 'undefined' ? '✅ 已加载' : '❌ 未加载'}`);
+
+        if (typeof firebase !== 'undefined') {
+            console.log(`- Auth: ${typeof firebase.auth !== 'undefined' ? '✅' : '❌'}`);
+            console.log(`- Firestore: ${typeof firebase.firestore !== 'undefined' ? '✅' : '❌'}`);
+            console.log(`- Storage: ${typeof firebase.storage !== 'undefined' ? '✅' : '❌'}`);
+        }
+
+        console.log('\n🔧 Firebase管理器状态:');
+        console.log(`- 初始化状态: ${firebaseManager.initialized ? '✅ 已初始化' : '❌ 未初始化'}`);
+        console.log(`- 当前用户: ${firebaseManager.currentUser ? '✅ 已认证' : '❌ 未认证'}`);
+
+        // 网络连接测试
+        console.log('\n🌐 网络连接测试:');
+        try {
+            const response = await fetch('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js', {
+                method: 'HEAD',
+                mode: 'no-cors'
+            });
+            console.log('- Firebase CDN连接: ✅ 可访问');
+        } catch (error) {
+            console.log('- Firebase CDN连接: ❌ 不可访问');
+            console.log('  错误:', error.message);
+        }
+
+        // 提供解决方案
+        console.log('\n💡 iOS Firebase解决方案:');
+
+        if (typeof firebase === 'undefined') {
+            console.log('🚨 Firebase SDK未加载，可能的解决方案:');
+            console.log('');
+            console.log('方案1: 手动添加Firebase SDK到HTML');
+            console.log('在页面的<head>部分添加以下代码:');
+            console.log('```html');
+            console.log('<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>');
+            console.log('<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>');
+            console.log('<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>');
+            console.log('<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>');
+            console.log('```');
+            console.log('');
+            console.log('方案2: 使用VPN');
+            console.log('- 某些地区可能无法访问Firebase CDN');
+            console.log('- 尝试连接VPN后重新加载页面');
+            console.log('');
+            console.log('方案3: 使用本地存储模式');
+            console.log('- 虽然无法跨设备同步，但核心功能仍可正常使用');
+            console.log('- 插件会自动降级到本地存储模式');
+
+            // 显示用户友好的提示
+            if (typeof toastr !== 'undefined') {
+                toastr.warning('🍎 iOS设备Firebase不可用<br>建议使用VPN或在HTML中预加载SDK', 'iOS提示', {
+                    timeOut: 10000,
+                    allowHtml: true
+                });
+            }
+        } else {
+            console.log('✅ Firebase SDK已加载，尝试测试连接...');
+
+            try {
+                await firebaseManager.init();
+                console.log('✅ Firebase初始化成功');
+
+                const userId = await firebaseManager.authenticateUser();
+                if (userId) {
+                    console.log('✅ Firebase认证成功');
+                    console.log('🎉 iOS设备Firebase完全正常！');
+
+                    if (typeof toastr !== 'undefined') {
+                        toastr.success('🍎 iOS Firebase工作正常！', '状态检测', { timeOut: 3000 });
+                    }
+                } else {
+                    console.log('❌ Firebase认证失败');
+                }
+            } catch (error) {
+                console.error('❌ Firebase测试失败:', error);
+            }
+        }
+
+        return {
+            isIOS,
+            firebaseLoaded: typeof firebase !== 'undefined',
+            managerInitialized: firebaseManager.initialized,
+            userAuthenticated: !!firebaseManager.currentUser
+        };
     };
 
     /**
@@ -13544,6 +14066,10 @@ ${currentPersonality}
         };
     };
 
+    // 检测设备类型并显示相应提示
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
     console.log("🐾 虚拟宠物系统脚本已加载完成");
     console.log("🔥 Firebase跨平台同步系统已启用 (KPOP Pet项目)");
     console.log("🧹 Chrome存储方法已完全移除，统一使用Firebase");
@@ -13551,7 +14077,36 @@ ${currentPersonality}
     console.log("🐛 Bug修复:");
     console.log("✅ 修复了 userApiUrls 变量初始化顺序问题");
     console.log("🛡️ 实施了同步循环防护系统，防止'失控的同步循环'");
+    console.log("🍎 优化了iOS设备的Firebase SDK加载机制");
+    console.log("🔥 支持Firebase v9+ 模块化SDK");
     console.log("");
+
+    // 检测Firebase SDK版本
+    const hasV9SDK = typeof window.initializeApp !== 'undefined';
+    const hasCompatSDK = typeof firebase !== 'undefined';
+
+    console.log("🔥 Firebase SDK状态:");
+    console.log(`  - v9+ 模块化SDK: ${hasV9SDK ? '✅ 已加载' : '❌ 未加载'}`);
+    console.log(`  - 兼容模式SDK: ${hasCompatSDK ? '✅ 已加载' : '❌ 未加载'}`);
+
+    if (!hasV9SDK && !hasCompatSDK) {
+        console.log("🚨 Firebase SDK未加载！");
+        console.log("🧪 运行 setupFirebaseV9() 查看v9+ SDK配置指南");
+    } else if (!hasV9SDK && hasCompatSDK) {
+        console.log("💡 建议升级到Firebase v9+ 模块化SDK");
+        console.log("🧪 运行 setupFirebaseV9() 查看升级指南");
+    } else if (hasV9SDK) {
+        console.log("🎉 Firebase v9+ 模块化SDK已就绪！");
+    }
+    console.log("");
+
+    if (isIOS) {
+        console.log("🍎 iOS设备检测到:");
+        console.log("🧪 运行 checkiOSFirebase() 来检测iOS Firebase状态");
+        console.log("💡 如果遇到Firebase加载问题，该函数会提供解决方案");
+        console.log("");
+    }
+
     console.log("🧪 测试功能:");
     console.log("🧪 运行 testSyncGuard() 来测试同步循环防护");
     console.log("🧪 运行 testAPIFunction() 来测试API获取功能");
@@ -13560,7 +14115,36 @@ ${currentPersonality}
     console.log("🧪 运行 testFirebaseSync() 来测试同步功能");
     console.log("🧪 运行 verifyCleanup() 来验证清理状态");
     console.log("");
+    console.log("🔥 Firebase SDK管理:");
+    console.log("🔥 运行 setupFirebaseV9() 来查看v9+ SDK配置指南");
+    console.log("");
     console.log("🔗 设备连接功能:");
     console.log("🔗 运行 generateDeviceCode() 来生成设备连接码");
     console.log("📱 运行 connectWithCode() 来连接新设备");
+
+    // iOS设备自动检测Firebase状态
+    if (isIOS) {
+        setTimeout(async () => {
+            console.log('\n🍎 自动检测iOS Firebase状态...');
+
+            if (typeof firebase === 'undefined') {
+                console.warn('⚠️ iOS设备上Firebase SDK未加载');
+                console.log('💡 这可能是正常的，插件会自动降级到本地存储模式');
+                console.log('🔧 如需云端同步，请运行 checkiOSFirebase() 查看解决方案');
+
+                if (typeof toastr !== 'undefined') {
+                    toastr.info('🍎 iOS设备检测到Firebase不可用<br>已自动切换到本地存储模式', 'iOS提示', {
+                        timeOut: 8000,
+                        allowHtml: true
+                    });
+                }
+            } else {
+                console.log('✅ iOS设备Firebase SDK已加载');
+
+                if (typeof toastr !== 'undefined') {
+                    toastr.success('🍎 iOS Firebase工作正常', 'iOS状态', { timeOut: 3000 });
+                }
+            }
+        }, 2000); // 延迟2秒，确保所有初始化完成
+    }
 });

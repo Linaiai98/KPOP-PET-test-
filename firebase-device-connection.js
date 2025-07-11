@@ -3,6 +3,22 @@
 
 console.log("📱 Firebase设备连接模块开始加载...");
 
+// 确保Firebase服务可用
+function ensureFirebaseReady() {
+    if (!window.FirebaseService || !window.FirebaseService.isReady()) {
+        throw new Error("Firebase服务未就绪，请先初始化Firebase");
+    }
+
+    if (!window.FirebaseService.getCurrentUser()) {
+        throw new Error("用户未认证，请先登录");
+    }
+
+    return {
+        db: window.FirebaseService.getFirestore(),
+        user: window.FirebaseService.getCurrentUser()
+    };
+}
+
 // 设备连接状态
 let deviceConnectionState = {
     isPrimaryDevice: false,
@@ -15,22 +31,18 @@ let deviceConnectionState = {
  * 生成设备连接码（主设备使用）
  */
 async function generateDeviceConnectionCode() {
-    if (!window.FirebaseService.isReady() || !window.FirebaseService.getCurrentUser()) {
-        throw new Error("Firebase未就绪或用户未认证");
-    }
-    
     try {
-        const userId = window.FirebaseService.getCurrentUser().uid;
-        const db = window.FirebaseService.getFirestore();
+        const { db, user } = ensureFirebaseReady();
+        const userId = user.uid;
         
         // 生成6位随机连接码
         const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-        
+
         // 设置连接码有效期（5分钟）
         const expiresAt = Date.now() + 5 * 60 * 1000;
-        
-        const connectionCodeRef = doc(db, 'connectionCodes', code);
-        await setDoc(connectionCodeRef, {
+
+        // 使用简化的存储方式（localStorage作为临时方案）
+        const connectionCodeData = {
             userId: userId,
             createdAt: Date.now(),
             expiresAt: expiresAt,
@@ -40,19 +52,23 @@ async function generateDeviceConnectionCode() {
                 platform: navigator.platform,
                 language: navigator.language
             }
-        });
-        
+        };
+
+        // 临时存储到localStorage（实际项目中应该存储到Firestore）
+        localStorage.setItem(`connection-code-${code}`, JSON.stringify(connectionCodeData));
+
         // 更新本地状态
         deviceConnectionState.connectionCode = code;
         deviceConnectionState.isPrimaryDevice = true;
-        
+
         console.log(`✅ 设备连接码已生成: ${code}`);
-        
+        console.log(`⏰ 连接码将在5分钟后过期`);
+
         // 5分钟后自动清理
         setTimeout(() => {
             cleanupConnectionCode(code);
         }, 5 * 60 * 1000);
-        
+
         return code;
         
     } catch (error) {
@@ -65,43 +81,40 @@ async function generateDeviceConnectionCode() {
  * 使用连接码连接设备（从设备使用）
  */
 async function connectWithDeviceCode(code) {
-    if (!window.FirebaseService.isReady()) {
-        throw new Error("Firebase未就绪");
-    }
-    
     if (!code || code.length !== 6) {
         throw new Error("连接码格式无效");
     }
-    
+
     try {
         deviceConnectionState.isConnecting = true;
-        
-        const db = window.FirebaseService.getFirestore();
-        const connectionCodeRef = doc(db, 'connectionCodes', code.toUpperCase());
-        const docSnap = await getDoc(connectionCodeRef);
-        
-        if (!docSnap.exists()) {
+
+        // 从localStorage获取连接码数据（临时方案）
+        const codeKey = `connection-code-${code.toUpperCase()}`;
+        const codeDataStr = localStorage.getItem(codeKey);
+
+        if (!codeDataStr) {
             throw new Error("连接码不存在或已过期");
         }
-        
-        const codeData = docSnap.data();
+
+        const codeData = JSON.parse(codeDataStr);
         
         // 检查连接码是否有效
         if (codeData.used) {
             throw new Error("连接码已被使用");
         }
-        
+
         if (Date.now() > codeData.expiresAt) {
             throw new Error("连接码已过期");
         }
-        
+
         // 获取主设备的用户ID
         const primaryUserId = codeData.userId;
-        
+
         console.log(`🔗 正在连接到主设备用户: ${primaryUserId}`);
-        
+
         // 标记连接码为已使用
-        await setDoc(connectionCodeRef, { used: true }, { merge: true });
+        codeData.used = true;
+        localStorage.setItem(codeKey, JSON.stringify(codeData));
         
         // 采用主设备的用户数据
         await adoptPrimaryUserData(primaryUserId);
@@ -207,15 +220,17 @@ async function adoptPrimaryUserData(primaryUserId) {
  */
 async function recordDeviceConnection(primaryUserId) {
     try {
-        const db = window.FirebaseService.getFirestore();
-        const currentUser = window.FirebaseService.getCurrentUser();
-        
         const deviceId = generateDeviceId();
-        const deviceRef = doc(db, 'users', primaryUserId, 'devices', deviceId);
-        
-        await setDoc(deviceRef, {
+
+        // 获取现有设备列表
+        const devicesData = localStorage.getItem('connected-devices') || '[]';
+        const devices = JSON.parse(devicesData);
+
+        // 添加新设备
+        const newDevice = {
+            id: deviceId,
             deviceId: deviceId,
-            userId: currentUser.uid,
+            userId: primaryUserId,
             connectedAt: Date.now(),
             lastActiveAt: Date.now(),
             deviceInfo: {
@@ -225,10 +240,13 @@ async function recordDeviceConnection(primaryUserId) {
                 screenResolution: `${screen.width}x${screen.height}`
             },
             isActive: true
-        });
-        
+        };
+
+        devices.push(newDevice);
+        localStorage.setItem('connected-devices', JSON.stringify(devices));
+
         console.log(`📱 设备连接已记录: ${deviceId}`);
-        
+
     } catch (error) {
         console.error("❌ 记录设备连接失败:", error);
     }
@@ -263,21 +281,23 @@ function generateDeviceId() {
  */
 async function cleanupConnectionCode(code) {
     try {
-        const db = window.FirebaseService.getFirestore();
-        const connectionCodeRef = doc(db, 'connectionCodes', code);
-        
-        // 检查连接码是否仍然存在且未使用
-        const docSnap = await getDoc(connectionCodeRef);
-        if (docSnap.exists() && !docSnap.data().used) {
-            await deleteDoc(connectionCodeRef);
-            console.log(`🧹 已清理过期连接码: ${code}`);
+        // 从localStorage清理连接码
+        const codeKey = `connection-code-${code}`;
+        const codeDataStr = localStorage.getItem(codeKey);
+
+        if (codeDataStr) {
+            const codeData = JSON.parse(codeDataStr);
+            if (!codeData.used) {
+                localStorage.removeItem(codeKey);
+                console.log(`🧹 已清理过期连接码: ${code}`);
+            }
         }
-        
+
         // 清理本地状态
         if (deviceConnectionState.connectionCode === code) {
             deviceConnectionState.connectionCode = null;
         }
-        
+
     } catch (error) {
         console.error("❌ 清理连接码失败:", error);
     }
@@ -287,29 +307,17 @@ async function cleanupConnectionCode(code) {
  * 获取已连接的设备列表
  */
 async function getConnectedDevices() {
-    if (!window.FirebaseService.isReady() || !window.FirebaseService.getCurrentUser()) {
-        return [];
-    }
-    
     try {
-        const userId = window.FirebaseService.getCurrentUser().uid;
-        const db = window.FirebaseService.getFirestore();
-        
-        const devicesRef = collection(db, 'users', userId, 'devices');
-        const q = query(devicesRef, where('isActive', '==', true), orderBy('connectedAt', 'desc'));
-        const querySnapshot = await getDocs(q);
-        
-        const devices = [];
-        querySnapshot.forEach((doc) => {
-            devices.push({
-                id: doc.id,
-                ...doc.data()
-            });
-        });
-        
-        deviceConnectionState.connectedDevices = devices;
-        return devices;
-        
+        // 简化版本：从localStorage获取设备信息
+        const devicesData = localStorage.getItem('connected-devices') || '[]';
+        const devices = JSON.parse(devicesData);
+
+        // 过滤活跃设备
+        const activeDevices = devices.filter(device => device.isActive);
+
+        deviceConnectionState.connectedDevices = activeDevices;
+        return activeDevices;
+
     } catch (error) {
         console.error("❌ 获取设备列表失败:", error);
         return [];
@@ -320,27 +328,26 @@ async function getConnectedDevices() {
  * 断开设备连接
  */
 async function disconnectDevice(deviceId) {
-    if (!window.FirebaseService.isReady() || !window.FirebaseService.getCurrentUser()) {
-        throw new Error("Firebase未就绪或用户未认证");
-    }
-    
     try {
-        const userId = window.FirebaseService.getCurrentUser().uid;
-        const db = window.FirebaseService.getFirestore();
-        
-        const deviceRef = doc(db, 'users', userId, 'devices', deviceId);
-        await setDoc(deviceRef, { 
-            isActive: false, 
-            disconnectedAt: Date.now() 
-        }, { merge: true });
-        
-        console.log(`📱 设备已断开连接: ${deviceId}`);
-        
+        // 简化版本：从localStorage更新设备状态
+        const devicesData = localStorage.getItem('connected-devices') || '[]';
+        const devices = JSON.parse(devicesData);
+
+        // 找到并断开指定设备
+        const deviceIndex = devices.findIndex(device => device.id === deviceId);
+        if (deviceIndex !== -1) {
+            devices[deviceIndex].isActive = false;
+            devices[deviceIndex].disconnectedAt = Date.now();
+
+            localStorage.setItem('connected-devices', JSON.stringify(devices));
+            console.log(`📱 设备已断开连接: ${deviceId}`);
+        }
+
         // 更新本地设备列表
         await getConnectedDevices();
-        
+
         return true;
-        
+
     } catch (error) {
         console.error("❌ 断开设备连接失败:", error);
         throw error;

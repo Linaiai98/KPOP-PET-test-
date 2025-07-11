@@ -11,6 +11,16 @@ jQuery(async () => {
     const extensionName = "virtual-pet-system";
     const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 
+// Firebase Sync Variables
+let firebaseApp = null;
+let firebaseAuth = null;
+let firestoreDb = null;
+let currentUser = null;
+const FIREBASE_CONFIG_PATH = `${extensionFolderPath}/firebase-config.js`;
+
+// Plugin state
+let isEnabled = localStorage.getItem(`${extensionName}-enabled`) !== 'false';
+
     console.log(`[${extensionName}] Starting initialization...`);
     console.log(`[${extensionName}] Extension folder path: ${extensionFolderPath}`);
     
@@ -197,6 +207,88 @@ jQuery(async () => {
         }
 
         return !hasIssues;
+    }
+
+    /**
+     * Dynamically loads a script and returns a promise.
+     * @param {string} src The script source URL.
+     * @returns {Promise<void>}
+     */
+    function loadScript(src) {
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = src;
+            script.onload = () => {
+                console.log(`[${extensionName}] Script loaded: ${src}`);
+                resolve();
+            };
+            script.onerror = () => {
+                console.error(`[${extensionName}] Script failed to load: ${src}`);
+                reject(new Error(`Failed to load script: ${src}`));
+            };
+            document.head.appendChild(script);
+        });
+    }
+
+    /**
+     * Loads Firebase SDKs and the configuration file.
+     * @returns {Promise<boolean>}
+     */
+    async function loadFirebaseScripts() {
+        try {
+            console.log(`[${extensionName}] Loading Firebase scripts...`);
+            // Load Firebase SDKs (using compat versions for easier integration)
+            await loadScript("https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js");
+            await loadScript("https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js");
+            await loadScript("https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js");
+            
+            // Load the local firebase config
+            await loadScript(FIREBASE_CONFIG_PATH);
+
+            console.log(`[${extensionName}] Firebase scripts loaded successfully.`);
+            return true;
+        } catch (error) {
+            console.error(`[${extensionName}] Failed to load Firebase scripts. Sync will be disabled.`, error);
+            showNotification("无法加载Firebase同步服务，请检查网络连接和插件文件。", "error");
+            return false;
+        }
+    }
+
+    /**
+     * Sign in with Google using Firebase Authentication.
+     */
+    function signInWithGoogle() {
+        if (!firebaseAuth) {
+            showNotification("Firebase尚未初始化。", "error");
+            return;
+        }
+        const provider = new firebase.auth.GoogleAuthProvider();
+        firebaseAuth.signInWithPopup(provider)
+            .then((result) => {
+                const user = result.user;
+                console.log(`[${extensionName}] Google Sign-In successful for:`, user.displayName);
+                showNotification(`欢迎, ${user.displayName}! 同步功能已激活。`, "success");
+            })
+            .catch((error) => {
+                console.error(`[${extensionName}] Google Sign-In error:`, error);
+                showNotification(`登录失败: ${error.message}`, "error");
+            });
+    }
+
+    /**
+     * Sign out the current user.
+     */
+    function signOut() {
+        if (!firebaseAuth) return;
+        firebaseAuth.signOut()
+            .then(() => {
+                console.log(`[${extensionName}] User signed out.`);
+                showNotification("您已退出，同步已暂停。", "info");
+            })
+            .catch((error) => {
+                console.error(`[${extensionName}] Sign-out error:`, error);
+                showNotification(`退出时发生错误: ${error.message}`, "error");
+            });
     }
 
     // 全局紧急修复函数
@@ -3466,19 +3558,87 @@ ${currentPersonality}
         });
     }
 
+    function updateLoginStatusUI() {
+        // Re-render the settings panel to show the correct login/logout state
+        renderSettings();
+    }
+
     /**
      * 渲染设置
      */
     function renderSettings() {
-        $("#pet-name-input").val(petData.name);
-        $("#pet-type-select").val(petData.type);
+        if (!settingsView) return;
 
-        // 从localStorage加载设置
-        const autoSave = localStorage.getItem(`${extensionName}-auto-save`) !== "false";
-        const notifications = localStorage.getItem(`${extensionName}-notifications`) !== "false";
+        settingsView.html(`
+            <div class="pet-section">
+                <h3>⚙️ 设置</h3>
 
-        $("#auto-save-checkbox").prop("checked", autoSave);
-        $("#notifications-checkbox").prop("checked", notifications);
+                <!-- General Settings -->
+                <div class="virtual-pet-settings-section">
+                    <h4>常规</h4>
+                    <label class="virtual-pet-switch">
+                        <input type="checkbox" id="virtual-pet-enabled-toggle" ${isEnabled ? 'checked' : ''}>
+                        <span class="virtual-pet-slider round"></span>
+                    </label>
+                    <label for="virtual-pet-enabled-toggle" style="margin-left: 10px;">启用虚拟宠物</label>
+                </div>
+
+                <!-- Cloud Sync Section -->
+                <div class="virtual-pet-settings-section">
+                    <h4>☁️ 云同步 (Cloud Sync)</h4>
+                    <div id="virtual-pet-sync-status">
+                        ${
+                            currentUser
+                                ? `
+                                    <p>已登录: <strong>${escapeHtml(currentUser.displayName)}</strong> (${escapeHtml(currentUser.email)})</p>
+                                    <button id="virtual-pet-logout-button" class="pet-button">退出登录</button>
+                                `
+                                : `
+                                    <p>登录以在多个设备间同步您的宠物数据。</p>
+                                    <button id="virtual-pet-login-button" class="pet-button">
+                                        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="height: 18px; vertical-align: middle; margin-right: 8px;">
+                                        使用 Google 登录
+                                    </button>
+                                `
+                        }
+                    </div>
+                </div>
+
+                <!-- Reset Section -->
+                <div class="virtual-pet-settings-section">
+                    <h4>⚠️ 危险区域</h4>
+                    <p>重置将会清除所有宠物数据和设置，无法撤销。</p>
+                    <button id="virtual-pet-reset-button" class="pet-button danger">重置宠物</button>
+                </div>
+
+                <div class="pet-nav-buttons">
+                    <button class="pet-button back-to-main-btn">
+                        ← 返回
+                    </button>
+                </div>
+            </div>
+        `);
+
+        // Event Listeners
+        $('#virtual-pet-reset-button').on('click', resetPet);
+        $('#virtual-pet-enabled-toggle').on('change', function() {
+            isEnabled = $(this).is(':checked');
+            saveSettings(); // Save toggle state
+            if (isEnabled) {
+                if (!$(`#${BUTTON_ID}`).length) {
+                    initializeFloatingButton();
+                }
+            } else {
+                destroyFloatingButton();
+            }
+        });
+
+        // Sync button listeners
+        if (currentUser) {
+            $('#virtual-pet-logout-button').on('click', signOut);
+        } else {
+            $('#virtual-pet-login-button').on('click', signInWithGoogle);
+        }
     }
 
     /**
@@ -4082,372 +4242,72 @@ ${currentPersonality}
     // -----------------------------------------------------------------
 
     async function initializeExtension() {
+        const version = "1.0.1";
+        console.log(`[${extensionName}] ----------------------------------------------`);
+        console.log(`[${extensionName}] | VIRTUAL PET SYSTEM v${version} |`);
+        console.log(`[${extensionName}] ----------------------------------------------`);
         console.log(`[${extensionName}] Initializing extension...`);
 
-        // 1. 检查并修复CSS变量污染
-        checkAndFixCSSVariables();
+        // First, load Firebase
+        const firebaseLoaded = await loadFirebaseScripts();
 
-        // 2. 创建样式隔离
-        createIsolatedStyles();
-
-        // 3. 动态加载CSS
-        console.log(`[${extensionName}] Loading CSS from: ${extensionFolderPath}/style.css`);
-        $("head").append(`<link rel="stylesheet" type="text/css" href="${extensionFolderPath}/style.css">`);
-
-        // 2. 先尝试创建简单的设置面板
-        console.log(`[${extensionName}] Creating simple settings panel...`);
-        const simpleSettingsHtml = `
-            <div id="virtual-pet-settings">
-                <div class="inline-drawer">
-                    <div class="inline-drawer-toggle inline-drawer-header">
-                        <b>🐾 虚拟宠物系统</b>
-                        <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
-                    </div>
-                    <div class="inline-drawer-content">
-                        <div class="flex-container">
-                            <label class="checkbox_label" for="virtual-pet-enabled-toggle">
-                                <input id="virtual-pet-enabled-toggle" type="checkbox" checked>
-                                <span>启用虚拟宠物系统</span>
-                            </label>
-                        </div>
-                        <small class="notes">
-                            启用后会在屏幕上显示一个可拖动的宠物按钮（🐾）
-                        </small>
-
-                        <hr style="margin: 15px 0; border: none; border-top: 1px solid #444;">
-
-                        <div class="flex-container">
-                            <label for="virtual-pet-personality-select" style="display: block; margin-bottom: 8px; font-weight: bold;">
-                                🎭 宠物人设选择
-                            </label>
-                            <select id="virtual-pet-personality-select" style="width: 100%; padding: 8px; margin-bottom: 8px; border-radius: 4px;">
-                                <option value="default">🐱 默认 - 高冷但温柔的猫</option>
-                                <option value="cheerful">🐶 活泼 - 热情洋溢的小狗</option>
-                                <option value="elegant">🐉 优雅 - 古典文雅的龙</option>
-                                <option value="shy">🐰 害羞 - 轻声细语的兔子</option>
-                                <option value="smart">🐦 聪明 - 机智幽默的鸟</option>
-                                <option value="custom">✏️ 自定义人设</option>
-                            </select>
-                        </div>
-
-                        <div id="virtual-pet-custom-personality-container" style="display: none; margin-top: 10px;">
-                            <label for="virtual-pet-custom-personality" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
-                                自定义人设描述：
-                            </label>
-                            <textarea id="virtual-pet-custom-personality"
-                                      placeholder="描述你的宠物性格、喜好和特点..."
-                                      rows="3"
-                                      maxlength="5000"
-                                      style="width: 100%; padding: 8px; border-radius: 4px; resize: vertical; font-family: inherit;"></textarea>
-                            <small style="color: #888; font-size: 0.8em;">最多5000字符，这将影响宠物与你互动时的回复风格</small>
-                        </div>
-
-                        <small class="notes" style="margin-top: 10px; display: block;">
-                            选择或自定义宠物的性格，AI会根据人设生成个性化回复
-                        </small>
-
-                        <!-- AI 配置设置 -->
-                        <hr style="margin: 15px 0; border: none; border-top: 1px solid #444;">
-
-                        <div class="flex-container">
-                            <label for="ai-api-select" style="display: block; margin-bottom: 8px; font-weight: bold;">
-                                🤖 AI API 配置
-                            </label>
-                            <select id="ai-api-select" style="width: 100%; padding: 8px; margin-bottom: 8px; border-radius: 4px;">
-                                <option value="">请选择API类型...</option>
-                                <option value="openai">OpenAI (ChatGPT)</option>
-                                <option value="claude">Claude (Anthropic)</option>
-                                <option value="google">Google AI Studio</option>
-                                <option value="mistral">Mistral AI</option>
-                                <option value="ollama">Ollama (本地)</option>
-                                <option value="custom">自定义API</option>
-                            </select>
-                        </div>
-
-                        <!-- API配置输入框 -->
-                        <div id="ai-config-container" style="display: none; margin-top: 10px;">
-                            <div style="margin-bottom: 10px;">
-                                <label for="ai-url-input" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
-                                    API URL:
-                                </label>
-                                <input id="ai-url-input" type="text" placeholder="例如: https://api.openai.com/v1 (只需填写到/v1，会自动添加端点)"
-                                       style="width: 100%; padding: 6px; border-radius: 4px;">
-                                <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
-                                    💡 提示：只需填写到 /v1，插件会自动添加 /chat/completions 端点
-                                </div>
-                            </div>
-                            <div style="margin-bottom: 10px;">
-                                <label for="ai-key-input" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
-                                    API Key:
-                                </label>
-                                <input id="ai-key-input" type="password" placeholder="输入你的API密钥"
-                                       style="width: 100%; padding: 6px; border-radius: 4px;">
-                            </div>
-                            <div style="margin-bottom: 10px;">
-                                <label for="ai-model-select" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
-                                    模型名称:
-                                </label>
-                                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
-                                    <select id="ai-model-select" style="flex: 1; padding: 6px; border-radius: 4px; font-size: 0.9em;">
-                                        <option value="">请选择模型...</option>
-                                        <option value="gpt-4">GPT-4</option>
-                                        <option value="gpt-4-turbo">GPT-4 Turbo</option>
-                                        <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-                                        <option value="claude-3-opus-20240229">Claude 3 Opus</option>
-                                        <option value="claude-3-sonnet-20240229">Claude 3 Sonnet</option>
-                                        <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
-                                        <option value="gemini-pro">Gemini Pro</option>
-                                        <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                                        <option value="custom">🔧 自定义模型</option>
-                                    </select>
-                                    <button id="refresh-models-btn" style="
-                                        padding: 6px 10px;
-                                        background: #4a90e2;
-                                        color: white;
-                                        border: none;
-                                        border-radius: 4px;
-                                        cursor: pointer;
-                                        font-size: 0.8em;
-                                        white-space: nowrap;
-                                    " title="从配置的API获取可用模型列表">
-                                        🔄 获取
-                                    </button>
-                                </div>
-                                <input id="ai-model-input" type="text" placeholder="自定义模型名称"
-                                       style="width: 100%; padding: 6px; border-radius: 4px; display: none;">
-                            </div>
-                        </div>
-
-                        <div class="flex-container" style="margin-top: 10px;">
-                            <button id="test-ai-connection-btn" style="padding: 8px 16px; background: #48bb78; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">
-                                🔗 测试连接
-                            </button>
-                            <span id="ai-connection-status" style="padding: 8px; font-size: 0.9em; color: #888;">
-                                未测试
-                            </span>
-                        </div>
-
-                        <small class="notes" style="margin-top: 10px; display: block;">
-                            配置AI API用于生成个性化的宠物回复，AI会根据选择的人设来回应
-                        </small>
-                    </div>
-                </div>
-            </div>
-        `;
-        $("#extensions_settings2").append(simpleSettingsHtml);
-        console.log(`[${extensionName}] Settings panel created`);
-
-        // 初始化设置面板
-        initializeSettingsPanel();
-
-        // 3. 加载弹窗HTML（如果失败就使用简单版本）
-        // 检测是否为iOS设备，如果是则跳过原始弹窗创建
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-
-        if (!isIOS) {
+        if (firebaseLoaded) {
             try {
-                console.log(`[${extensionName}] Loading popup HTML...`);
-                const popupHtml = await $.get(`${extensionFolderPath}/popup.html`);
-                $("body").append(popupHtml);
-                console.log(`[${extensionName}] Popup HTML loaded successfully`);
+                // Check if firebaseConfig is defined (loaded from firebase-config.js)
+                if (typeof firebaseConfig !== 'undefined') {
+                    firebaseApp = firebase.initializeApp(firebaseConfig);
+                    firebaseAuth = firebase.auth();
+                    firestoreDb = firebase.firestore();
+                    console.log(`[${extensionName}] Firebase initialized successfully.`);
+
+                    // Listen for auth state changes
+                    firebaseAuth.onAuthStateChanged(user => {
+                        if (user) {
+                            console.log(`[${extensionName}] User is signed in:`, user.displayName);
+                            currentUser = user;
+                            // TODO: Trigger data load from Firestore
+                        } else {
+                            console.log(`[${extensionName}] User is signed out.`);
+                            currentUser = null;
+                            // TODO: Handle sign out (e.g., revert to local data)
+                        }
+                        // Update UI to reflect login state
+                        updateLoginStatusUI();
+                    });
+
+                } else {
+                    console.error(`[${extensionName}] 'firebaseConfig' is not defined. Make sure firebase-config.js exists and is correct.`);
+                    showNotification("Firebase配置未找到，同步功能禁用。", "error");
+                }
             } catch (error) {
-                console.warn(`[${extensionName}] Failed to load popup.html, using simple version:`, error);
-                // 创建简单的弹窗HTML
-            const simplePopupHtml = `
-                <div id="virtual-pet-popup-overlay" class="virtual-pet-popup-overlay">
-                    <div id="virtual-pet-popup" class="pet-popup-container">
-                        <div class="pet-popup-header" style="display: none;">
-                            <div class="pet-popup-title"></div>
-                        </div>
-                        <div class="pet-popup-body">
-                            <div id="pet-main-view" class="pet-view">
-                                <div class="pet-section">
-                                    <div id="pet-status-container">
-                                        <div class="pet-avatar">
-                                            <div class="pet-emoji">🐱</div>
-                                            <div class="pet-name">小宠物</div>
-                                            <div class="pet-level">Lv.1</div>
-                                        </div>
-                                        <p>宠物系统正在开发中...</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-                $("body").append(simplePopupHtml);
+                console.error(`[${extensionName}] Error initializing Firebase:`, error);
+                showNotification("Firebase初始化失败，同步功能禁用。", "error");
             }
-        } else {
-            console.log(`[${extensionName}] iOS detected, skipping original popup creation`);
         }
 
-        // 3. 获取 DOM 引用（只在非iOS设备上）
-        if (!isIOS) {
-            overlay = $(`#${OVERLAY_ID}`);
-            mainView = $("#pet-main-view");
-            petView = $("#pet-detail-view");
-            settingsView = $("#pet-settings-view");
-            petContainer = $("#pet-status-container");
-        }
+        // Apply critical UI fixes on startup
+        emergencyStyleCleanup();
 
-        // 4. 加载宠物数据
+        // Load existing data
         loadPetData();
-
-        // 4.1 确保拓麻歌子系统已应用
-        if (petData.dataVersion >= 4.0) {
-            applyTamagotchiSystem();
-        } else {
-            // 旧版本数据自动升级到拓麻歌子系统
-            petData.dataVersion = 4.0;
-            applyTamagotchiSystem();
-            savePetData();
-        }
-
-        // 5. 加载自定义头像数据
         loadCustomAvatar();
 
-        // 5. 只在非iOS设备上初始化原始弹窗功能
-        if (!isIOS) {
-            // 使弹窗可拖拽
-            const $popup = $(`#${POPUP_ID}`);
-            if ($popup.length > 0) {
-                makePopupDraggable($popup);
-                console.log(`[${extensionName}] Popup drag functionality added`);
-            }
+        // Create UI elements
+        initializeFloatingButton();
 
-            // 移除了关闭按钮，现在只能通过悬浮按钮或外部点击关闭
-
-            if (overlay && overlay.length > 0) {
-                overlay.on("click touchend", function (event) {
-                    if (event.target === this) {
-                        event.preventDefault();
-                        closePopup();
-                    }
-                });
-            }
-        }
-
-        $(`#${POPUP_ID}`).on("click touchend", (e) => e.stopPropagation());
-
-        // 宠物交互按钮
-        $("#feed-pet-btn").on("click touchend", (e) => {
-            e.preventDefault();
-            feedPet();
-        });
-
-        $("#play-pet-btn").on("click touchend", (e) => {
-            e.preventDefault();
-            playWithPet();
-        });
-
-        $("#sleep-pet-btn").on("click touchend", (e) => {
-            e.preventDefault();
-            petSleep();
-        });
-
-        // 视图切换按钮
-        $("#goto-pet-detail-btn").on("click touchend", (e) => {
-            e.preventDefault();
-            showPetView();
-        });
-
-        $("#goto-settings-btn").on("click touchend", (e) => {
-            e.preventDefault();
-            showSettingsView();
-        });
-
-        // 返回主视图按钮 (使用事件委托)
-        $(".pet-popup-body").on("click touchend", ".back-to-main-btn", (e) => {
-            e.preventDefault();
-            showMainView();
-        });
-
-        // 设置相关按钮
-        $("#save-settings-btn").on("click touchend", (e) => {
-            e.preventDefault();
-            saveSettings();
-        });
-
-        $("#reset-pet-btn").on("click touchend", (e) => {
-            e.preventDefault();
-            resetPet();
-        });
-
-        // 6. 初始状态
-        console.log(`[${extensionName}] Setting up initial state...`);
-
-        // 等待一下确保DOM完全准备好
-        setTimeout(() => {
-            const isEnabled = localStorage.getItem(STORAGE_KEY_ENABLED) !== "false";
-            console.log(`[${extensionName}] Extension enabled: ${isEnabled}`);
-
-            const toggleElement = $(TOGGLE_ID);
-            if (toggleElement.length === 0) {
-                console.warn(`[${extensionName}] Toggle element not found: ${TOGGLE_ID}`);
-                console.log(`[${extensionName}] Available elements:`, $("#extensions_settings2").find("input[type='checkbox']").length);
-            } else {
-                toggleElement.prop("checked", isEnabled);
-                console.log(`[${extensionName}] Toggle element found and set`);
-            }
-
-            if (isEnabled) {
-                console.log(`[${extensionName}] Initializing floating button...`);
-                initializeFloatingButton();
-            }
-
-            // 绑定开关事件
-            $(document).off("change", TOGGLE_ID).on("change", TOGGLE_ID, function () {
-                const checked = $(this).is(":checked");
-                console.log(`[${extensionName}] Toggle changed: ${checked}`);
-                localStorage.setItem(STORAGE_KEY_ENABLED, checked);
-                if (checked) {
-                    initializeFloatingButton();
-                } else {
-                    destroyFloatingButton();
-                }
-            });
-
-            console.log(`[${extensionName}] Initial setup complete`);
-        }, 1000); // 等待1秒确保所有元素都已加载
-
-        // 7. 定期更新宠物状态
-        setInterval(() => {
-            updatePetStatus();
-            if (overlay && overlay.is(":visible")) {
-                renderPetStatus();
-                // 如果在详情视图，也更新详情
-                if (petView.is(":visible")) {
-                    renderPetDetails();
-                }
-            }
-        }, 60000); // 每分钟更新一次
-
-        // 8. 页面可见性变化时更新状态
-        document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) {
-                updatePetStatus();
-                if (overlay && overlay.is(":visible")) {
-                    renderPetStatus();
-                }
-            }
-        });
-
-        // 9. 如果是iOS设备，创建测试按钮
-        if (isIOS) {
-            console.log(`[${extensionName}] iOS detected, creating test button`);
-            setTimeout(() => {
-                if (typeof window.createIOSTestButton === 'function') {
-                    window.createIOSTestButton();
-                }
-            }, 3000); // 延迟3秒创建，确保页面完全加载
-        }
-
-        // 10. 设置卸载检测
+        // Setup unload handler
         setupUnloadDetection();
 
-        console.log(`[${extensionName}] Extension loaded successfully.`);
+        console.log(`[${extensionName}] ✅ Initialization complete.`);
+        showNotification("虚拟宠物系统已加载！", "success", 2000);
+
+        // Apply Tamagotchi logic
+        applyTamagotchiSystem();
+
+        // Initialize settings panel but don't show it
     }
+
+
 
     // 运行初始化
     try {

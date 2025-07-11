@@ -1,9 +1,50 @@
 // 虚拟宠物系统 - SillyTavern插件
 console.log("🐾 虚拟宠物系统脚本开始加载...");
 
+// 动态加载Firebase模块
+async function loadFirebaseModules() {
+    try {
+        console.log("🔥 开始加载Firebase模块...");
+
+        // 加载Firebase配置模块
+        await import('./firebase-config.js');
+        console.log("✅ Firebase配置模块已加载");
+
+        // 加载Firebase同步模块
+        await import('./firebase-sync.js');
+        console.log("✅ Firebase同步模块已加载");
+
+        // 加载Firebase设备连接模块
+        await import('./firebase-device-connection.js');
+        console.log("✅ Firebase设备连接模块已加载");
+
+        // 加载Firebase头像存储模块
+        await import('./firebase-avatar-storage.js');
+        console.log("✅ Firebase头像存储模块已加载");
+
+        // 初始化Firebase服务
+        const firebaseInitialized = await window.FirebaseService.initialize();
+        if (firebaseInitialized) {
+            console.log("🎉 Firebase服务初始化成功！");
+            return true;
+        } else {
+            console.warn("⚠️ Firebase服务初始化失败，将使用本地存储");
+            return false;
+        }
+
+    } catch (error) {
+        console.error("❌ Firebase模块加载失败:", error);
+        console.log("📱 将继续使用本地存储模式");
+        return false;
+    }
+}
+
 // 使用 jQuery 确保在 DOM 加载完毕后执行我们的代码
 jQuery(async () => {
     console.log("🐾 jQuery ready, 开始初始化...");
+
+    // 首先加载Firebase模块
+    const firebaseReady = await loadFirebaseModules();
 
     // -----------------------------------------------------------------
     // 1. 定义常量和状态变量
@@ -13,6 +54,7 @@ jQuery(async () => {
 
     console.log(`[${extensionName}] Starting initialization...`);
     console.log(`[${extensionName}] Extension folder path: ${extensionFolderPath}`);
+    console.log(`[${extensionName}] Firebase ready: ${firebaseReady}`);
     
     // 存储键
     const STORAGE_KEY_BUTTON_POS = "virtual-pet-button-position";
@@ -928,7 +970,14 @@ jQuery(async () => {
         // 保存到本地存储
         localStorage.setItem(`${extensionName}-ai-settings`, JSON.stringify(settings));
 
-        // 保存到同步存储
+        // Firebase同步（如果可用）
+        if (window.FirebaseSync && window.FirebaseService && window.FirebaseService.isReady()) {
+            window.FirebaseSync.uploadAISettings(settings).catch(error => {
+                console.warn(`[${extensionName}] Firebase AI设置同步失败:`, error);
+            });
+        }
+
+        // 传统同步存储作为备用
         saveAISettingsToSync(settings);
 
         console.log(`[${extensionName}] AI设置已保存并同步:`, settings);
@@ -1790,6 +1839,27 @@ ${currentPersonality}
             savePersonalitySettings('custom', customText);
         });
 
+        // Firebase同步管理按钮事件
+        $("#open-firebase-sync-btn").on('click', function() {
+            // 确保Firebase UI模块已加载
+            if (window.FirebaseUI) {
+                window.FirebaseUI.showSyncPanel();
+            } else {
+                // 动态加载Firebase UI模块
+                import('./firebase-ui.js').then(() => {
+                    if (window.FirebaseUI) {
+                        window.FirebaseUI.createSyncPanel();
+                        window.FirebaseUI.showSyncPanel();
+                    }
+                }).catch(error => {
+                    console.error("加载Firebase UI模块失败:", error);
+                    if (typeof toastr !== 'undefined') {
+                        toastr.error('Firebase同步功能暂时不可用', '❌ 加载失败');
+                    }
+                });
+            }
+        });
+
         // 启用/禁用虚拟宠物系统的事件监听器
         $("#virtual-pet-enabled-toggle").on('change', function() {
             const enabled = $(this).is(':checked');
@@ -2160,7 +2230,7 @@ ${currentPersonality}
     }
     
     /**
-     * 保存宠物数据
+     * 保存宠物数据 - 集成Firebase同步
      */
     function savePetData() {
         try {
@@ -2170,9 +2240,17 @@ ${currentPersonality}
                 lastSyncTime: Date.now()
             };
 
+            // 保存到本地存储
             localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(dataWithTimestamp));
 
-            // 同时保存到全局同步存储（如果可用）
+            // Firebase同步（如果可用）
+            if (window.FirebaseSync && window.FirebaseService && window.FirebaseService.isReady()) {
+                window.FirebaseSync.uploadPetData(dataWithTimestamp).catch(error => {
+                    console.warn(`[${extensionName}] Firebase宠物数据同步失败:`, error);
+                });
+            }
+
+            // 传统同步存储作为备用
             saveToSyncStorage(dataWithTimestamp);
 
         } catch (error) {
@@ -3345,7 +3423,7 @@ ${currentPersonality}
     }
 
     /**
-     * 保存自定义头像数据 - 支持多端同步
+     * 保存自定义头像数据 - 集成Firebase云存储
      */
     function saveCustomAvatar(imageData) {
         try {
@@ -3353,7 +3431,14 @@ ${currentPersonality}
             localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, imageData);
             customAvatarData = imageData;
 
-            // 保存到同步存储
+            // Firebase云存储同步（如果可用）
+            if (window.FirebaseAvatarStorage && window.FirebaseService && window.FirebaseService.isReady()) {
+                window.FirebaseAvatarStorage.syncToCloud().catch(error => {
+                    console.warn(`[${extensionName}] Firebase头像同步失败:`, error);
+                });
+            }
+
+            // 传统同步存储作为备用
             saveAvatarToSync(imageData);
 
             console.log(`[${extensionName}] Custom avatar saved and synced`);
@@ -4112,6 +4197,28 @@ ${currentPersonality}
                         </div>
                         <small class="notes">
                             启用后会在屏幕上显示一个可拖动的宠物按钮（🐾）
+                        </small>
+
+                        <hr style="margin: 15px 0; border: none; border-top: 1px solid #444;">
+
+                        <!-- Firebase同步管理 -->
+                        <div class="flex-container" style="margin-bottom: 15px;">
+                            <button id="open-firebase-sync-btn" style="
+                                width: 100%;
+                                padding: 12px;
+                                background: linear-gradient(135deg, #FF6B6B, #4ECDC4);
+                                color: white;
+                                border: none;
+                                border-radius: 8px;
+                                font-weight: bold;
+                                cursor: pointer;
+                                transition: transform 0.2s;
+                            " onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+                                🔥 Firebase同步管理
+                            </button>
+                        </div>
+                        <small class="notes" style="margin-bottom: 15px; display: block;">
+                            管理跨设备数据同步，连接多个设备，查看同步状态
                         </small>
 
                         <hr style="margin: 15px 0; border: none; border-top: 1px solid #444;">
@@ -12864,6 +12971,165 @@ ${currentPersonality}
         toastr.info('随机化标记已重置', '', { timeOut: 2000 });
     };
 
+    // -----------------------------------------------------------------
+    // Firebase同步辅助函数
+    // -----------------------------------------------------------------
+
+    /**
+     * 获取本地宠物数据（供Firebase同步使用）
+     */
+    window.getLocalPetData = function() {
+        try {
+            const localData = localStorage.getItem(STORAGE_KEY_PET_DATA);
+            return localData ? JSON.parse(localData) : null;
+        } catch (error) {
+            console.error("获取本地宠物数据失败:", error);
+            return null;
+        }
+    };
+
+    /**
+     * 更新本地宠物数据（供Firebase同步使用）
+     */
+    window.updateLocalPetData = function(data, source = 'firebase') {
+        try {
+            if (source === 'firebase') {
+                // 设置同步门控，防止循环同步
+                if (window.FirebaseSync) {
+                    window.FirebaseSync.setSyncGate('petData', true);
+                }
+            }
+
+            // 更新内存中的petData
+            Object.assign(petData, data);
+
+            // 保存到本地存储
+            localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(data));
+
+            if (source === 'firebase') {
+                // 释放同步门控
+                if (window.FirebaseSync) {
+                    setTimeout(() => {
+                        window.FirebaseSync.setSyncGate('petData', false);
+                    }, 100);
+                }
+            }
+
+            console.log("✅ 本地宠物数据已更新");
+        } catch (error) {
+            console.error("更新本地宠物数据失败:", error);
+        }
+    };
+
+    /**
+     * 获取本地AI设置（供Firebase同步使用）
+     */
+    window.getLocalAISettings = function() {
+        try {
+            const localData = localStorage.getItem(`${extensionName}-ai-settings`);
+            return localData ? JSON.parse(localData) : {};
+        } catch (error) {
+            console.error("获取本地AI设置失败:", error);
+            return {};
+        }
+    };
+
+    /**
+     * 更新本地AI设置（供Firebase同步使用）
+     */
+    window.updateLocalAISettings = function(data, source = 'firebase') {
+        try {
+            if (source === 'firebase') {
+                // 设置同步门控，防止循环同步
+                if (window.FirebaseSync) {
+                    window.FirebaseSync.setSyncGate('aiSettings', true);
+                }
+            }
+
+            // 保存到本地存储
+            localStorage.setItem(`${extensionName}-ai-settings`, JSON.stringify(data));
+
+            if (source === 'firebase') {
+                // 释放同步门控
+                if (window.FirebaseSync) {
+                    setTimeout(() => {
+                        window.FirebaseSync.setSyncGate('aiSettings', false);
+                    }, 100);
+                }
+            }
+
+            console.log("✅ 本地AI设置已更新");
+        } catch (error) {
+            console.error("更新本地AI设置失败:", error);
+        }
+    };
+
+    /**
+     * 获取本地UI设置（供Firebase同步使用）
+     */
+    window.getLocalUISettings = function() {
+        try {
+            const buttonPosition = localStorage.getItem(STORAGE_KEY_BUTTON_POS);
+            const customAvatar = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
+
+            return {
+                buttonPosition: buttonPosition ? JSON.parse(buttonPosition) : null,
+                customAvatar: customAvatar,
+                lastSyncTime: Date.now()
+            };
+        } catch (error) {
+            console.error("获取本地UI设置失败:", error);
+            return {};
+        }
+    };
+
+    /**
+     * 更新本地UI设置（供Firebase同步使用）
+     */
+    window.updateLocalUISettings = function(data, source = 'firebase') {
+        try {
+            if (source === 'firebase') {
+                // 设置同步门控，防止循环同步
+                if (window.FirebaseSync) {
+                    window.FirebaseSync.setSyncGate('uiSettings', true);
+                }
+            }
+
+            // 更新按钮位置
+            if (data.buttonPosition) {
+                localStorage.setItem(STORAGE_KEY_BUTTON_POS, JSON.stringify(data.buttonPosition));
+            }
+
+            // 更新自定义头像
+            if (data.customAvatar) {
+                localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, data.customAvatar);
+                customAvatarData = data.customAvatar;
+
+                // 更新头像显示
+                if (typeof updateAvatarDisplay === 'function') {
+                    updateAvatarDisplay();
+                }
+                if (typeof updateFloatingButtonAvatar === 'function') {
+                    updateFloatingButtonAvatar();
+                }
+            }
+
+            if (source === 'firebase') {
+                // 释放同步门控
+                if (window.FirebaseSync) {
+                    setTimeout(() => {
+                        window.FirebaseSync.setSyncGate('uiSettings', false);
+                    }, 100);
+                }
+            }
+
+            console.log("✅ 本地UI设置已更新");
+        } catch (error) {
+            console.error("更新本地UI设置失败:", error);
+        }
+    };
+
     console.log("🐾 虚拟宠物系统脚本已加载完成");
     console.log("🎲 智能初始化系统：首次打开随机化到50以下，后续自然衰减到100");
+    console.log("🔥 Firebase集成：支持跨设备数据同步");
 });

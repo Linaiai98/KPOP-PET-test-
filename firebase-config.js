@@ -3,31 +3,7 @@
 
 console.log("🔥 Firebase配置模块开始加载...");
 
-// Firebase v9+ 模块化导入
-import { initializeApp } from "firebase/app";
-import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
-import { 
-    getFirestore, 
-    doc, 
-    setDoc, 
-    getDoc, 
-    onSnapshot, 
-    collection,
-    query,
-    where,
-    orderBy,
-    limit,
-    serverTimestamp,
-    enableNetwork,
-    disableNetwork
-} from "firebase/firestore";
-import { 
-    getStorage, 
-    ref, 
-    uploadBytes, 
-    getDownloadURL, 
-    deleteObject 
-} from "firebase/storage";
+// 使用Firebase v9 compat版本，避免模块导入问题
 
 // Firebase项目配置
 const firebaseConfig = {
@@ -55,13 +31,13 @@ async function initializeFirebase() {
     try {
         console.log("🔥 正在初始化Firebase服务...");
         
-        // 初始化Firebase应用
-        app = initializeApp(firebaseConfig);
-        
+        // 初始化Firebase应用 (使用compat版本)
+        app = firebase.initializeApp(firebaseConfig);
+
         // 初始化各项服务
-        auth = getAuth(app);
-        db = getFirestore(app);
-        storage = getStorage(app);
+        auth = firebase.auth();
+        db = firebase.firestore();
+        storage = firebase.storage();
         
         console.log("✅ Firebase服务初始化成功");
         
@@ -109,7 +85,7 @@ async function initializeFirebase() {
  * 设置认证状态监听器
  */
 function setupAuthListener() {
-    onAuthStateChanged(auth, (user) => {
+    auth.onAuthStateChanged((user) => {
         // 当用户通过Firebase正常登录后，将UID保存到localStorage
         if (user && !localStorage.getItem(FIREBASE_UID_KEY)) {
             console.log(`[Firebase] New anonymous user created. Storing UID: ${user.uid}`);
@@ -130,7 +106,7 @@ function setupAuthListener() {
             document.dispatchEvent(new CustomEvent('firebase-auth-state-changed', { detail: { user: null } }));
             
             // 尝试匿名登录
-            signInAnonymously(auth).catch((error) => {
+            auth.signInAnonymously().catch((error) => {
                 console.error("❌ 匿名登录失败:", error);
             });
         }
@@ -190,9 +166,9 @@ async function onUserAuthenticated(user) {
  */
 async function updateUserActivity(userId) {
     try {
-        const userRef = doc(db, 'users', userId, 'profile', 'activity');
-        await setDoc(userRef, {
-            lastActiveAt: serverTimestamp(),
+        const userRef = db.collection('users').doc(userId).collection('profile').doc('activity');
+        await userRef.set({
+            lastActiveAt: firebase.firestore.FieldValue.serverTimestamp(),
             deviceInfo: {
                 userAgent: navigator.userAgent,
                 platform: navigator.platform,
@@ -210,8 +186,8 @@ async function updateUserActivity(userId) {
  */
 function setupUserDataListeners(userId) {
     // 监听宠物数据变化
-    const petDataRef = doc(db, 'users', userId, 'data', 'petData');
-    const petDataUnsubscribe = onSnapshot(petDataRef, (doc) => {
+    const petDataRef = db.collection('users').doc(userId).collection('data').doc('petData');
+    const petDataUnsubscribe = petDataRef.onSnapshot((doc) => {
         if (doc.exists()) {
             handleRemotePetDataUpdate(doc.data());
         }
@@ -220,8 +196,8 @@ function setupUserDataListeners(userId) {
     });
     
     // 监听AI设置变化
-    const aiSettingsRef = doc(db, 'users', userId, 'data', 'aiSettings');
-    const aiSettingsUnsubscribe = onSnapshot(aiSettingsRef, (doc) => {
+    const aiSettingsRef = db.collection('users').doc(userId).collection('data').doc('aiSettings');
+    const aiSettingsUnsubscribe = aiSettingsRef.onSnapshot((doc) => {
         if (doc.exists()) {
             handleRemoteAISettingsUpdate(doc.data());
         }
@@ -230,8 +206,8 @@ function setupUserDataListeners(userId) {
     });
     
     // 监听UI设置变化
-    const uiSettingsRef = doc(db, 'users', userId, 'data', 'uiSettings');
-    const uiSettingsUnsubscribe = onSnapshot(uiSettingsRef, (doc) => {
+    const uiSettingsRef = db.collection('users').doc(userId).collection('data').doc('uiSettings');
+    const uiSettingsUnsubscribe = uiSettingsRef.onSnapshot((doc) => {
         if (doc.exists()) {
             handleRemoteUISettingsUpdate(doc.data());
         }

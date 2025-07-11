@@ -11,13 +11,13 @@
 
     // 需要加载的脚本列表
     const scriptsToLoad = [
-        // Firebase App and Auth
-        `https://www.gstatic.com/firebasejs/${firebaseVersion}/firebase-app.js`,
-        `https://www.gstatic.com/firebasejs/${firebaseVersion}/firebase-auth.js`,
+        // Firebase App and Auth (使用compat版本以避免模块问题)
+        `https://www.gstatic.com/firebasejs/${firebaseVersion}/firebase-app-compat.js`,
+        `https://www.gstatic.com/firebasejs/${firebaseVersion}/firebase-auth-compat.js`,
         // Firestore Database
-        `https://www.gstatic.com/firebasejs/${firebaseVersion}/firebase-firestore.js`,
+        `https://www.gstatic.com/firebasejs/${firebaseVersion}/firebase-firestore-compat.js`,
         // Firebase Storage
-        `https://www.gstatic.com/firebasejs/${firebaseVersion}/firebase-storage.js`,
+        `https://www.gstatic.com/firebasejs/${firebaseVersion}/firebase-storage-compat.js`,
         // 我们的配置文件和同步逻辑
         './firebase-config.js',
         './firebase-sync.js',
@@ -30,6 +30,7 @@
             const script = document.createElement('script');
             script.src = src;
             script.async = false; // 确保按顺序执行
+
             script.onload = () => {
                 console.log(`✅ Script loaded: ${src}`);
                 resolve();

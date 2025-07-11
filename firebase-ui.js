@@ -636,4 +636,10 @@ window.FirebaseUI = {
     updateStatus: updateFirebaseStatus
 };
 
+// 自动创建Firebase同步面板
+$(document).ready(function() {
+    console.log("🔥 自动创建Firebase同步面板...");
+    createFirebaseSyncPanel();
+});
+
 console.log("✅ Firebase UI模块加载完成");

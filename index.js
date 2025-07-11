@@ -1939,8 +1939,11 @@ ${currentPersonality}
             }
         }, 1000);
 
-        // 绑定Firebase相关事件
-        initializeFirebaseSettings();
+        // **修改：监听firebase-ready事件，确保所有模块加载完毕**
+        document.addEventListener('firebase-ready', () => {
+            console.log(`[${extensionName}] Received firebase-ready event. Initializing Firebase UI settings...`);
+            initializeFirebaseSettings();
+        });
 
         console.log(`[${extensionName}] 设置面板初始化完成`);
         console.log(`[${extensionName}] 当前人设类型: ${currentPersonalityType}`);

@@ -76,6 +76,8 @@
                 const success = await window.FirebaseService.initialize();
                 if (success) {
                     console.log('🎉 Firebase Service successfully initialized!');
+                    // **新增：发送全局就绪事件**
+                    document.dispatchEvent(new CustomEvent('firebase-ready'));
                     return; // 初始化成功，退出循环
                 } else {
                     console.error('[Initializer] 🔥 FirebaseService.initialize() returned false. Halting.');

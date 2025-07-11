@@ -438,23 +438,23 @@ function bindFirebasePanelEvents() {
             showSyncProgress('正在同步所有数据...', 0);
 
             // 同步宠物数据
-            const petData = window.getLocalPetData();
+            const petData = window.FirebaseBridge.getLocalPetData();
             if (petData) {
-                await window.FirebaseSync.uploadPetData(petData);
+                await window.FirebaseDataService.uploadData('petData', petData);
                 updateSyncProgress(33);
             }
 
             // 同步AI设置
-            const aiSettings = window.getLocalAISettings();
+            const aiSettings = window.FirebaseBridge.getLocalAISettings();
             if (aiSettings && Object.keys(aiSettings).length > 0) {
-                await window.FirebaseSync.uploadAISettings(aiSettings);
+                await window.FirebaseDataService.uploadData('aiSettings', aiSettings);
                 updateSyncProgress(66);
             }
 
             // 同步UI设置（包括头像）
-            const uiSettings = window.getLocalUISettings();
+            const uiSettings = window.FirebaseBridge.getLocalUISettings();
             if (uiSettings) {
-                await window.FirebaseSync.uploadUISettings(uiSettings);
+                await window.FirebaseDataService.uploadData('uiSettings', uiSettings);
                 updateSyncProgress(100);
             }
 
@@ -483,9 +483,12 @@ function bindFirebasePanelEvents() {
     $('#reset-firebase-btn').on('click', async () => {
         if (confirm('确定要重置Firebase连接吗？这将重新初始化所有Firebase服务。')) {
             try {
-                if (window.FirebaseService) {
-                    window.FirebaseService.cleanup();
-                    await window.FirebaseService.initialize();
+                if (window.FirebaseCore) {
+                    // 清理旧的监听器
+                    if (window.FirebaseDataService) {
+                        window.FirebaseDataService.cleanup();
+                    }
+                    await window.FirebaseCore.initialize();
                     updateFirebaseStatus();
                     if (typeof toastr !== 'undefined') {
                         toastr.success('Firebase连接已重置', '🔄 重置完成');
@@ -510,14 +513,14 @@ function bindFirebasePanelEvents() {
  * 更新Firebase状态显示
  */
 function updateFirebaseStatus() {
-    if (!window.FirebaseService) {
+    if (!window.FirebaseCore) {
         $('#firebase-service-status').text('❌ 未加载').css('color', '#dc3545');
         $('#firebase-auth-status').text('❌ 不可用').css('color', '#dc3545');
         $('#firebase-network-status').text('❌ 不可用').css('color', '#dc3545');
         return;
     }
 
-    const status = window.FirebaseService.getStatus();
+    const status = window.FirebaseCore.getStatus();
 
     // Firebase服务状态
     if (status.isReady) {
@@ -626,7 +629,6 @@ window.disconnectDevice = async function(deviceId) {
 
 // 导出Firebase UI功能
 window.FirebaseUI = {
-    createSyncPanel: createFirebaseSyncPanel,
     showSyncPanel: () => {
         $('#firebase-sync-panel').show();
         updateFirebaseStatus();

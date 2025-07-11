@@ -15,7 +15,7 @@
         `https://www.gstatic.com/firebasejs/${firebaseVersion}/firebase-auth-compat.js`,
         `https://www.gstatic.com/firebasejs/${firebaseVersion}/firebase-firestore-compat.js`,
         `https://www.gstatic.com/firebasejs/${firebaseVersion}/firebase-storage-compat.js`,
-        './firebase-config.js',
+        './firebase-core.js', // New core module
         './firebase-sync.js',
         './firebase-ui.js'
     ];
@@ -66,21 +66,32 @@
         const MAX_ATTEMPTS = 10;
         const RETRY_DELAY = 500; // ms
 
+        // Firebase项目配置
+        const firebaseConfig = {
+          apiKey: "AIzaSyA74TnN9IoyQjCncKOIOShWEktrL1hd96o",
+          authDomain: "kpop-pett.firebaseapp.com",
+          projectId: "kpop-pett",
+          storageBucket: "kpop-pett.firebasestorage.app",
+          messagingSenderId: "264650615774",
+          appId: "1:264650615774:web:f500ff555183110c3f0b4f",
+          measurementId: "G-3BH0GMJR3D"
+        };
+
         for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             console.log(`[Initializer] Attempt ${attempt}/${MAX_ATTEMPTS} to initialize Firebase...`);
 
-            // 检查Firebase核心对象和我们自己的服务是否都已准备好
-            if (typeof firebase !== 'undefined' && typeof firebase.app === 'function' && window.FirebaseService) {
-                console.log('[Initializer] ✅ Dependencies (firebase, FirebaseService) are ready!');
+            // 检查Firebase核心对象和我们自己的FirebaseCore服务是否都已准备好
+            if (typeof firebase !== 'undefined' && typeof firebase.app === 'function' && window.FirebaseCore) {
+                console.log('[Initializer] ✅ Dependencies (firebase, FirebaseCore) are ready!');
                 
-                const success = await window.FirebaseService.initialize();
+                // 设置Firebase配置并初始化
+                window.FirebaseCore.setFirebaseConfig(firebaseConfig);
+                const success = await window.FirebaseCore.initialize();
                 if (success) {
-                    console.log('🎉 Firebase Service successfully initialized!');
-                    // **新增：发送全局就绪事件**
-                    document.dispatchEvent(new CustomEvent('firebase-ready'));
+                    console.log('🎉 Firebase Core Service successfully initialized!');
                     return; // 初始化成功，退出循环
                 } else {
-                    console.error('[Initializer] 🔥 FirebaseService.initialize() returned false. Halting.');
+                    console.error('[Initializer] 🔥 FirebaseCore.initialize() returned false. Halting.');
                     return; // 初始化函数明确返回失败，停止重试
                 }
             }

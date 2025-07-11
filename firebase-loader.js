@@ -20,7 +20,8 @@
         `https://www.gstatic.com/firebasejs/${firebaseVersion}/firebase-storage.js`,
         // 我们的配置文件和同步逻辑
         './firebase-config.js',
-        './firebase-sync.js'
+        './firebase-sync.js',
+        './firebase-ui.js'
     ];
 
     // 动态加载脚本的函数

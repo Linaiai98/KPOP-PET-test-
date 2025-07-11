@@ -1939,6 +1939,9 @@ ${currentPersonality}
             }
         }, 1000);
 
+        // 绑定Firebase相关事件
+        initializeFirebaseSettings();
+
         console.log(`[${extensionName}] 设置面板初始化完成`);
         console.log(`[${extensionName}] 当前人设类型: ${currentPersonalityType}`);
         console.log(`[${extensionName}] 当前人设内容: ${getCurrentPersonality()}`);
@@ -1959,6 +1962,114 @@ ${currentPersonality}
         } else {
             $("#virtual-pet-custom-personality-container").hide();
         }
+    }
+
+    /**
+     * 初始化Firebase设置界面
+     */
+    function initializeFirebaseSettings() {
+        console.log(`[${extensionName}] 初始化Firebase设置界面...`);
+
+        const FIREBASE_UID_KEY = 'kpop-pet-firebase-uid';
+
+        // 更新Firebase状态显示
+        function updateFirebaseStatus() {
+            const firebaseStatusEl = $('#firebase-status-value');
+            const firebaseUidEl = $('#firebase-uid');
+            const copyUidBtn = $('#copy-uid-button');
+
+            if (window.FirebaseService && window.FirebaseService.isReady()) {
+                const status = window.FirebaseService.getStatus();
+
+                if (status.isAuthenticated && status.userId) {
+                    firebaseStatusEl.text('已连接').css('color', 'green');
+                    firebaseUidEl.text(status.userId);
+                    copyUidBtn.prop('disabled', false);
+                } else {
+                    firebaseStatusEl.text('未认证').css('color', 'orange');
+                    firebaseUidEl.text('N/A');
+                    copyUidBtn.prop('disabled', true);
+                }
+            } else {
+                firebaseStatusEl.text('未连接').css('color', 'red');
+                firebaseUidEl.text('N/A');
+                copyUidBtn.prop('disabled', true);
+            }
+        }
+
+        // 监听Firebase认证状态变化
+        document.addEventListener('firebase-auth-state-changed', (event) => {
+            const user = event.detail.user;
+            const firebaseStatusEl = $('#firebase-status-value');
+            const firebaseUidEl = $('#firebase-uid');
+            const copyUidBtn = $('#copy-uid-button');
+
+            if (user && user.uid) {
+                firebaseStatusEl.text('已连接').css('color', 'green');
+                firebaseUidEl.text(user.uid);
+                copyUidBtn.prop('disabled', false);
+            } else {
+                firebaseStatusEl.text('未连接').css('color', 'red');
+                firebaseUidEl.text('N/A');
+                copyUidBtn.prop('disabled', true);
+            }
+        });
+
+        // 复制UID按钮事件
+        $('#copy-uid-button').on('click', function() {
+            const uid = $('#firebase-uid').text();
+            if (uid && uid !== 'N/A') {
+                navigator.clipboard.writeText(uid)
+                    .then(() => {
+                        toastr.success('同步ID已复制到剪贴板!', '📋 复制成功');
+                    })
+                    .catch(err => {
+                        console.error('无法复制ID: ', err);
+                        toastr.error('复制失败，请手动复制。', '❌ 复制失败');
+                    });
+            }
+        });
+
+        // 从ID同步按钮事件
+        $('#pull-from-id-button').on('click', function() {
+            const newUid = $('#sync-id-input').val().trim();
+            if (newUid) {
+                if (confirm(`确定要从新的ID同步数据吗？\n\nID: ${newUid}\n\n这将会刷新页面并使用这个新ID作为本机的身份。`)) {
+                    console.log(`[${extensionName}] 存储新UID (${newUid}) 并重新加载页面.`);
+                    localStorage.setItem(FIREBASE_UID_KEY, newUid);
+                    toastr.success('同步ID已更新。页面即将刷新以加载新ID的数据。', '🔄 同步设置');
+                    setTimeout(() => {
+                        location.reload();
+                    }, 2000);
+                }
+            } else {
+                toastr.warning('请输入一个有效的同步ID。', '⚠️ 输入无效');
+            }
+        });
+
+        // 打开Firebase管理面板按钮事件
+        $('#open-firebase-panel-btn').on('click', function() {
+            if (window.FirebaseUI && typeof window.FirebaseUI.showSyncPanel === 'function') {
+                window.FirebaseUI.showSyncPanel();
+                toastr.info('Firebase管理面板已打开', '🔥 Firebase');
+            } else {
+                toastr.warning('Firebase UI模块未加载，请稍后再试', '⚠️ 模块未就绪');
+                console.warn(`[${extensionName}] Firebase UI模块未找到`);
+            }
+        });
+
+        // 初始状态检查
+        setTimeout(() => {
+            updateFirebaseStatus();
+
+            // 检查是否有存储的UID
+            const storedUid = localStorage.getItem(FIREBASE_UID_KEY);
+            if (storedUid) {
+                console.log(`[${extensionName}] 发现存储的Firebase UID: ${storedUid}`);
+            }
+        }, 1000);
+
+        console.log(`[${extensionName}] Firebase设置界面初始化完成`);
     }
 
     // -----------------------------------------------------------------
@@ -4237,6 +4348,76 @@ ${currentPersonality}
 
                         <small class="notes" style="margin-top: 10px; display: block;">
                             配置AI API用于生成个性化的宠物回复，AI会根据选择的人设来回应
+                        </small>
+
+                        <!-- Firebase 同步设置 -->
+                        <hr style="margin: 15px 0; border: none; border-top: 1px solid #444;">
+
+                        <div class="flex-container">
+                            <label style="display: block; margin-bottom: 8px; font-weight: bold;">
+                                ☁️ Firebase 同步
+                            </label>
+                        </div>
+
+                        <div style="margin-bottom: 10px;">
+                            <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                                <span style="margin-right: 10px; font-size: 0.9em;">连接状态:</span>
+                                <span id="firebase-status-value" style="color: red; font-weight: bold;">未连接</span>
+                            </div>
+                            <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                                <span style="margin-right: 10px; font-size: 0.9em;">本机同步ID:</span>
+                                <span id="firebase-uid" style="word-break: break-all; font-size: 0.8em; color: #666;">N/A</span>
+                                <button id="copy-uid-button" style="
+                                    margin-left: 8px;
+                                    padding: 4px 8px;
+                                    background: #4a90e2;
+                                    color: white;
+                                    border: none;
+                                    border-radius: 4px;
+                                    cursor: pointer;
+                                    font-size: 0.8em;
+                                " disabled>复制ID</button>
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom: 10px;">
+                            <label style="display: block; margin-bottom: 5px; font-size: 0.9em; font-weight: bold;">
+                                从其他设备同步
+                            </label>
+                            <p style="font-size: 0.8em; color: #666; margin-bottom: 8px;">
+                                要同步另一台设备的数据，请在那台设备上复制它的同步ID，然后粘贴到下方并点击按钮。
+                            </p>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <input type="text" id="sync-id-input" placeholder="在此处粘贴其他设备的同步ID"
+                                       style="flex: 1; padding: 6px; border-radius: 4px; font-size: 0.9em;">
+                                <button id="pull-from-id-button" style="
+                                    padding: 6px 12px;
+                                    background: #48bb78;
+                                    color: white;
+                                    border: none;
+                                    border-radius: 4px;
+                                    cursor: pointer;
+                                    font-size: 0.9em;
+                                    white-space: nowrap;
+                                ">从ID同步</button>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 10px;">
+                            <button id="open-firebase-panel-btn" style="
+                                padding: 8px 16px;
+                                background: #ff6b35;
+                                color: white;
+                                border: none;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                font-size: 0.9em;
+                                margin-right: 8px;
+                            ">🔥 打开Firebase管理面板</button>
+                        </div>
+
+                        <small class="notes" style="margin-top: 10px; display: block;">
+                            Firebase同步可以让你在多个设备间同步宠物数据、AI设置和自定义头像
                         </small>
                     </div>
                 </div>

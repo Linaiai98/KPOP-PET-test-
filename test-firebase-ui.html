@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase UI 测试</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-section h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .status.warning { background: #fff3cd; color: #856404; }
+        .status.info { background: #d1ecf1; color: #0c5460; }
+        
+        /* 模拟SillyTavern的扩展设置容器 */
+        #extensions_settings2 {
+            background: #2a2a2a;
+            color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        /* 确保Firebase设置在深色背景下可见 */
+        #extensions_settings2 input,
+        #extensions_settings2 select,
+        #extensions_settings2 button {
+            background: #444;
+            color: #fff;
+            border: 1px solid #666;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        
+        #extensions_settings2 button {
+            background: #007bff;
+            cursor: pointer;
+        }
+        
+        #extensions_settings2 button:hover {
+            background: #0056b3;
+        }
+        
+        #extensions_settings2 button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🔥 Firebase UI 测试页面</h1>
+        
+        <div class="test-section">
+            <h3>📋 测试说明</h3>
+            <p>这个页面用于测试虚拟宠物插件的Firebase设置界面是否正常显示和工作。</p>
+            <ul>
+                <li>检查Firebase设置界面是否正确渲染</li>
+                <li>验证按钮和输入框是否可以正常交互</li>
+                <li>测试Firebase连接状态显示</li>
+                <li>验证事件处理是否正常工作</li>
+            </ul>
+        </div>
+
+        <div class="test-section">
+            <h3>🔍 加载状态</h3>
+            <div id="loading-status" class="status info">正在加载插件...</div>
+        </div>
+
+        <!-- 模拟SillyTavern的扩展设置容器 -->
+        <div id="extensions_settings2">
+            <h3>📦 扩展设置容器 (模拟SillyTavern)</h3>
+            <p>插件的设置界面将在这里显示...</p>
+        </div>
+
+        <div class="test-section">
+            <h3>🧪 测试操作</h3>
+            <button onclick="testFirebaseStatus()">测试Firebase状态更新</button>
+            <button onclick="testFirebasePanel()">测试Firebase面板打开</button>
+            <button onclick="simulateAuthChange()">模拟认证状态变化</button>
+            <button onclick="checkElements()">检查DOM元素</button>
+        </div>
+
+        <div class="test-section">
+            <h3>📊 测试结果</h3>
+            <div id="test-results"></div>
+        </div>
+    </div>
+
+    <script>
+        // 模拟toastr如果不存在
+        if (typeof toastr === 'undefined') {
+            window.toastr = {
+                success: (msg) => console.log('SUCCESS:', msg),
+                error: (msg) => console.log('ERROR:', msg),
+                warning: (msg) => console.log('WARNING:', msg),
+                info: (msg) => console.log('INFO:', msg)
+            };
+        }
+
+        // 加载插件
+        $(document).ready(function() {
+            console.log('🚀 开始加载虚拟宠物插件...');
+            
+            // 动态加载插件的主文件
+            const script = document.createElement('script');
+            script.src = './index.js';
+            script.onload = function() {
+                $('#loading-status').removeClass('info').addClass('success').text('✅ 插件加载完成');
+                console.log('✅ 插件加载完成');
+                
+                // 等待一段时间让插件完全初始化
+                setTimeout(checkPluginStatus, 2000);
+            };
+            script.onerror = function() {
+                $('#loading-status').removeClass('info').addClass('error').text('❌ 插件加载失败');
+                console.error('❌ 插件加载失败');
+            };
+            document.head.appendChild(script);
+        });
+
+        function checkPluginStatus() {
+            const results = [];
+            
+            // 检查设置面板是否存在
+            const settingsPanel = $('#virtual-pet-settings');
+            if (settingsPanel.length > 0) {
+                results.push('✅ 设置面板已创建');
+                
+                // 检查Firebase设置部分
+                const firebaseSection = $('#firebase-status-value');
+                if (firebaseSection.length > 0) {
+                    results.push('✅ Firebase设置界面已显示');
+                } else {
+                    results.push('❌ Firebase设置界面未找到');
+                }
+                
+                // 检查Firebase按钮
+                const firebaseButtons = $('#copy-uid-button, #pull-from-id-button, #open-firebase-panel-btn');
+                results.push(`📊 Firebase按钮数量: ${firebaseButtons.length}/3`);
+                
+            } else {
+                results.push('❌ 设置面板未创建');
+            }
+            
+            // 检查Firebase模块
+            if (window.FirebaseService) {
+                results.push('✅ FirebaseService 已加载');
+            } else {
+                results.push('⚠️ FirebaseService 未加载');
+            }
+            
+            if (window.FirebaseUI) {
+                results.push('✅ FirebaseUI 已加载');
+            } else {
+                results.push('⚠️ FirebaseUI 未加载');
+            }
+            
+            $('#test-results').html(results.map(r => `<div class="status ${r.startsWith('✅') ? 'success' : r.startsWith('❌') ? 'error' : 'warning'}">${r}</div>`).join(''));
+        }
+
+        function testFirebaseStatus() {
+            console.log('🧪 测试Firebase状态更新...');
+            if (typeof window.initializeFirebaseSettings === 'function') {
+                // 如果函数存在，调用它
+                console.log('调用 initializeFirebaseSettings...');
+            } else {
+                console.log('initializeFirebaseSettings 函数未找到');
+            }
+            
+            // 手动更新状态显示
+            const statusEl = $('#firebase-status-value');
+            if (statusEl.length > 0) {
+                statusEl.text('测试状态').css('color', 'blue');
+                toastr.info('Firebase状态已更新为测试状态');
+            } else {
+                toastr.error('Firebase状态元素未找到');
+            }
+        }
+
+        function testFirebasePanel() {
+            console.log('🧪 测试Firebase面板打开...');
+            const panelBtn = $('#open-firebase-panel-btn');
+            if (panelBtn.length > 0) {
+                panelBtn.click();
+                toastr.info('已点击Firebase面板按钮');
+            } else {
+                toastr.error('Firebase面板按钮未找到');
+            }
+        }
+
+        function simulateAuthChange() {
+            console.log('🧪 模拟认证状态变化...');
+            const mockUser = {
+                uid: 'test-uid-' + Date.now(),
+                email: 'test@example.com'
+            };
+            
+            // 触发认证状态变化事件
+            const event = new CustomEvent('firebase-auth-state-changed', {
+                detail: { user: mockUser }
+            });
+            document.dispatchEvent(event);
+            toastr.success('已模拟用户登录: ' + mockUser.uid);
+        }
+
+        function checkElements() {
+            console.log('🧪 检查DOM元素...');
+            const elements = [
+                '#virtual-pet-settings',
+                '#firebase-status-value',
+                '#firebase-uid',
+                '#copy-uid-button',
+                '#sync-id-input',
+                '#pull-from-id-button',
+                '#open-firebase-panel-btn'
+            ];
+            
+            const results = elements.map(selector => {
+                const el = $(selector);
+                return `${selector}: ${el.length > 0 ? '✅' : '❌'} (${el.length}个)`;
+            });
+            
+            console.log('DOM元素检查结果:', results);
+            alert('DOM元素检查结果:\n' + results.join('\n'));
+        }
+    </script>
+</body>
+</html>

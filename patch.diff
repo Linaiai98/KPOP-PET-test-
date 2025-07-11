@@ -1,0 +1,74 @@
+diff --git a/index.js b/index.js
+--- a/index.js
++++ b/index.js
+@@ -51,6 +51,19 @@
+         notification: 10002 // 通知
+     };
+ 
++    // 创建一个全局对象来暴露API
++    window.petSystem = {
++        // 将在这里挂载函数
++    };
++
+     // -----------------------------------------------------------------
+     // 2. 初始化函数
+     // -----------------------------------------------------------------
+@@ -1970,10 +1983,12 @@
+     /**
+      * 加载宠物数据
+      */
+-    function loadPetData() {
++    function loadPetData(isFromSync = false) {
+         console.log(`[${extensionName}] Loading pet data...`);
+         try {
+             const data = localStorage.getItem(STORAGE_KEY_PET_DATA);
++            if (isFromSync) return data ? JSON.parse(data) : getDefaultPetData();
++
+             if (data) {
+                 petData = JSON.parse(data);
+                 console.log(`[${extensionName}] Pet data loaded successfully.`);
+@@ -2170,10 +2185,16 @@
+     /**
+      * 保存宠物数据
+      */
+-    function savePetData() {
++    function savePetData(dataToSave = petData, isFromSync = false) {
+         try {
+-            localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(petData));
++            localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(dataToSave));
+             console.log(`[${extensionName}] Pet data saved successfully.`);
++
++            // 如果不是来自Firebase的同步更新，则触发上传
++            if (!isFromSync && window.FirebaseSync && typeof window.FirebaseSync.uploadPetData === 'function') {
++                console.log(`[${extensionName}] Triggering Firebase pet data upload.`);
++                window.FirebaseSync.uploadPetData(dataToSave);
++            }
+         } catch (error) {
+             console.error(`[${extensionName}] Error saving pet data:`, error);
+             showNotification("保存宠物数据失败！", 'error');
+@@ -2483,6 +2504,26 @@
+         updatePetDisplay();
+     }
+ 
++    // 将核心函数暴露到全局API
++    Object.assign(window.petSystem, {
++        loadPetData,
++        savePetData,
++        loadAISettings: () => ({}), // 示例，需要实现
++        saveAISettings: () => {}, // 示例，需要实现
++        loadUISettings: () => ({}), // 示例，需要实现
++        saveUISettings: () => {},
++        showNotification
++    });
++
++    // 加载Firebase桥接注册脚本
++    (function() {
++        const script = document.createElement('script');
++        script.src = `${extensionFolderPath}/firebase-bridge-register.js`;
++        document.head.appendChild(script);
++        console.log(`[${extensionName}] Firebase bridge register script added.`);
++    })();
++
+     // 首次加载时初始化
+     await initializeVirtualPet();
+ });

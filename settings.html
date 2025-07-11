@@ -38,6 +38,42 @@
                     </ul>
                 </div>
             </div>
+            
+            <!-- Firebase 同步设置 -->
+            <div class="pet-section" id="firebase-sync-section">
+                <h3>☁️ Firebase 数据同步</h3>
+                <div class="settings-container">
+                    <div class="setting-item">
+                        <label>连接状态:</label>
+                        <span id="firebase-status-text" style="font-weight: bold; color: #ff9800;">正在检查...</span>
+                    </div>
+                    <div class="setting-item">
+                        <label for="firebase-uid-input">你的同步ID:</label>
+                        <div style="display: flex; align-items: center;">
+                            <input type="text" id="firebase-uid-input" readonly placeholder="连接后显示">
+                            <button id="copy-uid-btn" class="pet-button" style="margin-left: 10px;" title="复制同步ID">📋</button>
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <label for="target-uid-input">从其他设备ID同步:</label>
+                        <input type="text" id="target-uid-input" placeholder="在此粘贴其他设备的同步ID">
+                    </div>
+                    <div class="setting-actions">
+                        <button id="pull-from-uid-btn" class="pet-button success">
+                            📥 拉取数据
+                        </button>
+                    </div>
+                    <div class="setting-item" style="font-size: 0.8em; color: #666;">
+                        <strong>说明:</strong> 要在多设备间同步, 请先在一台设备上使用, 然后复制该设备的“同步ID”。在你的新设备上, 将ID粘贴到上方输入框, 然后点击“拉取数据”。这会将云端数据覆盖到你的新设备上。
+                    </div>
+                </div>
+            </div>
+            
+            <div class="pet-nav-buttons">
+                <button class="pet-button back-to-main-btn">
+                    ← 返回
+                </button>
+            </div>
         </div>
     </div>
 </div>

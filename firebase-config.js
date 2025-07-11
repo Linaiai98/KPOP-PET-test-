@@ -49,6 +49,8 @@ let syncListeners = new Map(); // 存储实时监听器
 /**
  * 初始化Firebase服务
  */
+const FIREBASE_UID_KEY = 'kpop-pet-firebase-uid';
+
 async function initializeFirebase() {
     try {
         console.log("🔥 正在初始化Firebase服务...");
@@ -64,7 +66,22 @@ async function initializeFirebase() {
         console.log("✅ Firebase服务初始化成功");
         
         // 设置认证状态监听
-        setupAuthListener();
+                // 优先从localStorage获取UID，实现跨设备同步
+        const storedUid = localStorage.getItem(FIREBASE_UID_KEY);
+        if (storedUid) {
+            console.log(`[Firebase] Found stored UID: ${storedUid}. Re-using this identity.`);
+            // 模拟一个user对象，因为我们已经有了UID，不需要再次登录
+            const user = { uid: storedUid };
+            await onUserAuthenticated(user);
+            currentUser = user;
+            isFirebaseReady = true;
+            // 手动触发一次状态更新，让UI知道已经“登录”
+            document.dispatchEvent(new CustomEvent('firebase-auth-state-changed', { detail: { user } }));
+        } else {
+            console.log('[Firebase] No stored UID found. Proceeding with standard anonymous login.');
+            // 如果没有存储的UID，才进行正常的认证流程
+            setupAuthListener();
+        }
         
         // 设置网络状态监听
         setupNetworkListener();
@@ -93,15 +110,24 @@ async function initializeFirebase() {
  */
 function setupAuthListener() {
     onAuthStateChanged(auth, (user) => {
+        // 当用户通过Firebase正常登录后，将UID保存到localStorage
+        if (user && !localStorage.getItem(FIREBASE_UID_KEY)) {
+            console.log(`[Firebase] New anonymous user created. Storing UID: ${user.uid}`);
+            localStorage.setItem(FIREBASE_UID_KEY, user.uid);
+        }
         if (user) {
             currentUser = user;
             console.log("👤 用户已登录:", user.uid);
             
             // 触发数据同步
-            onUserAuthenticated(user);
+                        onUserAuthenticated(user);
+            // 触发事件，让UI更新
+            document.dispatchEvent(new CustomEvent('firebase-auth-state-changed', { detail: { user } }));
         } else {
-            currentUser = null;
+                        currentUser = null;
             console.log("👤 用户未登录");
+            // 触发事件，让UI更新
+            document.dispatchEvent(new CustomEvent('firebase-auth-state-changed', { detail: { user: null } }));
             
             // 尝试匿名登录
             signInAnonymously(auth).catch((error) => {

@@ -5,15 +5,16 @@ console.log("🔥 Firebase配置模块开始加载...");
 
 // 使用Firebase v9 compat版本，避免模块导入问题
 
-// Firebase项目配置
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-    apiKey: "AIzaSyA74TnN9IoyQjCncKOIOShWEktrL1hd96o",
-    authDomain: "kpop-pett.firebaseapp.com",
-    projectId: "kpop-pett",
-    storageBucket: "kpop-pett.appspot.com", // 修正后的格式
-    messagingSenderId: "264650615774",
-    appId: "1:264650615774:web:f500ff555183110c3f0b4f",
-    measurementId: "G-3BH0GMJR3D"
+  apiKey: "AIzaSyA74TnN9IoyQjCncKOIOShWEktrL1hd96o",
+  authDomain: "kpop-pett.firebaseapp.com",
+  projectId: "kpop-pett",
+  storageBucket: "kpop-pett.firebasestorage.app",
+  messagingSenderId: "264650615774",
+  appId: "1:264650615774:web:f500ff555183110c3f0b4f",
+  measurementId: "G-3BH0GMJR3D"
 };
 
 // 初始化Firebase服务

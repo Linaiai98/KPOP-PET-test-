@@ -67,6 +67,7 @@ function setupAuthListener() {
 
             // Notify other parts of the plugin that auth is complete
             document.dispatchEvent(new CustomEvent('firebase-auth-ready', { detail: { user } }));
+            document.dispatchEvent(new CustomEvent('firebase-auth-ready', { detail: { user } }));
 
         } else {
             currentUser = null;

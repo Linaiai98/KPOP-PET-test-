@@ -1844,16 +1844,23 @@ ${currentPersonality}
             try {
                 console.log("🔥 Firebase同步按钮被点击");
 
-                // 检查Firebase设备连接模块是否已加载
-                if (!window.FirebaseDeviceConnection) {
-                    console.log("⏳ Firebase设备连接模块未加载，正在加载...");
-                    await import('./firebase-device-connection.js');
+                // 检查Firebase服务是否已初始化
+                if (!window.FirebaseService || !window.FirebaseService.isReady()) {
+                    console.log("⏳ Firebase服务未初始化，开始完整的初始化流程...");
 
-                    // 等待一小段时间确保模块完全初始化
-                    await new Promise(resolve => setTimeout(resolve, 100));
+                    // 执行完整的Firebase模块加载和初始化
+                    const firebaseReady = await loadFirebaseModules();
+
+                    if (!firebaseReady) {
+                        throw new Error("Firebase服务初始化失败");
+                    }
+
+                    console.log("✅ Firebase服务初始化完成");
+                } else {
+                    console.log("✅ Firebase服务已就绪");
                 }
 
-                // 检查Firebase UI模块是否已加载
+                // 确保Firebase UI模块已加载
                 if (!window.FirebaseUI) {
                     console.log("⏳ Firebase UI模块未加载，正在加载...");
                     await import('./firebase-ui.js');
@@ -1862,22 +1869,28 @@ ${currentPersonality}
                     await new Promise(resolve => setTimeout(resolve, 100));
                 }
 
-                // 验证所有必要的对象都已加载
-                if (window.FirebaseUI && window.FirebaseDeviceConnection) {
-                    console.log("✅ 所有Firebase模块已就绪");
+                // 验证所有必要的服务和模块都已就绪
+                const allReady = window.FirebaseService &&
+                                window.FirebaseService.isReady() &&
+                                window.FirebaseDeviceConnection &&
+                                window.FirebaseUI;
+
+                if (allReady) {
+                    console.log("✅ 所有Firebase模块和服务已就绪");
+                    console.log("🔍 FirebaseService状态:", window.FirebaseService.getStatus());
                     console.log("🔍 FirebaseDeviceConnection可用:", !!window.FirebaseDeviceConnection);
                     console.log("🔍 generateCode方法可用:", typeof window.FirebaseDeviceConnection.generateCode);
 
                     window.FirebaseUI.createSyncPanel();
                     window.FirebaseUI.showSyncPanel();
                 } else {
-                    throw new Error("Firebase模块加载不完整");
+                    throw new Error("Firebase服务或模块未完全就绪");
                 }
 
             } catch (error) {
-                console.error("❌ 加载Firebase模块失败:", error);
+                console.error("❌ Firebase初始化或加载失败:", error);
                 if (typeof toastr !== 'undefined') {
-                    toastr.error('Firebase同步功能暂时不可用: ' + error.message, '❌ 加载失败');
+                    toastr.error('Firebase同步功能暂时不可用: ' + error.message, '❌ 初始化失败');
                 }
             }
         });

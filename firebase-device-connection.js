@@ -5,13 +5,33 @@ console.log("📱 Firebase设备连接模块开始加载...");
 
 // 确保Firebase服务可用
 function ensureFirebaseReady() {
-    if (!window.FirebaseService || !window.FirebaseService.isReady()) {
-        throw new Error("Firebase服务未就绪，请先初始化Firebase");
+    console.log("🔍 检查Firebase服务状态...");
+
+    // 详细的状态检查和诊断
+    const diagnostics = {
+        FirebaseService: !!window.FirebaseService,
+        isReady: window.FirebaseService ? window.FirebaseService.isReady() : false,
+        getCurrentUser: window.FirebaseService ? !!window.FirebaseService.getCurrentUser() : false,
+        getFirestore: window.FirebaseService ? !!window.FirebaseService.getFirestore() : false
+    };
+
+    console.log("🔍 Firebase服务诊断:", diagnostics);
+
+    if (!window.FirebaseService) {
+        throw new Error("Firebase服务对象未加载。请确保firebase-config.js已正确加载并初始化。");
+    }
+
+    if (!window.FirebaseService.isReady()) {
+        const status = window.FirebaseService.getStatus ? window.FirebaseService.getStatus() : "状态不可用";
+        console.log("🔍 Firebase服务详细状态:", status);
+        throw new Error("Firebase服务未就绪。请先调用FirebaseService.initialize()完成初始化。");
     }
 
     if (!window.FirebaseService.getCurrentUser()) {
-        throw new Error("用户未认证，请先登录");
+        throw new Error("用户未认证。Firebase匿名认证可能失败，请检查网络连接和Firebase配置。");
     }
+
+    console.log("✅ Firebase服务检查通过");
 
     return {
         db: window.FirebaseService.getFirestore(),

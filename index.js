@@ -1840,23 +1840,45 @@ ${currentPersonality}
         });
 
         // Firebase同步管理按钮事件
-        $("#open-firebase-sync-btn").on('click', function() {
-            // 确保Firebase UI模块已加载
-            if (window.FirebaseUI) {
-                window.FirebaseUI.showSyncPanel();
-            } else {
-                // 动态加载Firebase UI模块
-                import('./firebase-ui.js').then(() => {
-                    if (window.FirebaseUI) {
-                        window.FirebaseUI.createSyncPanel();
-                        window.FirebaseUI.showSyncPanel();
-                    }
-                }).catch(error => {
-                    console.error("加载Firebase UI模块失败:", error);
-                    if (typeof toastr !== 'undefined') {
-                        toastr.error('Firebase同步功能暂时不可用', '❌ 加载失败');
-                    }
-                });
+        $("#open-firebase-sync-btn").on('click', async function() {
+            try {
+                console.log("🔥 Firebase同步按钮被点击");
+
+                // 检查Firebase设备连接模块是否已加载
+                if (!window.FirebaseDeviceConnection) {
+                    console.log("⏳ Firebase设备连接模块未加载，正在加载...");
+                    await import('./firebase-device-connection.js');
+
+                    // 等待一小段时间确保模块完全初始化
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+
+                // 检查Firebase UI模块是否已加载
+                if (!window.FirebaseUI) {
+                    console.log("⏳ Firebase UI模块未加载，正在加载...");
+                    await import('./firebase-ui.js');
+
+                    // 等待一小段时间确保模块完全初始化
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+
+                // 验证所有必要的对象都已加载
+                if (window.FirebaseUI && window.FirebaseDeviceConnection) {
+                    console.log("✅ 所有Firebase模块已就绪");
+                    console.log("🔍 FirebaseDeviceConnection可用:", !!window.FirebaseDeviceConnection);
+                    console.log("🔍 generateCode方法可用:", typeof window.FirebaseDeviceConnection.generateCode);
+
+                    window.FirebaseUI.createSyncPanel();
+                    window.FirebaseUI.showSyncPanel();
+                } else {
+                    throw new Error("Firebase模块加载不完整");
+                }
+
+            } catch (error) {
+                console.error("❌ 加载Firebase模块失败:", error);
+                if (typeof toastr !== 'undefined') {
+                    toastr.error('Firebase同步功能暂时不可用: ' + error.message, '❌ 加载失败');
+                }
             }
         });
 

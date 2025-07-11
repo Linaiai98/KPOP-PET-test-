@@ -361,7 +361,23 @@ function bindFirebasePanelEvents() {
     // 生成连接码
     $('#generate-connection-code-btn').on('click', async () => {
         try {
+            console.log("🔗 生成连接码按钮被点击");
+            console.log("🔍 检查FirebaseDeviceConnection:", !!window.FirebaseDeviceConnection);
+
+            if (!window.FirebaseDeviceConnection) {
+                throw new Error("FirebaseDeviceConnection模块未加载");
+            }
+
+            console.log("🔍 检查generateCode方法:", typeof window.FirebaseDeviceConnection.generateCode);
+
+            if (typeof window.FirebaseDeviceConnection.generateCode !== 'function') {
+                throw new Error("generateCode方法不可用");
+            }
+
+            console.log("🔗 开始生成连接码...");
             const code = await window.FirebaseDeviceConnection.generateCode();
+            console.log("✅ 连接码生成成功:", code);
+
             $('#connection-code-value').text(code);
             $('#connection-code-display').show();
 
@@ -369,7 +385,14 @@ function bindFirebasePanelEvents() {
                 toastr.success(`连接码已生成: ${code}`, '🔗 设备连接', { timeOut: 5000 });
             }
         } catch (error) {
-            console.error("生成连接码失败:", error);
+            console.error("❌ 生成连接码失败:", error);
+            console.error("❌ 错误详情:", {
+                message: error.message,
+                stack: error.stack,
+                FirebaseDeviceConnection: !!window.FirebaseDeviceConnection,
+                generateCode: window.FirebaseDeviceConnection ? typeof window.FirebaseDeviceConnection.generateCode : 'N/A'
+            });
+
             if (typeof toastr !== 'undefined') {
                 toastr.error('生成连接码失败: ' + error.message, '❌ 错误');
             }

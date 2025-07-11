@@ -354,23 +354,35 @@ async function disconnectDevice(deviceId) {
     }
 }
 
-// 导出设备连接功能
+// 导出设备连接功能 - 修复函数名称匹配问题
 window.FirebaseDeviceConnection = {
-    // 连接码管理
-    generateCode: generateDeviceConnectionCode,
+    // 连接码管理 - 确保方法名与UI调用一致
+    generateCode: generateDeviceConnectionCode,  // UI调用的是generateCode
     connectWithCode: connectWithDeviceCode,
-    
+
     // 设备管理
     getDevices: getConnectedDevices,
     disconnectDevice: disconnectDevice,
-    
+
     // 状态查询
     getState: () => ({ ...deviceConnectionState }),
     isPrimary: () => deviceConnectionState.isPrimaryDevice,
     isConnecting: () => deviceConnectionState.isConnecting,
-    
+
     // 工具函数
     generateDeviceId: generateDeviceId
 };
+
+// 确保对象已正确挂载到window
+console.log("✅ FirebaseDeviceConnection对象已挂载到window:", !!window.FirebaseDeviceConnection);
+console.log("✅ generateCode方法可用:", typeof window.FirebaseDeviceConnection.generateCode);
+
+// 添加详细的调试信息
+if (window.FirebaseDeviceConnection) {
+    console.log("🔍 FirebaseDeviceConnection可用方法:", Object.keys(window.FirebaseDeviceConnection));
+    console.log("🔍 generateCode函数:", window.FirebaseDeviceConnection.generateCode);
+} else {
+    console.error("❌ FirebaseDeviceConnection对象未正确创建！");
+}
 
 console.log("✅ Firebase设备连接模块加载完成");

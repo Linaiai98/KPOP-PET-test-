@@ -12937,22 +12937,22 @@ ${currentPersonality}
             }
 
             const script = document.createElement('script');
-            // 加载纯粹的 v9 SDK 脚本
-            script.src = 'https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js';
+            // 加载 v9 'compat' (兼容) 脚本，这是在非模块化环境中使用的正确方法
+            script.src = 'https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js';
             script.onload = () => {
                 const authScript = document.createElement('script');
-                authScript.src = 'https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js';
+                authScript.src = 'https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js';
                 authScript.onload = () => {
                     const firestoreScript = document.createElement('script');
-                    firestoreScript.src = 'https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js';
+                    firestoreScript.src = 'https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js';
                     firestoreScript.onload = () => {
-                        console.log(`[${extensionName}] 所有 Firebase v9 SDK 加载成功`);
+                        console.log(`[${extensionName}] 所有 Firebase v9 compat SDK 加载成功`);
                         resolve();
                     };
-                    firestoreScript.onerror = () => reject(new Error('Failed to load firebase-firestore.js'));
+                    firestoreScript.onerror = () => reject(new Error('Failed to load firebase-firestore-compat.js'));
                     document.head.appendChild(firestoreScript);
                 };
-                authScript.onerror = () => reject(new Error('Failed to load firebase-auth.js'));
+                authScript.onerror = () => reject(new Error('Failed to load firebase-auth-compat.js'));
                 document.head.appendChild(authScript);
             };
             script.onerror = reject;
@@ -12980,14 +12980,14 @@ ${currentPersonality}
         try {
             await loadFirebaseSDKs();
             
-            // 使用 v9 模块化语法（通过全局 firebase 对象）
-            firebaseApp = firebase.app.initializeApp(firebaseConfig);
-            firebaseAuth = firebase.auth.getAuth(firebaseApp);
-            firestoreDb = firebase.firestore.getFirestore(firebaseApp);
+            // 使用 v8/compat 语法
+            firebaseApp = firebase.initializeApp(firebaseConfig);
+            firebaseAuth = firebase.auth();
+            firestoreDb = firebase.firestore();
 
-            console.log(`[${extensionName}] Firebase v9 初始化成功`);
+            console.log(`[${extensionName}] Firebase v9 (compat) 初始化成功`);
 
-            firebase.auth.onAuthStateChanged(firebaseAuth, async (user) => {
+            firebaseAuth.onAuthStateChanged(async (user) => {
                 if (user) {
                     currentUser = user;
                     console.log(`[${extensionName}] 用户已匿名登录，UID:`, user.uid);
@@ -12997,7 +12997,7 @@ ${currentPersonality}
                 } else {
                     console.log(`[${extensionName}] 用户未登录，正在尝试匿名登录...`);
                     try {
-                        await firebase.auth.signInAnonymously(firebaseAuth);
+                        await firebaseAuth.signInAnonymously();
                     } catch (error) {
                         console.error(`[${extensionName}] 匿名登录失败:`, error);
                         updateFirebaseUI('连接失败，请检查网络或刷新页面。', 'red');
@@ -13037,8 +13037,8 @@ ${currentPersonality}
         if (!currentUser || !firestoreDb) return;
         console.log(`[${extensionName}] 正在从Firebase加载数据...`);
         try {
-            const docRef = firebase.firestore.doc(firestoreDb, 'users', currentUser.uid);
-            const docSnap = await firebase.firestore.getDoc(docRef);
+            const docRef = firestoreDb.collection('users').doc(currentUser.uid);
+            const docSnap = await docRef.get();
 
             if (docSnap.exists()) {
                 const firebaseData = docSnap.data().petData;
@@ -13070,8 +13070,8 @@ ${currentPersonality}
 
         console.log(`[${extensionName}] 正在保存数据到Firebase...`);
         try {
-            const docRef = firebase.firestore.doc(firestoreDb, 'users', currentUser.uid);
-            await firebase.firestore.setDoc(docRef, { petData: petData }, { merge: true });
+            const docRef = firestoreDb.collection('users').doc(currentUser.uid);
+            await docRef.set({ petData: petData }, { merge: true });
             console.log(`[${extensionName}] 数据成功保存到Firebase`);
         } catch (error) {
             console.error(`[${extensionName}] 保存数据到Firebase失败:`, error);
@@ -13097,8 +13097,8 @@ ${currentPersonality}
             const code = Math.random().toString(36).substring(2, 8).toUpperCase();
             const expiration = new Date(Date.now() + 5 * 60 * 1000);
 
-            const docRef = firebase.firestore.doc(firestoreDb, 'connection_codes', code);
-            await firebase.firestore.setDoc(docRef, {
+            const docRef = firestoreDb.collection('connection_codes').doc(code);
+            await docRef.set({
                 petData: petData,
                 expiresAt: expiration,
                 sourceUid: currentUser.uid
@@ -13132,8 +13132,8 @@ ${currentPersonality}
         button.prop('disabled', true).text('正在迁移...');
 
         try {
-            const docRef = firebase.firestore.doc(firestoreDb, 'connection_codes', code.toUpperCase());
-            const docSnap = await firebase.firestore.getDoc(docRef);
+            const docRef = firestoreDb.collection('connection_codes').doc(code.toUpperCase());
+            const docSnap = await docRef.get();
 
             if (!docSnap.exists() || docSnap.data().expiresAt.toDate() < new Date()) {
                 toastr.error('连接码无效或已过期。', '迁移失败');
@@ -13149,7 +13149,7 @@ ${currentPersonality}
             updateAllUI();
             toastr.success('数据迁移成功！您的宠物已同步。', '成功');
 
-            await firebase.firestore.deleteDoc(docRef);
+            await docRef.delete();
 
         } catch (error) {
             console.error(`[${extensionName}] 使用连接码失败:`, error);

@@ -38,9 +38,6 @@ jQuery(async () => {
     // 自定义头像管理
     let customAvatarData = null;
 
-    // Firebase v9 SDK 模块的引用
-    let fb_app, fb_auth, fb_firestore;
-
     // Firebase 实例
     let firebaseApp = null;
     let firebaseAuth = null;
@@ -12940,26 +12937,22 @@ ${currentPersonality}
             }
 
             const script = document.createElement('script');
-            // 加载包含所有模块的兼容性脚本，最简单可靠
-            script.src = 'https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js';
+            // 加载纯粹的 v9 SDK 脚本
+            script.src = 'https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js';
             script.onload = () => {
                 const authScript = document.createElement('script');
-                authScript.src = 'https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js';
+                authScript.src = 'https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js';
                 authScript.onload = () => {
                     const firestoreScript = document.createElement('script');
-                    firestoreScript.src = 'https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js';
+                    firestoreScript.src = 'https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js';
                     firestoreScript.onload = () => {
-                        console.log(`[${extensionName}] 所有 Firebase v9 compat SDK 加载成功`);
-                        // 从 v9 兼容包中解构出 v9 模块化函数
-                        fb_app = window.firebase.app;
-                        fb_auth = window.firebase.auth;
-                        fb_firestore = window.firebase.firestore;
+                        console.log(`[${extensionName}] 所有 Firebase v9 SDK 加载成功`);
                         resolve();
                     };
-                    firestoreScript.onerror = reject;
+                    firestoreScript.onerror = () => reject(new Error('Failed to load firebase-firestore.js'));
                     document.head.appendChild(firestoreScript);
                 };
-                authScript.onerror = reject;
+                authScript.onerror = () => reject(new Error('Failed to load firebase-auth.js'));
                 document.head.appendChild(authScript);
             };
             script.onerror = reject;
@@ -12987,13 +12980,14 @@ ${currentPersonality}
         try {
             await loadFirebaseSDKs();
             
-            firebaseApp = firebase.initializeApp(firebaseConfig);
-            firebaseAuth = firebase.auth(firebaseApp);
-            firestoreDb = firebase.firestore(firebaseApp);
+            // 使用 v9 模块化语法（通过全局 firebase 对象）
+            firebaseApp = firebase.app.initializeApp(firebaseConfig);
+            firebaseAuth = firebase.auth.getAuth(firebaseApp);
+            firestoreDb = firebase.firestore.getFirestore(firebaseApp);
 
-            console.log(`[${extensionName}] Firebase v9 (compat) 初始化成功`);
+            console.log(`[${extensionName}] Firebase v9 初始化成功`);
 
-            firebaseAuth.onAuthStateChanged(async (user) => {
+            firebase.auth.onAuthStateChanged(firebaseAuth, async (user) => {
                 if (user) {
                     currentUser = user;
                     console.log(`[${extensionName}] 用户已匿名登录，UID:`, user.uid);
@@ -13003,7 +12997,7 @@ ${currentPersonality}
                 } else {
                     console.log(`[${extensionName}] 用户未登录，正在尝试匿名登录...`);
                     try {
-                        await firebaseAuth.signInAnonymously();
+                        await firebase.auth.signInAnonymously(firebaseAuth);
                     } catch (error) {
                         console.error(`[${extensionName}] 匿名登录失败:`, error);
                         updateFirebaseUI('连接失败，请检查网络或刷新页面。', 'red');
@@ -13043,8 +13037,8 @@ ${currentPersonality}
         if (!currentUser || !firestoreDb) return;
         console.log(`[${extensionName}] 正在从Firebase加载数据...`);
         try {
-            const docRef = firestoreDb.collection('users').doc(currentUser.uid);
-            const docSnap = await docRef.get();
+            const docRef = firebase.firestore.doc(firestoreDb, 'users', currentUser.uid);
+            const docSnap = await firebase.firestore.getDoc(docRef);
 
             if (docSnap.exists()) {
                 const firebaseData = docSnap.data().petData;
@@ -13076,8 +13070,8 @@ ${currentPersonality}
 
         console.log(`[${extensionName}] 正在保存数据到Firebase...`);
         try {
-            const docRef = firestoreDb.collection('users').doc(currentUser.uid);
-            await docRef.set({ petData: petData }, { merge: true });
+            const docRef = firebase.firestore.doc(firestoreDb, 'users', currentUser.uid);
+            await firebase.firestore.setDoc(docRef, { petData: petData }, { merge: true });
             console.log(`[${extensionName}] 数据成功保存到Firebase`);
         } catch (error) {
             console.error(`[${extensionName}] 保存数据到Firebase失败:`, error);
@@ -13103,8 +13097,8 @@ ${currentPersonality}
             const code = Math.random().toString(36).substring(2, 8).toUpperCase();
             const expiration = new Date(Date.now() + 5 * 60 * 1000);
 
-            const docRef = firestoreDb.collection('connection_codes').doc(code);
-            await docRef.set({
+            const docRef = firebase.firestore.doc(firestoreDb, 'connection_codes', code);
+            await firebase.firestore.setDoc(docRef, {
                 petData: petData,
                 expiresAt: expiration,
                 sourceUid: currentUser.uid
@@ -13138,8 +13132,8 @@ ${currentPersonality}
         button.prop('disabled', true).text('正在迁移...');
 
         try {
-            const docRef = firestoreDb.collection('connection_codes').doc(code.toUpperCase());
-            const docSnap = await docRef.get();
+            const docRef = firebase.firestore.doc(firestoreDb, 'connection_codes', code.toUpperCase());
+            const docSnap = await firebase.firestore.getDoc(docRef);
 
             if (!docSnap.exists() || docSnap.data().expiresAt.toDate() < new Date()) {
                 toastr.error('连接码无效或已过期。', '迁移失败');
@@ -13155,7 +13149,7 @@ ${currentPersonality}
             updateAllUI();
             toastr.success('数据迁移成功！您的宠物已同步。', '成功');
 
-            await docRef.delete();
+            await firebase.firestore.deleteDoc(docRef);
 
         } catch (error) {
             console.error(`[${extensionName}] 使用连接码失败:`, error);

@@ -13168,8 +13168,37 @@ ${currentPersonality}
             });
         }
 
-        // 主初始化流程
-        injectFirebaseUI();
-        initializeFirebase();
-        setupFirebaseEventListeners();
+        // -----------------------------------------------------------------
+        // 10. 主初始化流程
+        // -----------------------------------------------------------------
+        function initialize() {
+            console.log(`[${extensionName}] 正在初始化虚拟宠物系统...`);
+            
+            // 确保旧数据和UI被清理
+            forceClearAndReload(false); 
+
+            if (isEnabled) {
+                console.log(`[${extensionName}] 系统已启用，开始加载UI...`);
+                loadPetData();
+                createIsolatedStyles();
+                createPetButton();
+                createPopup();
+                initializeEventListeners();
+                initializeSettingsPanel();
+                startPetLogic();
+                updateUI(); // 初始UI更新
+
+                // 初始化云同步功能
+                injectFirebaseUI();
+                initializeFirebase();
+                setupFirebaseEventListeners();
+
+                console.log(`[${extensionName}] 虚拟宠物系统初始化完成。`);
+            } else {
+                console.log(`[${extensionName}] 系统被禁用，不加载UI。`);
+            }
+        }
+
+        // 开始执行
+        initialize();
     });

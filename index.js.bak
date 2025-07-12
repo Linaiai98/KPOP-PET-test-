@@ -397,9 +397,9 @@ jQuery(async () => {
             localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(petData));
             console.log(`[${extensionName}] 宠物数据已保存到本地。`);
 
-            // 如果不是由云同步本身触发的保存，并且插件已启用，则触发一次云端同步
-            if (!fromSync && isEnabled) {
-                syncWithFirebase();
+            // 如果不是由云同步本身触发的保存，则触发一次云端保存
+            if (!fromSync) {
+                saveDataToFirebase(); // 这个函数会处理冷却逻辑
             }
         } catch (error) {
             console.error(`[${extensionName}] 保存宠物数据失败:`, error);

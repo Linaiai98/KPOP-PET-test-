@@ -1931,14 +1931,63 @@ ${currentPersonality}
             }
         }, 1000);
 
+        // --- Firebase UI Injection ---
+        injectFirebaseUI();
+
         console.log(`[${extensionName}] 设置面板初始化完成`);
         console.log(`[${extensionName}] 当前人设类型: ${currentPersonalityType}`);
         console.log(`[${extensionName}] 当前人设内容: ${getCurrentPersonality()}`);
         console.log(`[${extensionName}] 💡 提示: 点击"🔄 刷新"按钮可以从SillyTavern获取可用的API列表`);
-        console.log(`[${extensionName}] 💡 提示: 在控制台运行以下命令进行测试:`);
+        console.log(`[${extensionName}] 💡 提示: 在控制台运行以���命令进行测试:`);
         console.log(`[${extensionName}] 💡   - diagnoseSillyTavernEnvironment() // 环境诊断`);
         console.log(`[${extensionName}] 💡   - testVirtualPetAPIDiscovery() // API发现测试`);
         console.log(`[${extensionName}] 💡   - quickAPITest() // 快速API测试`);
+    }
+
+    /**
+     * Injects the Firebase Sync UI into the settings panel.
+     */
+    function injectFirebaseUI() {
+        // Check if the UI already exists
+        if ($('#firebase-sync-section').length > 0) {
+            return;
+        }
+
+        const firebaseHtml = `
+            <!-- Firebase Cloud Sync Section -->
+            <div id="firebase-sync-section" style="margin-top: 20px; padding: 15px; border: 1px solid var(--border-color, #E2E8F0); border-radius: 8px;">
+                <h4>☁️ 云同步设置</h4>
+                <div id="firebase-sync-status" style="display: flex; align-items: center; margin-bottom: 15px;">
+                    <span id="firebase-sync-status-dot" class="status-dot offline" style="width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; background-color: #f56565;"></span>
+                    <span id="firebase-sync-status-text">未启用 - 同步未激活</span>
+                </div>
+                <div id="sync-code-area" style="display: none; margin-top: 15px;">
+                    <label>您的同步码:</label>
+                    <input type="text" id="sync-code-display" readonly style="width: 100%; background-color: #f0f0f0; border: 1px solid #ccc; padding: 5px; margin-top: 5px; color: #333;">
+                    <small class="notes">这是您的匿名账户ID，可用于在不同设备间手动迁移数据。</small>
+                </div>
+                <div class="firebase-sync-actions" style="margin-top: 15px;">
+                    <button id="firebase-login-btn" class="btn-primary" style="background-color: var(--primary-accent-color, #FF9EC7); color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer;">启用云同步</button>
+                    <button id="firebase-get-code-btn" class="btn-secondary" style="display: none; background-color: #6c757d; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer;">获取同步码</button>
+                    <button id="firebase-logout-btn" class="btn-danger" style="display: none; background-color: var(--danger-color, #FF9EC7); color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer;">停用同步</button>
+                </div>
+                <small class="notes" style="margin-top: 10px;">
+                    启用后，您的宠物数据将自动备份到云端。
+                </small>
+            </div>
+        `;
+
+        // Append the UI to the settings panel
+        $('#virtual-pet-settings .inline-drawer-content').append(firebaseHtml);
+
+        // Dynamically load the firebase-auth.js script as a module
+        if ($('script[src*="firebase-auth.js"]').length === 0) {
+            const script = document.createElement('script');
+            script.type = 'module';
+            script.src = `${extensionFolderPath}/firebase-auth.js`;
+            document.head.appendChild(script);
+            console.log(`[${extensionName}] Firebase auth script loaded.`);
+        }
     }
 
     /**

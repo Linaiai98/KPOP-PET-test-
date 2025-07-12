@@ -5,7 +5,6 @@
   "requires": [],
   "optional": [],
   "js": "index.js",
-  "type": "module",
   "css": "style.css",
   "author": "Augment Agent",
   "version": "1.0.1",

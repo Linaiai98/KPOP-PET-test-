@@ -38,100 +38,32 @@
                     </ul>
                 </div>
             </div>
-            
-            <!-- Firebase 同步设置 -->
-            <div class="kpop-pet-settings-section" id="firebase-sync-settings">
-                <h3>☁️ Firebase 同步</h3>
-                <div class="kpop-pet-settings-item">
-                    <label>连接状态:</label>
-                    <span id="firebase-status-value" style="color:red; font-weight: bold;">未连接</span>
+
+            <!-- Firebase Sync Section -->
+            <div id="firebase-sync-section" style="margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+                <h4>☁️ 云同步 (Firebase)</h4>
+                <small class="notes">使用您的 Google 账号登录，即可在不同设备间同步您的宠物数据。</small>
+                
+                <div id="firebase-auth-status" style="margin-top: 10px;">
+                    <p>状态: <span id="firebase-status-text">未初始化</span></p>
                 </div>
-                <div class="kpop-pet-settings-item">
-                    <label>本机同步ID:</label>
-                    <span id="firebase-uid" style="word-break: break-all;">N/A</span>
-                    <button id="copy-uid-button" class="kpop-pet-button" disabled>复制ID</button>
+
+                <div id="firebase-controls" style="margin-top: 10px;">
+                    <button id="firebase-login-button" class="menu_button">使用 Google 登录</button>
+                    <button id="firebase-logout-button" class="menu_button" style="display: none;">登出</button>
                 </div>
-                <hr>
-                <h4>从其他设备同步</h4>
-                <p class="kpop-pet-settings-description">
-                    要同步另一台设备的数据，请在那台设备上复制它的同步ID，然后粘贴到下方并点击按钮。
-                </p>
-                <div class="kpop-pet-settings-item">
-                    <input type="text" id="sync-id-input" class="text_pole" placeholder="在此处粘贴其他设备的同步ID">
-                    <button id="pull-from-id-button" class="kpop-pet-button">从ID同步</button>
+
+                <div id="firebase-config-section" style="margin-top: 15px;">
+                    <label for="firebase-config">Firebase 配置:</label>
+                    <textarea id="firebase-config" class="text_pole" rows="6" placeholder="请在此处粘贴从 Firebase 控制台获取的配置代码 (firebaseConfig 变量的内容)"></textarea>
+                    <button id="firebase-save-config-button" class="menu_button" style="margin-top: 5px;">保存配置</button>
                 </div>
-            </div>
-            
-            <div class="pet-nav-buttons">
-                <button class="pet-button back-to-main-btn">
-                    ← 返回
-                </button>
             </div>
         </div>
     </div>
 </div>
 
-<script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const firebaseStatusEl = document.getElementById('firebase-status-value');
-        const firebaseUidEl = document.getElementById('firebase-uid');
-        const copyUidBtn = document.getElementById('copy-uid-button');
-        const syncIdInput = document.getElementById('sync-id-input');
-        const pullFromIdBtn = document.getElementById('pull-from-id-button');
-
-        const FIREBASE_UID_KEY = 'kpop-pet-firebase-uid';
-
-        // 监听来自 firebase-config.js 的认证状态变化事件
-        document.addEventListener('firebase-auth-state-changed', (event) => {
-            const user = event.detail.user;
-            if (user && user.uid) {
-                firebaseStatusEl.textContent = '已连接';
-                firebaseStatusEl.style.color = 'green';
-                firebaseUidEl.textContent = user.uid;
-                copyUidBtn.disabled = false;
-            } else {
-                firebaseStatusEl.textContent = '未连接';
-                firebaseStatusEl.style.color = 'red';
-                firebaseUidEl.textContent = 'N/A';
-                copyUidBtn.disabled = true;
-            }
-        });
-
-        // 检查初始状态
-        setTimeout(() => {
-            // SillyTavern环境中，currentUser可能作为全局变量存在
-            if (window.currentUser && window.currentUser.uid) {
-                 document.dispatchEvent(new CustomEvent('firebase-auth-state-changed', { detail: { user: window.currentUser } }));
-            } else {
-                document.dispatchEvent(new CustomEvent('firebase-auth-state-changed', { detail: { user: null } }));
-            }
-        }, 500); // 延迟执行以确保Firebase脚本已加载
-
-        // 复制ID
-        copyUidBtn.addEventListener('click', () => {
-            if (firebaseUidEl.textContent && firebaseUidEl.textContent !== 'N/A') {
-                navigator.clipboard.writeText(firebaseUidEl.textContent)
-                    .then(() => { alert('同步ID已复制到剪贴板!'); })
-                    .catch(err => { 
-                        console.error('无法复制ID: ', err);
-                        alert('复制失败，请手动复制。');
-                    });
-            }
-        });
-
-        // 从ID同步
-        pullFromIdBtn.addEventListener('click', () => {
-            const newUid = syncIdInput.value.trim();
-            if (newUid) {
-                if (confirm(`确定要从新的ID同步数据吗？\n\nID: ${newUid}\n\n这将会刷新页面并使用这个新ID作为本机的身份。`)) {
-                    console.log(`[Settings] Storing new UID (${newUid}) and reloading page.`);
-                    localStorage.setItem(FIREBASE_UID_KEY, newUid);
-                    alert('同步ID已更新。页面即将刷新以加载新ID的数据。');
-                    location.reload();
-                }
-            } else {
-                alert('请输入一个有效的同步ID。');
-            }
-        });
-    });
-</script>
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js"></script>

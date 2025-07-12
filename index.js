@@ -12988,12 +12988,12 @@ ${currentPersonality}
             await loadFirebaseSDKs();
             
             firebaseApp = firebase.initializeApp(firebaseConfig);
-            firebaseAuth = firebase.getAuth(firebaseApp);
-            firestoreDb = firebase.getFirestore(firebaseApp);
+            firebaseAuth = firebase.auth(firebaseApp);
+            firestoreDb = firebase.firestore(firebaseApp);
 
-            console.log(`[${extensionName}] Firebase v9 初始化成功`);
+            console.log(`[${extensionName}] Firebase v9 (compat) 初始化成功`);
 
-            firebase.onAuthStateChanged(firebaseAuth, async (user) => {
+            firebaseAuth.onAuthStateChanged(async (user) => {
                 if (user) {
                     currentUser = user;
                     console.log(`[${extensionName}] 用户已匿名登录，UID:`, user.uid);
@@ -13003,7 +13003,7 @@ ${currentPersonality}
                 } else {
                     console.log(`[${extensionName}] 用户未登录，正在尝试匿名登录...`);
                     try {
-                        await firebase.signInAnonymously(firebaseAuth);
+                        await firebaseAuth.signInAnonymously();
                     } catch (error) {
                         console.error(`[${extensionName}] 匿名登录失败:`, error);
                         updateFirebaseUI('连接失败，请检查网络或刷新页面。', 'red');
@@ -13043,8 +13043,8 @@ ${currentPersonality}
         if (!currentUser || !firestoreDb) return;
         console.log(`[${extensionName}] 正在从Firebase加载数据...`);
         try {
-            const docRef = firebase.doc(firestoreDb, 'users', currentUser.uid);
-            const docSnap = await firebase.getDoc(docRef);
+            const docRef = firestoreDb.collection('users').doc(currentUser.uid);
+            const docSnap = await docRef.get();
 
             if (docSnap.exists()) {
                 const firebaseData = docSnap.data().petData;
@@ -13076,8 +13076,8 @@ ${currentPersonality}
 
         console.log(`[${extensionName}] 正在保存数据到Firebase...`);
         try {
-            const docRef = firebase.doc(firestoreDb, 'users', currentUser.uid);
-            await firebase.setDoc(docRef, { petData: petData }, { merge: true });
+            const docRef = firestoreDb.collection('users').doc(currentUser.uid);
+            await docRef.set({ petData: petData }, { merge: true });
             console.log(`[${extensionName}] 数据成功保存到Firebase`);
         } catch (error) {
             console.error(`[${extensionName}] 保存数据到Firebase失败:`, error);
@@ -13103,8 +13103,8 @@ ${currentPersonality}
             const code = Math.random().toString(36).substring(2, 8).toUpperCase();
             const expiration = new Date(Date.now() + 5 * 60 * 1000);
 
-            const docRef = firebase.doc(firestoreDb, 'connection_codes', code);
-            await firebase.setDoc(docRef, {
+            const docRef = firestoreDb.collection('connection_codes').doc(code);
+            await docRef.set({
                 petData: petData,
                 expiresAt: expiration,
                 sourceUid: currentUser.uid
@@ -13138,8 +13138,8 @@ ${currentPersonality}
         button.prop('disabled', true).text('正在迁移...');
 
         try {
-            const docRef = firebase.doc(firestoreDb, 'connection_codes', code.toUpperCase());
-            const docSnap = await firebase.getDoc(docRef);
+            const docRef = firestoreDb.collection('connection_codes').doc(code.toUpperCase());
+            const docSnap = await docRef.get();
 
             if (!docSnap.exists() || docSnap.data().expiresAt.toDate() < new Date()) {
                 toastr.error('连接码无效或已过期。', '迁移失败');
@@ -13155,7 +13155,7 @@ ${currentPersonality}
             updateAllUI();
             toastr.success('数据迁移成功！您的宠物已同步。', '成功');
 
-            await firebase.deleteDoc(docRef);
+            await docRef.delete();
 
         } catch (error) {
             console.error(`[${extensionName}] 使用连接码失败:`, error);

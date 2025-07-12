@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>KPOP Pet Full Test</title>
+    <!-- Toastr CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    <style>
+        body { padding: 20px; font-family: sans-serif; background-color: #2d2d2d; color: white; }
+        h1 { border-bottom: 1px solid #444; padding-bottom: 10px; }
+        /* Basic styles from SillyTavern for the drawer to work */
+        .inline-drawer-content { display: block; padding: 15px; border: 1px solid #444; margin-top: 10px; border-radius: 5px; }
+        .inline-drawer .inline-drawer-header { cursor: pointer; font-weight: bold; }
+        .notes { font-size: 0.8em; color: #aaa; }
+        .flex-container { display: flex; gap: 20px; }
+        .flex1 { flex: 1; }
+        .checkbox_label { display: block; }
+        /* Styles for injected UI */
+        .menu_button { padding: 8px 15px; cursor: pointer; background-color: #4CAF50; color: white; border: none; border-radius: 4px; }
+        .menu_button:hover { background-color: #45a049; }
+        .menu_button:disabled { background-color: #555; cursor: not-allowed; }
+        .text_pole { padding: 8px; border-radius: 4px; border: 1px solid #555; background-color: #333; color: white; }
+    </style>
+</head>
+<body>
+
+    <h1>宠物系统完整功能测试页</h1>
+    <p>本页面加载了所有必需的脚本和HTML，用于测试宠物系统，包括云同步UI。</p>
+
+    <!-- Content from settings.html -->
+    <div id="virtual-pet-settings">
+        <div class="inline-drawer">
+            <div class="inline-drawer-toggle inline-drawer-header">
+                <b>🐾 虚拟宠物系统</b>
+            </div>
+            <div class="inline-drawer-content">
+                <div class="flex-container">
+                    <label class="checkbox_label" for="virtual-pet-enabled-toggle">
+                        <input id="virtual-pet-enabled-toggle" type="checkbox" checked>
+                        <span>启用虚拟宠物系统</span>
+                    </label>
+                </div>
+                <small class="notes">
+                    启用后会在屏幕上显示一个可拖动的宠物按钮（🐾），点击可以打开宠物管理界面。
+                </small>
+                
+                <!-- Firebase UI will be injected here by index.js -->
+            </div>
+        </div>
+    </div>
+
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- Toastr JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    <!-- The main script -->
+    <script src="index.js"></script>
+
+</body>
+</html>

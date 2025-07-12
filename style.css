@@ -856,3 +856,91 @@
         padding: 8px 10px;
     }
 }
+
+
+/* --- Firebase 同步 UI --- */
+#firebase-sync-section {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-small);
+    padding: 15px;
+    margin-top: 20px;
+}
+
+#firebase-sync-section h4 {
+    color: var(--primary-accent-color);
+    margin-top: 0;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 8px;
+}
+
+#firebase-sync-status {
+    display: flex;
+    align-items: center;
+    font-size: 0.9em;
+    color: var(--text-muted-color);
+    margin-bottom: 15px;
+}
+
+#firebase-sync-status-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 8px;
+    background-color: #ccc; /* 默认灰色 */
+    transition: background-color 0.3s;
+}
+
+#firebase-sync-status-dot.online {
+    background-color: var(--success-color); /* 绿色 */
+}
+
+#firebase-sync-status-dot.offline {
+    background-color: var(--danger-color); /* 红色 */
+}
+
+.firebase-sync-actions button {
+    border: none;
+    padding: 10px 15px;
+    border-radius: var(--border-radius-small);
+    cursor: pointer;
+    font-weight: 500;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.firebase-sync-actions button:hover {
+    transform: translateY(-1px);
+}
+
+.firebase-sync-actions .btn-primary {
+    background-color: var(--primary-accent-color);
+    color: white;
+}
+
+.firebase-sync-actions .btn-primary:hover {
+    background-color: var(--primary-accent-hover-color);
+}
+
+.firebase-sync-actions .btn-danger {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+.firebase-sync-actions .btn-danger:hover {
+    background-color: #d32f2f;
+}
+
+.firebase-sync-actions .btn-secondary {
+    background-color: #6c757d;
+    color: white;
+}
+
+.firebase-sync-actions .btn-secondary:hover {
+    background-color: #5a6268;
+}
+
+#firebase-logout-btn {
+    display: none; /* 默认隐藏 */
+}

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Firebase Connection Test</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: #f0f0f0; color: #333; }
+        h1 { color: #1a73e8; }
+        #status { padding: 15px; margin-top: 20px; border-radius: 8px; font-weight: bold; font-size: 1.1em; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .success { background-color: #e6ffed; color: #2d6a4f; border: 1px solid #95d5b2; }
+        .error { background-color: #fff0f1; color: #a4133c; border: 1px solid #ffb3c1; }
+        pre { background-color: #e9ecef; padding: 10px; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word; }
+    </style>
+</head>
+<body>
+    <h1>Firebase 匿名登录测试</h1>
+    <p>本页面将独立测试您的 Firebase 配置是否能成功连接并进行匿名登录。</p>
+    <div id="status">正在测试...</div>
+
+    <!-- Import Firebase v9 SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js"></script>
+
+    <script>
+        // 您的 Firebase 配置
+        const firebaseConfig = {
+            apiKey: "AIzaSyA74TnN9IoyQjCncKOIOShWEktrL1hd96o",
+            authDomain: "kpop-pett.firebaseapp.com",
+            projectId: "kpop-pett",
+            storageBucket: "kpop-pett.appspot.com",
+            messagingSenderId: "264650615774",
+            appId: "1:264650615774:web:f500ff555183110c3f0b4f",
+            measurementId: "G-3BH0GMJR3D"
+        };
+
+        const statusDiv = document.getElementById('status');
+
+        async function runTest() {
+            try {
+                if (typeof firebase === 'undefined') {
+                    throw new Error("Firebase SDK 未能加载。请检查您的网络连接或广告拦截插件。");
+                }
+
+                // 初始化 Firebase
+                const app = firebase.initializeApp(firebaseConfig);
+                const auth = firebase.getAuth(app);
+
+                // 尝试匿名登录
+                const userCredential = await firebase.signInAnonymously(auth);
+                const user = userCredential.user;
+                
+                statusDiv.innerHTML = `✅ <strong>连接成功！</strong><br>已获取匿名用户 UID: <pre>${user.uid}</pre>`;
+                statusDiv.className = 'success';
+
+            } catch (error) {
+                console.error("Firebase 测试失败:", error);
+                statusDiv.innerHTML = `❌ <strong>连接失败！</strong><br>错误信息: <pre>${error.message}</pre><br>请打开浏览器控制台 (F12) 查看详细错误代码。`;
+                statusDiv.className = 'error';
+            }
+        }
+
+        runTest();
+    </script>
+
+</body>
+</html>

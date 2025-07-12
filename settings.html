@@ -38,32 +38,6 @@
                     </ul>
                 </div>
             </div>
-
-            <!-- Firebase Sync Section -->
-            <div id="firebase-sync-section" style="margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 15px;">
-                <h4>☁️ 云同步 (Firebase)</h4>
-                <small class="notes">使用您的 Google 账号登录，即可在不同设备间同步您的宠物数据。</small>
-                
-                <div id="firebase-auth-status" style="margin-top: 10px;">
-                    <p>状态: <span id="firebase-status-text">未初始化</span></p>
-                </div>
-
-                <div id="firebase-controls" style="margin-top: 10px;">
-                    <button id="firebase-login-button" class="menu_button">使用 Google 登录</button>
-                    <button id="firebase-logout-button" class="menu_button" style="display: none;">登出</button>
-                </div>
-
-                <div id="firebase-config-section" style="margin-top: 15px;">
-                    <label for="firebase-config">Firebase 配置:</label>
-                    <textarea id="firebase-config" class="text_pole" rows="6" placeholder="请在此处粘贴从 Firebase 控制台获取的配置代码 (firebaseConfig 变量的内容)"></textarea>
-                    <button id="firebase-save-config-button" class="menu_button" style="margin-top: 5px;">保存配置</button>
-                </div>
-            </div>
         </div>
     </div>
 </div>
-
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js"></script>

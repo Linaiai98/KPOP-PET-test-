@@ -19,7 +19,7 @@ jQuery(async () => {
     const STORAGE_KEY_ENABLED = "virtual-pet-enabled";
     const STORAGE_KEY_PET_DATA = "virtual-pet-data";
     const STORAGE_KEY_CUSTOM_AVATAR = "virtual-pet-custom-avatar";
-    const STORAGE_KEY_FIREBASE_CONFIG = "virtual-pet-firebase-config";
+    const STORAGE_KEY_FIREBASE_CONFIG = "virtual-pet-firebase-config"; // 新增：用于存储Firebase配置
     
     // DOM IDs and Selectors
     const BUTTON_ID = "virtual-pet-button";
@@ -38,7 +38,7 @@ jQuery(async () => {
     // 自定义头像管理
     let customAvatarData = null;
 
-    // Firebase
+    // Firebase 同步状态
     let firebaseApp = null;
     let firebaseAuth = null;
     let firestoreDb = null;
@@ -2170,7 +2170,11 @@ ${currentPersonality}
     /**
      * 保存宠物数据
      */
-    function savePetData() {
+    /**
+     * 保存宠物数据
+     * @param {boolean} fromFirebase - 标记调用是否来自Firebase加载，以避免无限循环
+     */
+    function savePetData(fromFirebase = false) {
         try {
             // 添加时间戳用于同步
             const dataWithTimestamp = {
@@ -2182,6 +2186,11 @@ ${currentPersonality}
 
             // 同时保存到全局同步存储（如果可用）
             saveToSyncStorage(dataWithTimestamp);
+
+            // 如果用户已登录，并且本次保存不是由Firebase加载触发的，则同步到Firebase
+            if (currentUser && !fromFirebase) {
+                saveDataToFirebase();
+            }
 
         } catch (error) {
             console.error(`[${extensionName}] Error saving pet data:`, error);
@@ -12872,14 +12881,135 @@ ${currentPersonality}
         toastr.info('随机化标记已重置', '', { timeOut: 2000 });
     };
 
+
+
     // -----------------------------------------------------------------
-    // 10. Firebase 同步功能
+    // 10. Firebase 同步功能 - 全新重构
     // -----------------------------------------------------------------
+
+    /**
+     * 动态加载Firebase SDK脚本
+     * @returns {Promise<void>}
+     */
+    /**
+     * 动态注入Firebase设置UI
+     */
+    function injectFirebaseUI() {
+        // 检查UI是否已存在
+        if ($('#firebase-sync-section').length > 0) {
+            return;
+        }
+
+        const firebaseHtml = `
+            <div id="firebase-sync-section" style="margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+                <h4>☁️ 云同步 (Firebase)</h4>
+                <small class="notes">使用您的 Google 账号登录，即可在不同设备间同步您的宠物数据。</small>
+                
+                <div id="firebase-auth-status" style="margin-top: 10px;">
+                    <p>状态: <span id="firebase-status-text">未初始化</span></p>
+                </div>
+
+                <div id="firebase-controls" style="margin-top: 10px;">
+                    <button id="firebase-login-button" class="menu_button">使用 Google 登录</button>
+                    <button id="firebase-logout-button" class="menu_button" style="display: none;">登出</button>
+                </div>
+
+                <div id="firebase-config-section" style="margin-top: 15px;">
+                    <label for="firebase-config">Firebase 配置 (JSON):</label>
+                    <textarea id="firebase-config" class="text_pole" rows="6" placeholder="请在此处粘贴从 Firebase 控制台获取的配置对象 (firebaseConfig)"></textarea>
+                    <button id="firebase-save-config-button" class="menu_button" style="margin-top: 5px;">保存配置</button>
+                </div>
+            </div>
+        `;
+
+        // 注入到设置面板
+        $('#virtual-pet-settings .inline-drawer-content').append(firebaseHtml);
+    }
+
+    function loadFirebaseSDKs() {
+        return new Promise((resolve, reject) => {
+            // 检查SDK是否已加载
+            if (window.firebase && window.firebase.initializeApp) {
+                console.log(`[${extensionName}] Firebase SDK 已加载`);
+                resolve();
+                return;
+            }
+
+            const sdkUrls = [
+                'https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js',
+                'https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js',
+                'https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js'
+            ];
+
+            let loadedCount = 0;
+            sdkUrls.forEach(url => {
+                const script = document.createElement('script');
+                script.src = url;
+                script.async = true;
+                script.onload = () => {
+                    loadedCount++;
+                    if (loadedCount === sdkUrls.length) {
+                        console.log(`[${extensionName}] 所有 Firebase SDK 加载成功`);
+                        resolve();
+                    }
+                };
+                script.onerror = () => {
+                    console.error(`[${extensionName}] 加载 Firebase SDK 失败: ${url}`);
+                    reject(new Error(`Failed to load ${url}`));
+                };
+                document.head.appendChild(script);
+            });
+        });
+    }
+
+    /**
+     * 初始化Firebase
+     */
+    async function initializeFirebase() {
+        try {
+            await loadFirebaseSDKs();
+            const configString = localStorage.getItem(STORAGE_KEY_FIREBASE_CONFIG);
+            if (configString) {
+                firebaseConfig = JSON.parse(configString);
+                if (firebase.getApps().length === 0) { // 检查是否已初始化
+                    firebaseApp = firebase.initializeApp(firebaseConfig);
+                    firebaseAuth = firebase.getAuth(firebaseApp);
+                    firestoreDb = firebase.getFirestore(firebaseApp);
+                    console.log(`[${extensionName}] Firebase 初始化成功`);
+
+                    firebase.onAuthStateChanged(firebaseAuth, async (user) => {
+                        currentUser = user;
+                        if (user) {
+                            console.log(`[${extensionName}] 用户已登录:`, user.uid);
+                            await loadDataFromFirebase();
+                        } else {
+                            console.log(`[${extensionName}] 用户已登出`);
+                        }
+                        updateFirebaseUI();
+                    });
+                } else {
+                     // 如果已经初始化，只需获取实例
+                    firebaseApp = firebase.getApps()[0];
+                    firebaseAuth = firebase.getAuth(firebaseApp);
+                    firestoreDb = firebase.getFirestore(firebaseApp);
+                }
+            }
+        } catch (error) {
+            console.error(`[${extensionName}] Firebase 初始化失败:`, error);
+            firebaseApp = null;
+        }
+        updateFirebaseUI();
+    }
 
     /**
      * 更新Firebase UI状态
      */
     function updateFirebaseUI() {
+        // 确保UI已注入
+        if ($('#firebase-sync-section').length === 0) {
+            return;
+        }
+
         const statusText = $('#firebase-status-text');
         const loginButton = $('#firebase-login-button');
         const logoutButton = $('#firebase-logout-button');
@@ -12895,7 +13025,7 @@ ${currentPersonality}
             statusText.css('color', 'lightgreen');
             loginButton.hide();
             logoutButton.show();
-            configSection.hide(); // 登录后隐藏配置区域
+            configSection.hide();
         } else {
             statusText.text(firebaseApp ? '准备就绪，请登录' : '未配置或配置错误');
             statusText.css('color', firebaseApp ? 'orange' : 'red');
@@ -12907,46 +13037,8 @@ ${currentPersonality}
     }
 
     /**
-     * 初始化Firebase
+     * 设置Firebase相关的事件监听器
      */
-    function initializeFirebase() {
-        try {
-            const configString = localStorage.getItem(STORAGE_KEY_FIREBASE_CONFIG);
-            if (configString) {
-                firebaseConfig = JSON.parse(configString);
-                if (firebaseApp) {
-                    // 如果已有实例，不再重复初始化
-                    console.log(`[${extensionName}] Firebase 已初始化`);
-                    return;
-                }
-                firebaseApp = firebase.initializeApp(firebaseConfig);
-                firebaseAuth = firebase.getAuth(firebaseApp);
-                firestoreDb = firebase.getFirestore(firebaseApp);
-                console.log(`[${extensionName}] Firebase 初始化成功`);
-
-                // 监听认证状态变化
-                firebase.onAuthStateChanged(firebaseAuth, async (user) => {
-                    if (user) {
-                        currentUser = user;
-                        console.log(`[${extensionName}] 用户已登录:`, user.uid);
-                        await loadDataFromFirebase(); // 登录后立即从Firebase加载数据
-                    } else {
-                        currentUser = null;
-                        console.log(`[${extensionName}] 用户已登出`);
-                    }
-                    updateFirebaseUI();
-                });
-            }
-        } catch (error) {
-            console.error(`[${extensionName}] Firebase 初始化失败:`, error);
-            firebaseApp = null;
-            firebaseAuth = null;
-            firestoreDb = null;
-            firebaseConfig = null;
-        }
-        updateFirebaseUI();
-    }
-
     /**
      * 从Firebase加载数据
      */
@@ -12962,7 +13054,7 @@ ${currentPersonality}
                 console.log(`[${extensionName}] 从Firebase获取到数据:`, firebaseData);
                 // 合并数据：Firebase的数据作为权威来源，但保留本地新添加的属性
                 petData = { ...petData, ...firebaseData };
-                savePetData(); // 保存到本地
+                savePetData(true); // 保存到本地，并阻止无限循环
                 updateAllUI(); // 更新UI
                 toastr.success('宠物数据已从云端同步！', '同步成功');
             } else {
@@ -12989,72 +13081,21 @@ ${currentPersonality}
         console.log(`[${extensionName}] 正在保存数据到Firebase...`);
         try {
             const docRef = firebase.doc(firestoreDb, 'users', currentUser.uid);
-            await firebase.setDoc(docRef, { petData: petData });
+            await firebase.setDoc(docRef, { petData: petData }, { merge: true }); // 使用 merge: true 更安全
             console.log(`[${extensionName}] 数据成功保存到Firebase`);
         } catch (error) {
             console.error(`[${extensionName}] 保存数据到Firebase失败:`, error);
         }
     }
 
-    /**
-     * 登录Firebase
-     */
-    async function loginWithGoogle() {
-        if (!firebaseAuth) {
-            toastr.error('Firebase尚未配置，请先保存配置。', '登录失败');
-            return;
-        }
-        const provider = new firebase.GoogleAuthProvider();
-        try {
-            await firebase.signInWithPopup(firebaseAuth, provider);
-            toastr.success('登录成功！', '欢迎回来');
-        } catch (error) {
-            console.error(`[${extensionName}] Google登录失败:`, error);
-            toastr.error('Google登录失败，请检查弹出窗口或控制台。', '登录失败');
-        }
-    }
-
-    /**
-     * 登出Firebase
-     */
-    async function logout() {
-        if (!firebaseAuth) return;
-        try {
-            await firebaseAuth.signOut();
-            toastr.info('您已成功登出。', '再见');
-        } catch (error) {
-            console.error(`[${extensionName}] 登出失败:`, error);
-        }
-    }
-
-    /**
-     * 保存宠物数据
-     */
-    function savePetData() {
-        try {
-            localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(petData));
-            // 如果用户已登录，则同步到Firebase
-            if (currentUser) {
-                saveDataToFirebase();
-            }
-        } catch (error) {
-            console.error(`[${extensionName}] 保存宠物数据失败:`, error);
-        }
-    }
-
-    // -----------------------------------------------------------------
-    // 11. 事件监听器 (包括Firebase)
-    // -----------------------------------------------------------------
-
     function setupFirebaseEventListeners() {
         $(document).on('click', '#firebase-save-config-button', function() {
             const configString = $('#firebase-config').val();
             try {
                 const config = JSON.parse(configString);
-                // 简单的验证
                 if (config.apiKey && config.projectId) {
                     localStorage.setItem(STORAGE_KEY_FIREBASE_CONFIG, JSON.stringify(config));
-                    toastr.success('Firebase配置已保存！', '成功');
+                    toastr.success('Firebase配置已保存！正在重新初始化...', '成功');
                     initializeFirebase();
                 } else {
                     toastr.error('配置格式不正确，缺少apiKey或projectId。', '保存失败');
@@ -13064,11 +13105,27 @@ ${currentPersonality}
             }
         });
 
-        $(document).on('click', '#firebase-login-button', loginWithGoogle);
-        $(document).on('click', '#firebase-logout-button', logout);
+        $(document).on('click', '#firebase-login-button', async () => {
+            if (!firebaseAuth) return;
+            const provider = new firebase.GoogleAuthProvider();
+            try {
+                await firebase.signInWithPopup(firebaseAuth, provider);
+                toastr.success('登录成功！', '欢迎回来');
+            } catch (error) {
+                console.error(`[${extensionName}] Google登录失败:`, error);
+                toastr.error('Google登录失败，详情请查看控制台。', '登录失败');
+            }
+        });
+
+        $(document).on('click', '#firebase-logout-button', async () => {
+            if (!firebaseAuth) return;
+            await firebaseAuth.signOut();
+            toastr.info('您已成功登出。', '再见');
+        });
     }
 
-    // 在主初始化流程中调用
+    // 主初始化流程
+    injectFirebaseUI();
     initializeFirebase();
     setupFirebaseEventListeners();
 

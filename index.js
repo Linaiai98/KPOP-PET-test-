@@ -12906,15 +12906,15 @@ ${currentPersonality}
                 <p>状态: <span id="firebase-status-text" style="color: orange;">正在连接...</span></p>
                 <small class="notes">您的数据已通过匿名方式自动同步。您可以使用下方的连接码功能，将数据迁移到另一台设备或浏览器。</small>
                 
-                <div id="connection-code-generator" style="margin-top: 15px;">
-                    <button id="generate-code-button" class="menu_button">生成连接码</button>
-                    <p id="connection-code-display" style="margin-top: 5px; font-weight: bold; color: lightgreen; display: none;"></p>
-                </div>
+                <h4 style="margin-top: 20px;">生成连接码 (用于数据发送)</h4>
+                <button id="generate-code-btn" class="menu_button" style="white-space: nowrap;">生成连接码</button>
+                <p id="connection-code-display" style="margin-top: 5px; font-weight: bold; color: lightgreen; display: none;"></p>
 
-                <div id="connection-code-importer" style="margin-top: 15px;">
-                    <label for="connection-code-input">使用连接码迁移数据:</label>
-                    <input type="text" id="connection-code-input" class="text_pole" placeholder="在此输入连接码">
-                    <button id="use-code-button" class="menu_button" style="margin-top: 5px;">确认迁移</button>
+                <h4 style="margin-top: 20px;">使用连接码 (用于数据接收)</h4>
+                <p>在您想接收数据的设备上输入连接码，然后点击迁移。</p>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <input type="text" id="connection-code-input" placeholder="在此输入连接码" class="text_pole" style="flex-grow: 1;">
+                    <button id="use-code-btn" class="menu_button" style="white-space: nowrap;">确认迁移</button>
                 </div>
             </div>
         `;
@@ -12929,9 +12929,6 @@ ${currentPersonality}
             // 检查核心模块是否已加载
             if (window.firebase?.app) {
                 console.log(`[${extensionName}] Firebase v9 SDK 已加载`);
-                fb_app = window.firebase.app;
-                fb_auth = window.firebase.auth;
-                fb_firestore = window.firebase.firestore;
                 resolve();
                 return;
             }

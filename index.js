@@ -13040,7 +13040,7 @@ ${currentPersonality}
             const docRef = firestoreDb.collection('users').doc(currentUser.uid);
             const docSnap = await docRef.get();
 
-            if (docSnap.exists()) {
+            if (docSnap.exists) {
                 const firebaseData = docSnap.data().petData;
                 console.log(`[${extensionName}] 从Firebase获取到数据:`, firebaseData);
                 petData = { ...petData, ...firebaseData };
@@ -13135,7 +13135,7 @@ ${currentPersonality}
             const docRef = firestoreDb.collection('connection_codes').doc(code.toUpperCase());
             const docSnap = await docRef.get();
 
-            if (!docSnap.exists() || docSnap.data().expiresAt.toDate() < new Date()) {
+            if (!docSnap.exists || docSnap.data().expiresAt.toDate() < new Date()) {
                 toastr.error('连接码无效或已过期。', '迁移失败');
                 return;
             }

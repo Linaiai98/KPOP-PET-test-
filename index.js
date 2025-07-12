@@ -13042,7 +13042,7 @@ ${currentPersonality}
                 console.log(`[${extensionName}] 从Firebase获取到数据:`, firebaseData);
                 petData = { ...petData, ...firebaseData };
                 savePetData(true);
-                updateAllUI();
+                updateUI();
                 toastr.success('宠物数据已从云端同步！', '同步成功');
             } else {
                 console.log(`[${extensionName}] Firebase中无此用户数据，将上传本地数据。`);
@@ -13143,7 +13143,7 @@ ${currentPersonality}
             petData = { ...petData, ...sourceData };
             savePetData();
             await saveDataToFirebase();
-            updateAllUI();
+            updateUI();
             toastr.success('数据迁移成功！您的宠物已同步。', '成功');
 
             await docRef.delete();

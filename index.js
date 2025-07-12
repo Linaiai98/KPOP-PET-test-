@@ -19,7 +19,7 @@ jQuery(async () => {
     const STORAGE_KEY_ENABLED = "virtual-pet-enabled";
     const STORAGE_KEY_PET_DATA = "virtual-pet-data";
     const STORAGE_KEY_CUSTOM_AVATAR = "virtual-pet-custom-avatar";
-    const STORAGE_KEY_FIREBASE_CONFIG = "virtual-pet-firebase-config"; // 新增：用于存储Firebase配置
+
     
     // DOM IDs and Selectors
     const BUTTON_ID = "virtual-pet-button";
@@ -12894,35 +12894,30 @@ ${currentPersonality}
     /**
      * 动态注入Firebase设置UI
      */
+    /**
+     * 动态注入Firebase设置UI - 连接码版本
+     */
     function injectFirebaseUI() {
-        // 检查UI是否已存在
-        if ($('#firebase-sync-section').length > 0) {
-            return;
-        }
+        if ($('#firebase-sync-section').length > 0) return;
 
         const firebaseHtml = `
             <div id="firebase-sync-section" style="margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 15px;">
-                <h4>☁️ 云同步 (Firebase)</h4>
-                <small class="notes">使用您的 Google 账号登录，即可在不同设备间同步您的宠物数据。</small>
+                <h4>☁️ 云同步 (匿名)</h4>
+                <p>状态: <span id="firebase-status-text" style="color: orange;">正在连接...</span></p>
+                <small class="notes">您的数据已通过匿名方式自动同步。您可以使用下方的连接码功能，将数据迁移到另一台设备或浏览器。</small>
                 
-                <div id="firebase-auth-status" style="margin-top: 10px;">
-                    <p>状态: <span id="firebase-status-text">未初始化</span></p>
+                <div id="connection-code-generator" style="margin-top: 15px;">
+                    <button id="generate-code-button" class="menu_button">生成连接码</button>
+                    <p id="connection-code-display" style="margin-top: 5px; font-weight: bold; color: lightgreen; display: none;"></p>
                 </div>
 
-                <div id="firebase-controls" style="margin-top: 10px;">
-                    <button id="firebase-login-button" class="menu_button">使用 Google 登录</button>
-                    <button id="firebase-logout-button" class="menu_button" style="display: none;">登出</button>
-                </div>
-
-                <div id="firebase-config-section" style="margin-top: 15px;">
-                    <label for="firebase-config">Firebase 配置 (JSON):</label>
-                    <textarea id="firebase-config" class="text_pole" rows="6" placeholder="请在此处粘贴从 Firebase 控制台获取的配置对象 (firebaseConfig)"></textarea>
-                    <button id="firebase-save-config-button" class="menu_button" style="margin-top: 5px;">保存配置</button>
+                <div id="connection-code-importer" style="margin-top: 15px;">
+                    <label for="connection-code-input">使用连接码迁移数据:</label>
+                    <input type="text" id="connection-code-input" class="text_pole" placeholder="在此输入连接码">
+                    <button id="use-code-button" class="menu_button" style="margin-top: 5px;">确认迁移</button>
                 </div>
             </div>
         `;
-
-        // 注入到设置面板
         $('#virtual-pet-settings .inline-drawer-content').append(firebaseHtml);
     }
 
@@ -12965,74 +12960,77 @@ ${currentPersonality}
     /**
      * 初始化Firebase
      */
+    /**
+     * 初始化Firebase并实现匿名登录
+     */
     async function initializeFirebase() {
+        // 1. 硬编码 Firebase 配置
+        const firebaseConfig = {
+            apiKey: "AIzaSyA74TnN9IoyQjCncKOIOShWEktrL1hd96o",
+            authDomain: "kpop-pett.firebaseapp.com",
+            projectId: "kpop-pett",
+            storageBucket: "kpop-pett.appspot.com", // 注意：这里修正了您提供的 bucket 地址
+            messagingSenderId: "264650615774",
+            appId: "1:264650615774:web:f500ff555183110c3f0b4f",
+            measurementId: "G-3BH0GMJR3D"
+        };
+
         try {
             await loadFirebaseSDKs();
-            const configString = localStorage.getItem(STORAGE_KEY_FIREBASE_CONFIG);
-            if (configString) {
-                firebaseConfig = JSON.parse(configString);
-                if (firebase.getApps().length === 0) { // 检查是否已初始化
-                    firebaseApp = firebase.initializeApp(firebaseConfig);
-                    firebaseAuth = firebase.getAuth(firebaseApp);
-                    firestoreDb = firebase.getFirestore(firebaseApp);
-                    console.log(`[${extensionName}] Firebase 初始化成功`);
 
-                    firebase.onAuthStateChanged(firebaseAuth, async (user) => {
-                        currentUser = user;
-                        if (user) {
-                            console.log(`[${extensionName}] 用户已登录:`, user.uid);
-                            await loadDataFromFirebase();
-                        } else {
-                            console.log(`[${extensionName}] 用户已登出`);
-                        }
-                        updateFirebaseUI();
-                    });
-                } else {
-                     // 如果已经初始化，只需获取实例
-                    firebaseApp = firebase.getApps()[0];
-                    firebaseAuth = firebase.getAuth(firebaseApp);
-                    firestoreDb = firebase.getFirestore(firebaseApp);
-                }
+            // 2. 初始化 Firebase App
+            if (firebase.getApps().length === 0) {
+                firebaseApp = firebase.initializeApp(firebaseConfig);
+            } else {
+                firebaseApp = firebase.getApps()[0];
             }
+            firebaseAuth = firebase.getAuth(firebaseApp);
+            firestoreDb = firebase.getFirestore(firebaseApp);
+            console.log(`[${extensionName}] Firebase 初始化成功`);
+
+            // 3. 处理用户认证状态
+            firebase.onAuthStateChanged(firebaseAuth, async (user) => {
+                if (user) {
+                    // 用户已登录 (无论是匿名还是其他方式)
+                    currentUser = user;
+                    console.log(`[${extensionName}] 用户已匿名登录，UID:`, user.uid);
+                    updateFirebaseUI('已连接，正在同步数据...');
+                    await loadDataFromFirebase();
+                    updateFirebaseUI('数据同步成功！');
+                } else {
+                    // 用户未登录，执行匿名登录
+                    console.log(`[${extensionName}] 用户未登录，正在尝试匿名登录...`);
+                    try {
+                        const userCredential = await firebase.signInAnonymously(firebaseAuth);
+                        currentUser = userCredential.user;
+                        console.log(`[${extensionName}] 匿名登录成功，UID:`, currentUser.uid);
+                    } catch (error) {
+                        console.error(`[${extensionName}] 匿名登录失败:`, error);
+                        updateFirebaseUI('连接失败，请检查网络或刷新页面。');
+                    }
+                }
+            });
+
         } catch (error) {
             console.error(`[${extensionName}] Firebase 初始化失败:`, error);
             firebaseApp = null;
+            updateFirebaseUI('初始化失败，请检查浏览器插件冲突或网络。');
         }
-        updateFirebaseUI();
     }
 
     /**
      * 更新Firebase UI状态
      */
-    function updateFirebaseUI() {
-        // 确保UI已注入
-        if ($('#firebase-sync-section').length === 0) {
-            return;
-        }
-
-        const statusText = $('#firebase-status-text');
-        const loginButton = $('#firebase-login-button');
-        const logoutButton = $('#firebase-logout-button');
-        const configSection = $('#firebase-config-section');
-        const configInput = $('#firebase-config');
-
-        if (firebaseConfig) {
-            configInput.val(JSON.stringify(firebaseConfig, null, 2));
-        }
-
-        if (currentUser) {
-            statusText.text(`已作为 ${currentUser.displayName || currentUser.email} 登录`);
-            statusText.css('color', 'lightgreen');
-            loginButton.hide();
-            logoutButton.show();
-            configSection.hide();
-        } else {
-            statusText.text(firebaseApp ? '准备就绪，请登录' : '未配置或配置错误');
-            statusText.css('color', firebaseApp ? 'orange' : 'red');
-            loginButton.show();
-            logoutButton.hide();
-            configSection.show();
-            loginButton.prop('disabled', !firebaseApp);
+    /**
+     * 更新Firebase UI状态 - 简化版
+     * @param {string} message - 要显示的状态信息
+     * @param {string} color - 文本颜色 (默认 'lightgreen')
+     */
+    function updateFirebaseUI(message, color = 'lightgreen') {
+        if ($('#firebase-status-text').length > 0) {
+            const statusText = $('#firebase-status-text');
+            statusText.text(message);
+            statusText.css('color', color);
         }
     }
 
@@ -13088,39 +13086,111 @@ ${currentPersonality}
         }
     }
 
+    /**
+     * 设置Firebase相关的事件监听器 - 连接码版本
+     */
+    /**
+     * 生成一个一次性的连接码
+     */
+    async function generateConnectionCode() {
+        if (!currentUser || !firestoreDb) {
+            toastr.error('未连接到同步服务。', '生成失败');
+            return;
+        }
+
+        const button = $('#generate-code-button');
+        button.prop('disabled', true).text('正在生成...');
+
+        try {
+            // 1. 生成一个随机、易读的6位大写字母数字码
+            const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+            const expiration = new Date(Date.now() + 5 * 60 * 1000); // 5分钟后过期
+
+            // 2. 将当前宠物数据和过期时间存入 'connection_codes' 集合
+            const docRef = firebase.doc(firestoreDb, 'connection_codes', code);
+            await firebase.setDoc(docRef, {
+                petData: petData,
+                expiresAt: expiration,
+                sourceUid: currentUser.uid
+            });
+
+            // 3. 在UI上显示连接码
+            const display = $('#connection-code-display');
+            display.text(`您的连接码是: ${code} (5分钟内有效)`).show();
+            toastr.success('连接码已生成！请在另一台设备上输入。', '成功');
+
+            // 5分钟后自动隐藏
+            setTimeout(() => display.hide(), 5 * 60 * 1000);
+
+        } catch (error) {
+            console.error(`[${extensionName}] 生成连接码失败:`, error);
+            toastr.error('生成连接码失败，请检查网络或重试。', '错误');
+        } finally {
+            button.prop('disabled', false).text('生成连接码');
+        }
+    }
+
+    /**
+     * 使用连接码来迁移数据
+     * @param {string} code - 用户输入的连接码
+     */
+    async function useConnectionCode(code) {
+        if (!firestoreDb) {
+            toastr.error('未连接到同步服务。', '迁移失败');
+            return;
+        }
+
+        const button = $('#use-code-button');
+        button.prop('disabled', true).text('正在迁移...');
+
+        try {
+            const docRef = firebase.doc(firestoreDb, 'connection_codes', code.toUpperCase());
+            const docSnap = await firebase.getDoc(docRef);
+
+            if (!docSnap.exists() || docSnap.data().expiresAt.toDate() < new Date()) {
+                toastr.error('连接码无效或已过期。', '迁移失败');
+                return;
+            }
+
+            const sourceData = docSnap.data().petData;
+            console.log(`[${extensionName}] 通过连接码获取到数据:`, sourceData);
+
+            // 1. 将获取到的数据应用到当前宠物
+            petData = { ...petData, ...sourceData };
+            
+            // 2. 强制保存到本地和云端(当前用户的UID下)
+            savePetData(); 
+            await saveDataToFirebase();
+            
+            // 3. 更新UI
+            updateAllUI();
+            toastr.success('数据迁移成功！您的宠物已同步。', '成功');
+
+            // 4. 删除这个一次性连接码
+            await firebase.deleteDoc(docRef);
+
+        } catch (error) {
+            console.error(`[${extensionName}] 使用连接码失败:`, error);
+            toastr.error('迁移数据时发生错误，请重试。', '错误');
+        } finally {
+            button.prop('disabled', false).text('确认迁移');
+            $('#connection-code-input').val('');
+        }
+    }
+
+    /**
+     * 设置Firebase相关的事件监听器 - 连接码版本
+     */
     function setupFirebaseEventListeners() {
-        $(document).on('click', '#firebase-save-config-button', function() {
-            const configString = $('#firebase-config').val();
-            try {
-                const config = JSON.parse(configString);
-                if (config.apiKey && config.projectId) {
-                    localStorage.setItem(STORAGE_KEY_FIREBASE_CONFIG, JSON.stringify(config));
-                    toastr.success('Firebase配置已保存！正在重新初始化...', '成功');
-                    initializeFirebase();
-                } else {
-                    toastr.error('配置格式不正确，缺少apiKey或projectId。', '保存失败');
-                }
-            } catch (e) {
-                toastr.error('配置不是有效的JSON格式。', '保存失败');
-            }
-        });
+        $(document).on('click', '#generate-code-button', generateConnectionCode);
 
-        $(document).on('click', '#firebase-login-button', async () => {
-            if (!firebaseAuth) return;
-            const provider = new firebase.GoogleAuthProvider();
-            try {
-                await firebase.signInWithPopup(firebaseAuth, provider);
-                toastr.success('登录成功！', '欢迎回来');
-            } catch (error) {
-                console.error(`[${extensionName}] Google登录失败:`, error);
-                toastr.error('Google登录失败，详情请查看控制台。', '登录失败');
+        $(document).on('click', '#use-code-button', () => {
+            const code = $('#connection-code-input').val().trim();
+            if (code) {
+                useConnectionCode(code);
+            } else {
+                toastr.warning('请输入连接码。');
             }
-        });
-
-        $(document).on('click', '#firebase-logout-button', async () => {
-            if (!firebaseAuth) return;
-            await firebaseAuth.signOut();
-            toastr.info('您已成功登出。', '再见');
         });
     }
 

@@ -90,17 +90,80 @@ A: 检查网络连接，确保能访问Google服务。如果在中国大陆，�
 A: 确认连接码是6位大写字母和数字组合，检查是否在5分钟有效期内，确保连接码未被使用过。
 
 **Q: 数据同步不及时？**
-A: 点击"🔍 检查同步状态"查看详情，或手动点击"☁️ 立即备份"强制同步。
+A: 手动点击"☁️ 备份"强制同步，或检查网络连接。
 
 **Q: 移动端连接失败？**
 A: 移动端可能需要VPN才能连接Firebase服务，特别是在网络受限的地区。
 
+**Q: 权限错误怎么办？**
+A: 需要在Firebase控制台配置安全规则，请参考下面的"Firebase配置"部分。
+
 ### 错误代码说明
 
 - **auth/network-request-failed** - 网络连接问题
-- **firestore/permission-denied** - 权限错误，通常是认证问题
-- **storage/unauthorized** - 存储权限错误
+- **firestore/permission-denied** - 权限错误，需要配置Firestore安全规则
+- **storage/unauthorized** - 存储权限错误，需要配置Storage安全规则
 - **functions/deadline-exceeded** - 请求超时
+
+## ⚙️ Firebase控制台配置
+
+### 🔐 启用匿名登录
+1. 进入 [Firebase控制台](https://console.firebase.google.com/)
+2. 选择项目 `kpop-pett`
+3. 点击 **Authentication** → **Sign-in method**
+4. 启用 **Anonymous** 登录方式
+
+### 📄 配置Firestore安全规则
+1. 点击 **Firestore Database** → **Rules**
+2. 复制以下规则并粘贴：
+
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 用户数据
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // 连接码
+    match /connectionCodes/{codeId} {
+      allow read, create: if request.auth != null;
+      allow update: if request.auth != null &&
+        (resource.data.userId == request.auth.uid ||
+         request.auth.uid != resource.data.get('secondaryUserId', ''));
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+```
+
+3. 点击 **发布** 按钮
+
+### 📁 配置Storage安全规则
+1. 点击 **Storage** → **Rules**
+2. 复制以下规则并粘贴：
+
+```javascript
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /avatars/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
+```
+
+3. 点击 **发布** 按钮
 
 ## 📱 移动端优化
 

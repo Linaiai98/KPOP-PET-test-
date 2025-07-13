@@ -1015,302 +1015,159 @@ jQuery(async () => {
     }
 
     /**
-     * 更新Firebase状态显示
+     * 更新Firebase状态显示（简化版）
      */
     function updateFirebaseStatus(status = 'disconnected', message = '') {
-        const statusContainer = $('#firebase-status');
         const statusIcon = $('#firebase-status-icon');
         const statusText = $('#firebase-status-text');
-        const userInfo = $('#firebase-user-info');
-        const userId = $('#firebase-user-id');
-        const deviceName = $('#firebase-device-name');
-
-        // 移除所有状态类
-        statusContainer.removeClass('connected connecting error');
-        statusIcon.removeClass('spinning');
+        const primaryControls = $('#firebase-primary-controls');
+        const secondaryControls = $('#firebase-secondary-controls');
+        const managementControls = $('#firebase-management-controls');
+        const initBtn = $('#firebase-init-btn');
 
         switch (status) {
             case 'connected':
-                statusContainer.addClass('connected');
                 statusIcon.text('🟢');
                 statusText.text(message || '已连接');
-                if (currentUser) {
-                    userId.text(currentUser.uid.substring(0, 8) + '...');
-                    deviceName.text(getDeviceName());
-                    userInfo.show();
-                }
-                // 启用相关按钮
-                $('#firebase-generate-code-btn, #firebase-backup-now-btn').prop('disabled', false);
-                $('#firebase-data-management').show();
+                initBtn.text('✅ 已连接').prop('disabled', true);
+                primaryControls.show();
+                secondaryControls.hide();
+                managementControls.show();
                 break;
 
             case 'connecting':
-                statusContainer.addClass('connecting');
-                statusIcon.text('🟡').addClass('spinning');
+                statusIcon.text('🟡');
                 statusText.text(message || '连接中...');
-                userInfo.hide();
+                initBtn.text('🔄 连接中...').prop('disabled', true);
                 break;
 
             case 'error':
-                statusContainer.addClass('error');
                 statusIcon.text('🔴');
                 statusText.text(message || '连接错误');
-                userInfo.hide();
-                // 禁用相关按钮
-                $('#firebase-generate-code-btn, #firebase-backup-now-btn').prop('disabled', true);
-                $('#firebase-data-management').hide();
+                initBtn.text('❌ 重试').prop('disabled', false);
+                primaryControls.hide();
+                managementControls.hide();
+                secondaryControls.show();
                 break;
 
             default: // disconnected
                 statusIcon.text('⚪');
                 statusText.text(message || '未连接');
-                userInfo.hide();
-                // 禁用相关按钮
-                $('#firebase-generate-code-btn, #firebase-backup-now-btn').prop('disabled', true);
-                $('#firebase-data-management').hide();
+                initBtn.text('🔗 连接').prop('disabled', false);
+                primaryControls.hide();
+                managementControls.hide();
+                secondaryControls.show();
                 break;
         }
     }
 
     /**
-     * 绑定Firebase UI事件
+     * 绑定Firebase UI事件（简化版）
      */
     function bindFirebaseEvents() {
-        // 初始化云端备份按钮
+        // 初始化连接按钮
         $('#firebase-init-btn').on('click', async function() {
-            const button = $(this);
-            const originalText = button.text();
-
             try {
-                button.prop('disabled', true).text('🔄 初始化中...');
+                updateFirebaseStatus('connecting', '连接中...');
 
                 await initializeFirebase();
                 await signInAnonymously();
 
-                button.text('✅ 初始化完成').removeClass('firebase-btn-primary').addClass('firebase-btn-success');
-
-                setTimeout(() => {
-                    button.text(originalText).removeClass('firebase-btn-success').addClass('firebase-btn-primary').prop('disabled', false);
-                }, 2000);
+                updateFirebaseStatus('connected', '已连接');
+                toastr.success('云端备份已连接！', '☁️ 连接成功');
 
             } catch (error) {
-                button.text('❌ 初始化失败').removeClass('firebase-btn-primary').addClass('firebase-btn-danger');
-                toastr.error(`初始化失败: ${error.message}`, '❌ 错误');
-
-                setTimeout(() => {
-                    button.text(originalText).removeClass('firebase-btn-danger').addClass('firebase-btn-primary').prop('disabled', false);
-                }, 3000);
+                updateFirebaseStatus('error', '连接失败');
+                toastr.error(`连接失败: ${error.message}`, '❌ 连接错误');
             }
         });
 
         // 生成连接码按钮
         $('#firebase-generate-code-btn').on('click', async function() {
-            const button = $(this);
-            const originalText = button.text();
-
             try {
-                button.prop('disabled', true).text('🔄 生成中...');
-
                 const code = await generateConnectionCode();
-
-                // 显示连接码
                 $('#firebase-connection-code-text').val(code);
                 $('#firebase-connection-code-display').show();
-
-                button.text('✅ 已生成').removeClass('firebase-btn-secondary').addClass('firebase-btn-success');
-
-                setTimeout(() => {
-                    button.text(originalText).removeClass('firebase-btn-success').addClass('firebase-btn-secondary').prop('disabled', false);
-                }, 2000);
-
+                toastr.success(`连接码已生成: ${code}`, '🔑 生成成功');
             } catch (error) {
-                button.text('❌ 生成失败').removeClass('firebase-btn-secondary').addClass('firebase-btn-danger');
-                toastr.error(`生成连接码失败: ${error.message}`, '❌ 错误');
-
-                setTimeout(() => {
-                    button.text(originalText).removeClass('firebase-btn-danger').addClass('firebase-btn-secondary').prop('disabled', false);
-                }, 3000);
+                toastr.error(`生成失败: ${error.message}`, '❌ 错误');
             }
         });
 
         // 复制连接码按钮
         $('#firebase-copy-code-btn').on('click', function() {
-            const codeInput = $('#firebase-connection-code-text')[0];
-            codeInput.select();
-            codeInput.setSelectionRange(0, 99999); // 移动端兼容
-
-            try {
-                document.execCommand('copy');
-                toastr.success('连接码已复制到剪贴板！', '📋 复制成功');
-
-                const button = $(this);
-                const originalText = button.text();
-                button.text('✅ 已复制');
-                setTimeout(() => {
-                    button.text(originalText);
-                }, 2000);
-            } catch (error) {
+            const code = $('#firebase-connection-code-text').val();
+            navigator.clipboard.writeText(code).then(() => {
+                toastr.success('连接码已复制！', '📋 复制成功');
+            }).catch(() => {
                 toastr.error('复制失败，请手动复制', '❌ 复制失败');
-            }
+            });
         });
 
         // 连接同步按钮
         $('#firebase-connect-btn').on('click', async function() {
-            const button = $(this);
-            const originalText = button.text();
-            const codeInput = $('#firebase-connection-code-input');
-            const code = codeInput.val().trim().toUpperCase();
+            const code = $('#firebase-connection-code-input').val().trim().toUpperCase();
 
             if (!code || code.length !== 6) {
                 toastr.warning('请输入6位连接码', '⚠️ 输入错误');
-                codeInput.focus();
                 return;
             }
 
             try {
-                button.prop('disabled', true).text('🔄 连接中...');
-                codeInput.prop('disabled', true);
+                updateFirebaseStatus('connecting', '连接中...');
 
-                await initializeFirebase();
+                if (!isFirebaseInitialized) {
+                    await initializeFirebase();
+                }
+
                 await connectWithCode(code);
-
-                button.text('✅ 连接成功').removeClass('firebase-btn-primary').addClass('firebase-btn-success');
-                codeInput.val('').prop('disabled', false);
-
-                setTimeout(() => {
-                    button.text(originalText).removeClass('firebase-btn-success').addClass('firebase-btn-primary').prop('disabled', false);
-                }, 2000);
+                updateFirebaseStatus('connected', '已连接');
+                $('#firebase-connection-code-input').val('');
+                toastr.success('设备连接成功，数据已同步！', '🔗 连接成功');
 
             } catch (error) {
-                button.text('❌ 连接失败').removeClass('firebase-btn-primary').addClass('firebase-btn-danger');
+                updateFirebaseStatus('error', '连接失败');
                 toastr.error(`连接失败: ${error.message}`, '❌ 连接错误');
-                codeInput.prop('disabled', false);
-
-                setTimeout(() => {
-                    button.text(originalText).removeClass('firebase-btn-danger').addClass('firebase-btn-primary').prop('disabled', false);
-                }, 3000);
             }
         });
 
         // 立即备份按钮
         $('#firebase-backup-now-btn').on('click', async function() {
-            const button = $(this);
-            const originalText = button.text();
-
             try {
-                button.prop('disabled', true).text('☁️ 备份中...');
-
                 await backupAllDataToFirebase();
-
-                button.text('✅ 备份完成').removeClass('firebase-btn-success').addClass('firebase-btn-info');
-
-                setTimeout(() => {
-                    button.text(originalText).removeClass('firebase-btn-info').addClass('firebase-btn-success').prop('disabled', false);
-                }, 2000);
-
+                toastr.success('数据已备份到云端！', '☁️ 备份成功');
             } catch (error) {
-                button.text('❌ 备份失败').removeClass('firebase-btn-success').addClass('firebase-btn-danger');
-
-                setTimeout(() => {
-                    button.text(originalText).removeClass('firebase-btn-danger').addClass('firebase-btn-success').prop('disabled', false);
-                }, 3000);
+                toastr.error(`备份失败: ${error.message}`, '❌ 备份失败');
             }
         });
 
         // 恢复数据按钮
         $('#firebase-restore-btn').on('click', async function() {
-            const button = $(this);
-            const originalText = button.text();
-
-            if (!confirm('确定要从云端恢复数据吗？\n\n这将覆盖当前的所有本地数据！')) {
+            if (!confirm('确定要从云端恢复数据吗？这将覆盖当前数据！')) {
                 return;
             }
 
             try {
-                button.prop('disabled', true).text('📥 恢复中...');
-
                 await restoreDataFromFirebase();
-
-                button.text('✅ 恢复完成').removeClass('firebase-btn-info').addClass('firebase-btn-success');
-
-                setTimeout(() => {
-                    button.text(originalText).removeClass('firebase-btn-success').addClass('firebase-btn-info').prop('disabled', false);
-                }, 2000);
-
+                toastr.success('数据已从云端恢复！', '📥 恢复成功');
             } catch (error) {
-                button.text('❌ 恢复失败').removeClass('firebase-btn-info').addClass('firebase-btn-danger');
-
-                setTimeout(() => {
-                    button.text(originalText).removeClass('firebase-btn-danger').addClass('firebase-btn-info').prop('disabled', false);
-                }, 3000);
-            }
-        });
-
-        // 检查同步状态按钮
-        $('#firebase-check-status-btn').on('click', async function() {
-            const button = $(this);
-            const originalText = button.text();
-
-            try {
-                button.prop('disabled', true).text('🔍 检查中...');
-
-                const status = await checkFirebaseSyncStatus();
-
-                // 更新同步详情显示
-                $('#sync-pet-status').text(status.hasPetData ? '✅ 已同步' : '❌ 未同步');
-                $('#sync-ai-status').text(status.hasAISettings ? '✅ 已同步' : '❌ 未同步');
-                $('#sync-avatar-status').text(status.hasAvatar ? '✅ 已同步' : '❌ 未同步');
-                $('#sync-last-time').text(status.lastBackup ? status.lastBackup.toLocaleString() : '从未备份');
-
-                $('#firebase-sync-details').show();
-
-                button.text('✅ 检查完成').removeClass('firebase-btn-outline').addClass('firebase-btn-success');
-
-                setTimeout(() => {
-                    button.text(originalText).removeClass('firebase-btn-success').addClass('firebase-btn-outline').prop('disabled', false);
-                }, 2000);
-
-            } catch (error) {
-                button.text('❌ 检查失败').removeClass('firebase-btn-outline').addClass('firebase-btn-danger');
-                toastr.error(`检查失败: ${error.message}`, '❌ 错误');
-
-                setTimeout(() => {
-                    button.text(originalText).removeClass('firebase-btn-danger').addClass('firebase-btn-outline').prop('disabled', false);
-                }, 3000);
+                toastr.error(`恢复失败: ${error.message}`, '❌ 恢复失败');
             }
         });
 
         // 断开连接按钮
         $('#firebase-disconnect-btn').on('click', async function() {
-            const button = $(this);
-            const originalText = button.text();
-
-            if (!confirm('确定要断开云端连接吗？\n\n断开后将无法同步数据，但本地数据会保留。')) {
+            if (!confirm('确定要断开云端连接吗？断开后将无法同步数据。')) {
                 return;
             }
 
             try {
-                button.prop('disabled', true).text('🔌 断开中...');
-
                 await disconnectFirebase();
-
-                // 隐藏相关UI
+                updateFirebaseStatus('disconnected', '已断开连接');
                 $('#firebase-connection-code-display').hide();
-                $('#firebase-sync-details').hide();
-
-                button.text('✅ 已断开').removeClass('firebase-btn-danger').addClass('firebase-btn-success');
-
-                setTimeout(() => {
-                    button.text(originalText).removeClass('firebase-btn-success').addClass('firebase-btn-danger').prop('disabled', false);
-                }, 2000);
-
+                toastr.info('已断开云端连接', '🔌 断开连接');
             } catch (error) {
-                button.text('❌ 断开失败').removeClass('firebase-btn-danger').addClass('firebase-btn-warning');
                 toastr.error(`断开失败: ${error.message}`, '❌ 错误');
-
-                setTimeout(() => {
-                    button.text(originalText).removeClass('firebase-btn-warning').addClass('firebase-btn-danger').prop('disabled', false);
-                }, 3000);
             }
         });
 
@@ -1325,7 +1182,7 @@ jQuery(async () => {
 
         // 连接码输入框回车键
         $('#firebase-connection-code-input').on('keypress', function(e) {
-            if (e.which === 13) { // Enter键
+            if (e.which === 13) {
                 $('#firebase-connect-btn').click();
             }
         });
@@ -5192,104 +5049,72 @@ ${currentPersonality}
 
                         <div class="flex-container">
                             <label style="display: block; margin-bottom: 8px; font-weight: bold;">
-                                ☁️ 云端备份设置
+                                ☁️ 云端备份
                             </label>
-                            <small class="notes" style="margin-bottom: 15px; display: block;">
-                                使用Firebase实现全平台数据同步，支持iOS、安卓、电脑端数据备份与恢复。
+                            <small class="notes" style="margin-bottom: 10px; display: block;">
+                                跨设备同步宠物数据、AI设置和头像
                             </small>
                         </div>
 
-                        <!-- 连接状态显示 -->
-                        <div id="firebase-status" class="firebase-status-container" style="margin-bottom: 15px; padding: 10px; border-radius: 8px; background: #f8f9fa; border-left: 4px solid #6c757d;">
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <span id="firebase-status-icon">⚪</span>
-                                <span id="firebase-status-text">未连接</span>
-                            </div>
-                            <div id="firebase-user-info" style="font-size: 0.9em; color: #6c757d; margin-top: 5px; display: none;">
-                                <div>用户ID: <span id="firebase-user-id">-</span></div>
-                                <div>设备: <span id="firebase-device-name">-</span></div>
-                            </div>
-                        </div>
-
-                        <!-- 主设备操作 -->
-                        <div id="firebase-primary-device" class="firebase-section">
-                            <h5 style="margin-bottom: 10px;">📱 主设备设置</h5>
-                            <p style="font-size: 0.9em; color: #6c757d; margin-bottom: 10px;">
-                                在主设备上生成连接码，其他设备可以使用此连接码同步数据。
-                            </p>
-
-                            <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
-                                <button id="firebase-init-btn" class="firebase-btn firebase-btn-primary">
-                                    🔗 初始化云端备份
-                                </button>
-                                <button id="firebase-generate-code-btn" class="firebase-btn firebase-btn-secondary" disabled>
-                                    🔑 生成连接码
-                                </button>
-                                <button id="firebase-backup-now-btn" class="firebase-btn firebase-btn-success" disabled>
-                                    ☁️ 立即备份
+                        <!-- 简化的状态和操作区域 -->
+                        <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 10px;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span id="firebase-status-icon">⚪</span>
+                                    <span id="firebase-status-text" style="font-size: 0.9em;">未连接</span>
+                                </div>
+                                <button id="firebase-init-btn" class="firebase-btn firebase-btn-primary" style="padding: 6px 12px; font-size: 0.85em;">
+                                    🔗 连接
                                 </button>
                             </div>
 
-                            <!-- 连接码显示 -->
-                            <div id="firebase-connection-code-display" style="display: none; margin-bottom: 15px;">
-                                <label style="font-weight: bold; margin-bottom: 5px; display: block;">🔑 设备连接码</label>
-                                <div style="display: flex; gap: 10px; align-items: center;">
-                                    <input type="text" id="firebase-connection-code-text" readonly
-                                           style="flex: 1; padding: 8px; border: 2px solid #28a745; border-radius: 4px; background: #f8fff9; font-family: monospace; font-size: 16px; text-align: center; letter-spacing: 2px;">
-                                    <button id="firebase-copy-code-btn" class="firebase-btn firebase-btn-outline">
-                                        📋 复制
+                            <!-- 主设备功能 -->
+                            <div id="firebase-primary-controls" style="display: none; margin-bottom: 10px;">
+                                <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                                    <button id="firebase-generate-code-btn" class="firebase-btn firebase-btn-secondary" style="flex: 1; padding: 6px; font-size: 0.85em;">
+                                        🔑 生成连接码
+                                    </button>
+                                    <button id="firebase-backup-now-btn" class="firebase-btn firebase-btn-success" style="flex: 1; padding: 6px; font-size: 0.85em;">
+                                        ☁️ 备份
                                     </button>
                                 </div>
-                                <small style="color: #28a745; margin-top: 5px; display: block;">
-                                    ⏰ 连接码有效期：5分钟，请尽快在其他设备上使用
-                                </small>
+
+                                <!-- 连接码显示 -->
+                                <div id="firebase-connection-code-display" style="display: none;">
+                                    <div style="display: flex; gap: 8px; align-items: center;">
+                                        <input type="text" id="firebase-connection-code-text" readonly
+                                               style="flex: 1; padding: 6px; border: 1px solid #28a745; border-radius: 4px; background: #f8fff9; font-family: monospace; font-size: 14px; text-align: center; letter-spacing: 1px;">
+                                        <button id="firebase-copy-code-btn" class="firebase-btn firebase-btn-outline" style="padding: 6px 10px; font-size: 0.8em;">
+                                            📋
+                                        </button>
+                                    </div>
+                                    <small style="color: #28a745; margin-top: 3px; display: block; font-size: 0.8em;">
+                                        有效期5分钟
+                                    </small>
+                                </div>
                             </div>
-                        </div>
 
-                        <!-- 从设备操作 -->
-                        <div id="firebase-secondary-device" class="firebase-section" style="margin-top: 20px;">
-                            <h5 style="margin-bottom: 10px;">📲 从设备连接</h5>
-                            <p style="font-size: 0.9em; color: #6c757d; margin-bottom: 10px;">
-                                输入主设备生成的连接码，同步所有宠物数据、AI设置和头像。
-                            </p>
-
-                            <div style="margin-bottom: 15px;">
-                                <label style="font-weight: bold; margin-bottom: 5px; display: block;">🔑 输入连接码</label>
-                                <div style="display: flex; gap: 10px; align-items: center;">
-                                    <input type="text" id="firebase-connection-code-input" placeholder="输入6位连接码"
-                                           maxlength="6" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 16px; text-align: center; letter-spacing: 2px; text-transform: uppercase;">
-                                    <button id="firebase-connect-btn" class="firebase-btn firebase-btn-primary">
-                                        🔗 连接同步
+                            <!-- 从设备功能 -->
+                            <div id="firebase-secondary-controls">
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <input type="text" id="firebase-connection-code-input" placeholder="输入连接码"
+                                           maxlength="6" style="flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 14px; text-align: center; text-transform: uppercase;">
+                                    <button id="firebase-connect-btn" class="firebase-btn firebase-btn-primary" style="padding: 6px 12px; font-size: 0.85em;">
+                                        连接
                                     </button>
                                 </div>
-                                <small style="color: #6c757d; margin-top: 5px; display: block;">
-                                    💡 连接码格式：6位大写字母和数字组合，如：ABC123
-                                </small>
-                            </div>
-                        </div>
-
-                        <!-- 数据管理 -->
-                        <div id="firebase-data-management" class="firebase-section" style="margin-top: 20px; display: none;">
-                            <h5 style="margin-bottom: 10px;">📊 数据管理</h5>
-
-                            <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
-                                <button id="firebase-restore-btn" class="firebase-btn firebase-btn-info">
-                                    📥 恢复数据
-                                </button>
-                                <button id="firebase-check-status-btn" class="firebase-btn firebase-btn-outline">
-                                    🔍 检查同步状态
-                                </button>
-                                <button id="firebase-disconnect-btn" class="firebase-btn firebase-btn-danger">
-                                    🔌 断开连接
-                                </button>
                             </div>
 
-                            <!-- 同步状态详情 -->
-                            <div id="firebase-sync-details" style="display: none; background: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 0.9em;">
-                                <div><strong>📱 宠物数据:</strong> <span id="sync-pet-status">-</span></div>
-                                <div><strong>🤖 AI设置:</strong> <span id="sync-ai-status">-</span></div>
-                                <div><strong>🎨 头像:</strong> <span id="sync-avatar-status">-</span></div>
-                                <div><strong>⏰ 最后同步:</strong> <span id="sync-last-time">-</span></div>
+                            <!-- 已连接后的管理功能 -->
+                            <div id="firebase-management-controls" style="display: none; margin-top: 10px;">
+                                <div style="display: flex; gap: 8px;">
+                                    <button id="firebase-restore-btn" class="firebase-btn firebase-btn-info" style="flex: 1; padding: 6px; font-size: 0.85em;">
+                                        📥 恢复
+                                    </button>
+                                    <button id="firebase-disconnect-btn" class="firebase-btn firebase-btn-danger" style="flex: 1; padding: 6px; font-size: 0.85em;">
+                                        断开
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

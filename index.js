@@ -5138,16 +5138,18 @@ ${currentPersonality}
                         <small class="notes" style="margin-top: 10px; display: block;">
                             配置AI API用于生成个性化的宠物回复，AI会根据选择的人设来回应
                         </small>
-                    </div>
-                </div>
 
-                <!-- Firebase 云端备份设置 -->
-                <div class="flex-container" style="margin-top: 20px;">
-                    <div class="flex1">
-                        <h4>☁️ 云端备份设置</h4>
-                        <small class="notes" style="margin-bottom: 15px; display: block;">
-                            使用Firebase实现全平台数据同步，支持iOS、安卓、电脑端数据备份与恢复。
-                        </small>
+                        <!-- Firebase 云端备份设置 -->
+                        <hr style="margin: 15px 0; border: none; border-top: 1px solid #444;">
+
+                        <div class="flex-container">
+                            <label style="display: block; margin-bottom: 8px; font-weight: bold;">
+                                ☁️ 云端备份设置
+                            </label>
+                            <small class="notes" style="margin-bottom: 15px; display: block;">
+                                使用Firebase实现全平台数据同步，支持iOS、安卓、电脑端数据备份与恢复。
+                            </small>
+                        </div>
 
                         <!-- 连接状态显示 -->
                         <div id="firebase-status" class="firebase-status-container" style="margin-bottom: 15px; padding: 10px; border-radius: 8px; background: #f8f9fa; border-left: 4px solid #6c757d;">

@@ -755,11 +755,15 @@ jQuery(async () => {
                 console.log(`[${extensionName}] ✅ AI设置已同步`);
             }
 
-            // 同步头像
-            if (userData.avatar) {
+            // 同步头像 (优先使用avatarUrl)
+            if (userData.avatarUrl) {
+                customAvatarData = userData.avatarUrl;
+                localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, userData.avatarUrl);
+                console.log(`[${extensionName}] ✅ 头像URL已同步`);
+            } else if (userData.avatar) { // 兼容旧数据
                 customAvatarData = userData.avatar;
                 localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, userData.avatar);
-                console.log(`[${extensionName}] ✅ 头像已同步`);
+                console.log(`[${extensionName}] ✅ 旧版头像数据已同步`);
             }
 
             // 更新UI
@@ -772,6 +776,32 @@ jQuery(async () => {
         } catch (error) {
             console.error(`[${extensionName}] ❌ 数据同步失败:`, error);
             throw error;
+        }
+    }
+
+    /**
+     * 上传头像到Firebase Storage并返回URL
+     * @param {string} dataUrl base64数据URL
+     * @returns {Promise<string>} 头像的公开URL
+     */
+    async function uploadAvatarToStorage(dataUrl) {
+        if (!currentUser || !firebaseStorage) {
+            throw new Error('Firebase Storage未初始化或用户未登录');
+        }
+        console.log(`[${extensionName}] ☁️ 上传头像到Firebase Storage...`);
+
+        const storageRef = firebaseStorage.ref().child(`avatars/${currentUser.uid}/avatar.png`);
+
+        try {
+            // Firebase Storage的putString方法可以直接处理data_url
+            const uploadTask = await storageRef.putString(dataUrl, 'data_url');
+            const downloadURL = await uploadTask.ref.getDownloadURL();
+            
+            console.log(`[${extensionName}] ✅ 头像上传成功，URL: ${downloadURL}`);
+            return downloadURL;
+        } catch (error) {
+            console.error(`[${extensionName}] ❌ 头像上传失败:`, error);
+            throw new Error(`头像上传失败: ${error.message}`);
         }
     }
 
@@ -792,7 +822,7 @@ jQuery(async () => {
             const backupData = {
                 lastBackup: firebase.firestore.FieldValue.serverTimestamp(),
                 deviceName: getDeviceName(),
-                dataVersion: '1.0'
+                dataVersion: '1.1' // 版本升级，表示使用Storage
             };
 
             // 备份宠物数据
@@ -813,11 +843,24 @@ jQuery(async () => {
                 }
             }
 
-            // 备份头像（如果小于500KB）
-            if (customAvatarData && customAvatarData.length < 500000) {
-                backupData.avatar = customAvatarData;
-            } else if (customAvatarData) {
-                console.warn(`[${extensionName}] 头像过大(${Math.round(customAvatarData.length/1024)}KB)，跳过备份`);
+            // 备份头像到Firebase Storage
+            if (customAvatarData) {
+                // 如果是base64数据, 则上传并获取URL
+                if (customAvatarData.startsWith('data:image')) {
+                    try {
+                        const avatarUrl = await uploadAvatarToStorage(customAvatarData);
+                        backupData.avatarUrl = avatarUrl;
+                        // 上传成功后，可以更新本地存储为URL，减少未来重复上传
+                        localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, avatarUrl);
+                        customAvatarData = avatarUrl;
+                    } catch (uploadError) {
+                        console.error(`[${extensionName}] ❌ 头像备份失败，跳过头像备份:`, uploadError);
+                        toastr.warning('头像上传失败，本次备份将不包含头像。', '⚠️ 备份警告');
+                    }
+                } else if (customAvatarData.startsWith('http')) {
+                    // 如果已经是URL，直接保存
+                    backupData.avatarUrl = customAvatarData;
+                }
             }
 
             // 执行备份
@@ -870,12 +913,17 @@ jQuery(async () => {
                 console.log(`[${extensionName}] ✅ AI设置已恢复`);
             }
 
-            // 恢复头像
-            if (userData.avatar) {
+            // 恢复头像 (优先使用avatarUrl)
+            if (userData.avatarUrl) {
+                customAvatarData = userData.avatarUrl;
+                localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, userData.avatarUrl);
+                restoredCount++;
+                console.log(`[${extensionName}] ✅ 头像URL已恢复`);
+            } else if (userData.avatar) { // 兼容旧数据
                 customAvatarData = userData.avatar;
                 localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, userData.avatar);
                 restoredCount++;
-                console.log(`[${extensionName}] ✅ 头像已恢复`);
+                console.log(`[${extensionName}] ✅ 旧版头像数据已恢复`);
             }
 
             // 更新UI

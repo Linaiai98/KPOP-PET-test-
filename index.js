@@ -2836,6 +2836,9 @@ ${currentPersonality}
             }
         }, 1000);
 
+        // 绑定Firebase事件
+        bindFirebaseEvents();
+
         console.log(`[${extensionName}] 设置面板初始化完成`);
         console.log(`[${extensionName}] 当前人设类型: ${currentPersonalityType}`);
         console.log(`[${extensionName}] 当前人设内容: ${getCurrentPersonality()}`);
@@ -5137,6 +5140,110 @@ ${currentPersonality}
                         </small>
                     </div>
                 </div>
+
+                <!-- Firebase 云端备份设置 -->
+                <div class="flex-container" style="margin-top: 20px;">
+                    <div class="flex1">
+                        <h4>☁️ 云端备份设置</h4>
+                        <small class="notes" style="margin-bottom: 15px; display: block;">
+                            使用Firebase实现全平台数据同步，支持iOS、安卓、电脑端数据备份与恢复。
+                        </small>
+
+                        <!-- 连接状态显示 -->
+                        <div id="firebase-status" class="firebase-status-container" style="margin-bottom: 15px; padding: 10px; border-radius: 8px; background: #f8f9fa; border-left: 4px solid #6c757d;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span id="firebase-status-icon">⚪</span>
+                                <span id="firebase-status-text">未连接</span>
+                            </div>
+                            <div id="firebase-user-info" style="font-size: 0.9em; color: #6c757d; margin-top: 5px; display: none;">
+                                <div>用户ID: <span id="firebase-user-id">-</span></div>
+                                <div>设备: <span id="firebase-device-name">-</span></div>
+                            </div>
+                        </div>
+
+                        <!-- 主设备操作 -->
+                        <div id="firebase-primary-device" class="firebase-section">
+                            <h5 style="margin-bottom: 10px;">📱 主设备设置</h5>
+                            <p style="font-size: 0.9em; color: #6c757d; margin-bottom: 10px;">
+                                在主设备上生成连接码，其他设备可以使用此连接码同步数据。
+                            </p>
+
+                            <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                                <button id="firebase-init-btn" class="firebase-btn firebase-btn-primary">
+                                    🔗 初始化云端备份
+                                </button>
+                                <button id="firebase-generate-code-btn" class="firebase-btn firebase-btn-secondary" disabled>
+                                    🔑 生成连接码
+                                </button>
+                                <button id="firebase-backup-now-btn" class="firebase-btn firebase-btn-success" disabled>
+                                    ☁️ 立即备份
+                                </button>
+                            </div>
+
+                            <!-- 连接码显示 -->
+                            <div id="firebase-connection-code-display" style="display: none; margin-bottom: 15px;">
+                                <label style="font-weight: bold; margin-bottom: 5px; display: block;">🔑 设备连接码</label>
+                                <div style="display: flex; gap: 10px; align-items: center;">
+                                    <input type="text" id="firebase-connection-code-text" readonly
+                                           style="flex: 1; padding: 8px; border: 2px solid #28a745; border-radius: 4px; background: #f8fff9; font-family: monospace; font-size: 16px; text-align: center; letter-spacing: 2px;">
+                                    <button id="firebase-copy-code-btn" class="firebase-btn firebase-btn-outline">
+                                        📋 复制
+                                    </button>
+                                </div>
+                                <small style="color: #28a745; margin-top: 5px; display: block;">
+                                    ⏰ 连接码有效期：5分钟，请尽快在其他设备上使用
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- 从设备操作 -->
+                        <div id="firebase-secondary-device" class="firebase-section" style="margin-top: 20px;">
+                            <h5 style="margin-bottom: 10px;">📲 从设备连接</h5>
+                            <p style="font-size: 0.9em; color: #6c757d; margin-bottom: 10px;">
+                                输入主设备生成的连接码，同步所有宠物数据、AI设置和头像。
+                            </p>
+
+                            <div style="margin-bottom: 15px;">
+                                <label style="font-weight: bold; margin-bottom: 5px; display: block;">🔑 输入连接码</label>
+                                <div style="display: flex; gap: 10px; align-items: center;">
+                                    <input type="text" id="firebase-connection-code-input" placeholder="输入6位连接码"
+                                           maxlength="6" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 16px; text-align: center; letter-spacing: 2px; text-transform: uppercase;">
+                                    <button id="firebase-connect-btn" class="firebase-btn firebase-btn-primary">
+                                        🔗 连接同步
+                                    </button>
+                                </div>
+                                <small style="color: #6c757d; margin-top: 5px; display: block;">
+                                    💡 连接码格式：6位大写字母和数字组合，如：ABC123
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- 数据管理 -->
+                        <div id="firebase-data-management" class="firebase-section" style="margin-top: 20px; display: none;">
+                            <h5 style="margin-bottom: 10px;">📊 数据管理</h5>
+
+                            <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                                <button id="firebase-restore-btn" class="firebase-btn firebase-btn-info">
+                                    📥 恢复数据
+                                </button>
+                                <button id="firebase-check-status-btn" class="firebase-btn firebase-btn-outline">
+                                    🔍 检查同步状态
+                                </button>
+                                <button id="firebase-disconnect-btn" class="firebase-btn firebase-btn-danger">
+                                    🔌 断开连接
+                                </button>
+                            </div>
+
+                            <!-- 同步状态详情 -->
+                            <div id="firebase-sync-details" style="display: none; background: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 0.9em;">
+                                <div><strong>📱 宠物数据:</strong> <span id="sync-pet-status">-</span></div>
+                                <div><strong>🤖 AI设置:</strong> <span id="sync-ai-status">-</span></div>
+                                <div><strong>🎨 头像:</strong> <span id="sync-avatar-status">-</span></div>
+                                <div><strong>⏰ 最后同步:</strong> <span id="sync-last-time">-</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         `;
         $("#extensions_settings2").append(simpleSettingsHtml);
@@ -5348,10 +5455,7 @@ ${currentPersonality}
             }, 3000); // 延迟3秒创建，确保页面完全加载
         }
 
-        // 10. 绑定Firebase事件
-        bindFirebaseEvents();
-
-        // 11. 设置卸载检测
+        // 10. 设置卸载检测
         setupUnloadDetection();
 
         console.log(`[${extensionName}] Extension loaded successfully.`);

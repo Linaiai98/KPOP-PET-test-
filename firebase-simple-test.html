@@ -274,7 +274,7 @@
             const secondaryControls = document.getElementById('secondary-controls');
             const managementControls = document.getElementById('management-controls');
             const initBtn = document.getElementById('init-btn');
-            
+
             switch (status) {
                 case 'connected':
                     statusIcon.textContent = '🟢';
@@ -282,17 +282,18 @@
                     initBtn.textContent = '✅ 已连接';
                     initBtn.disabled = true;
                     primaryControls.style.display = 'block';
-                    secondaryControls.style.display = 'none';
+                    // 连接成功后保持输入框可见，方便其他设备连接
+                    secondaryControls.style.display = 'block';
                     managementControls.style.display = 'block';
                     break;
-                    
+
                 case 'connecting':
                     statusIcon.textContent = '🟡';
                     statusText.textContent = message || '连接中...';
                     initBtn.textContent = '🔄 连接中...';
                     initBtn.disabled = true;
                     break;
-                    
+
                 case 'error':
                     statusIcon.textContent = '🔴';
                     statusText.textContent = message || '连接错误';
@@ -302,7 +303,7 @@
                     managementControls.style.display = 'none';
                     secondaryControls.style.display = 'block';
                     break;
-                    
+
                 default: // disconnected
                     statusIcon.textContent = '⚪';
                     statusText.textContent = message || '未连接';
@@ -313,7 +314,7 @@
                     secondaryControls.style.display = 'block';
                     break;
             }
-            
+
             log(`状态更新: ${status} - ${message || ''}`);
         }
         

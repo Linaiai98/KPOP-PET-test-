@@ -1031,7 +1031,8 @@ jQuery(async () => {
                 statusText.text(message || '已连接');
                 initBtn.text('✅ 已连接').prop('disabled', true);
                 primaryControls.show();
-                secondaryControls.hide();
+                // 连接成功后仍然显示从设备输入框，方便其他设备连接
+                secondaryControls.show();
                 managementControls.show();
                 break;
 

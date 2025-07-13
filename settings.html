@@ -40,4 +40,51 @@
             </div>
         </div>
     </div>
+
+    <!-- Firebase 云同步设置 -->
+    <div class="inline-drawer">
+        <div class="inline-drawer-toggle inline-drawer-header">
+            <b>☁️ 云同步 (Firebase)</b>
+            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+        </div>
+        <div class="inline-drawer-content">
+            <p class="notes">
+                使用云同步可以在不同设备间同步你的宠物数据。在一个设备上生成连接码，在另一个设备上输入即可。
+            </p>
+            <div id="firebase-sync-container">
+                <div id="firebase-status-section">
+                    <strong>同步状态:</strong> <span id="firebase-sync-status" style="font-weight: bold; color: #ffA500;">未连接</span>
+                </div>
+
+                <hr>
+
+                <!-- 生成连接码 (主设备) -->
+                <div id="firebase-generate-code-section">
+                    <h4>在主设备上生成连接码</h4>
+                    <button id="firebase-generate-code-btn" class="menu_button">生成连接码</button>
+                    <div id="firebase-code-display" style="display: none; margin-top: 10px;">
+                        <p>你的连接码是 (10分钟内有效):</p>
+                        <strong id="firebase-connection-code" style="font-size: 1.5em; letter-spacing: 2px; color: var(--primary-accent-color);"></strong>
+                    </div>
+                </div>
+
+                <hr>
+
+                <!-- 输入连接码 (从设备) -->
+                <div id="firebase-enter-code-section">
+                    <h4>在新设备上输入连接码</h4>
+                    <div class="flex-container">
+                        <input type="text" id="firebase-code-input" placeholder="输入6位连接码" maxlength="6" class="text_pole">
+                        <button id="firebase-connect-btn" class="menu_button">连接</button>
+                    </div>
+                </div>
+                 <hr>
+                <!-- 注销同步 -->
+                <div id="firebase-disconnect-section" style="margin-top: 10px;">
+                     <button id="firebase-disconnect-btn" class="menu_button danger">断开同步</button>
+                     <p class="notes">断开同步后，此设备将不再与云端同步数据。</p>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>

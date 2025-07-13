@@ -38,51 +38,139 @@
                     </ul>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <!-- Firebase 云同步设置 -->
-    <div class="inline-drawer">
-        <div class="inline-drawer-toggle inline-drawer-header">
-            <b>☁️ 云同步 (Firebase)</b>
-            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
-        </div>
-        <div class="inline-drawer-content">
-            <p class="notes">
-                使用云同步可以在不同设备间同步你的宠物数据。在一个设备上生成连接码，在另一个设备上输入即可。
-            </p>
-            <div id="firebase-sync-container">
-                <div id="firebase-status-section">
-                    <strong>同步状态:</strong> <span id="firebase-sync-status" style="font-weight: bold; color: #ffA500;">未连接</span>
-                </div>
+            <!-- Firebase 云端备份设置 -->
+            <div class="flex-container" style="margin-top: 20px;">
+                <div class="flex1">
+                    <h4>☁️ 云端备份设置</h4>
+                    <small class="notes" style="margin-bottom: 15px; display: block;">
+                        使用Firebase实现全平台数据同步，支持iOS、安卓、电脑端数据备份与恢复。
+                    </small>
 
-                <hr>
-
-                <!-- 生成连接码 (主设备) -->
-                <div id="firebase-generate-code-section">
-                    <h4>在主设备上生成连接码</h4>
-                    <button id="firebase-generate-code-btn" class="menu_button">生成连接码</button>
-                    <div id="firebase-code-display" style="display: none; margin-top: 10px;">
-                        <p>你的连接码是 (10分钟内有效):</p>
-                        <strong id="firebase-connection-code" style="font-size: 1.5em; letter-spacing: 2px; color: var(--primary-accent-color);"></strong>
+                    <!-- 连接状态显示 -->
+                    <div id="firebase-status" class="firebase-status-container" style="margin-bottom: 15px; padding: 10px; border-radius: 8px; background: #f8f9fa; border-left: 4px solid #6c757d;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span id="firebase-status-icon">⚪</span>
+                            <span id="firebase-status-text">未连接</span>
+                        </div>
+                        <div id="firebase-user-info" style="font-size: 0.9em; color: #6c757d; margin-top: 5px; display: none;">
+                            <div>用户ID: <span id="firebase-user-id">-</span></div>
+                            <div>设备: <span id="firebase-device-name">-</span></div>
+                        </div>
                     </div>
-                </div>
 
-                <hr>
+                    <!-- 主设备操作 -->
+                    <div id="firebase-primary-device" class="firebase-section">
+                        <h5 style="margin-bottom: 10px;">📱 主设备设置</h5>
+                        <p style="font-size: 0.9em; color: #6c757d; margin-bottom: 10px;">
+                            在主设备上生成连接码，其他设备可以使用此连接码同步数据。
+                        </p>
 
-                <!-- 输入连接码 (从设备) -->
-                <div id="firebase-enter-code-section">
-                    <h4>在新设备上输入连接码</h4>
-                    <div class="flex-container">
-                        <input type="text" id="firebase-code-input" placeholder="输入6位连接码" maxlength="6" class="text_pole">
-                        <button id="firebase-connect-btn" class="menu_button">连接</button>
+                        <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                            <button id="firebase-init-btn" class="firebase-btn firebase-btn-primary">
+                                🔗 初始化云端备份
+                            </button>
+                            <button id="firebase-generate-code-btn" class="firebase-btn firebase-btn-secondary" disabled>
+                                🔑 生成连接码
+                            </button>
+                            <button id="firebase-backup-now-btn" class="firebase-btn firebase-btn-success" disabled>
+                                ☁️ 立即备份
+                            </button>
+                        </div>
+
+                        <!-- 连接码显示 -->
+                        <div id="firebase-connection-code-display" style="display: none; margin-bottom: 15px;">
+                            <label style="font-weight: bold; margin-bottom: 5px; display: block;">🔑 设备连接码</label>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <input type="text" id="firebase-connection-code-text" readonly
+                                       style="flex: 1; padding: 8px; border: 2px solid #28a745; border-radius: 4px; background: #f8fff9; font-family: monospace; font-size: 16px; text-align: center; letter-spacing: 2px;">
+                                <button id="firebase-copy-code-btn" class="firebase-btn firebase-btn-outline">
+                                    📋 复制
+                                </button>
+                            </div>
+                            <small style="color: #28a745; margin-top: 5px; display: block;">
+                                ⏰ 连接码有效期：5分钟，请尽快在其他设备上使用
+                            </small>
+                        </div>
                     </div>
-                </div>
-                 <hr>
-                <!-- 注销同步 -->
-                <div id="firebase-disconnect-section" style="margin-top: 10px;">
-                     <button id="firebase-disconnect-btn" class="menu_button danger">断开同步</button>
-                     <p class="notes">断开同步后，此设备将不再与云端同步数据。</p>
+
+                    <!-- 从设备操作 -->
+                    <div id="firebase-secondary-device" class="firebase-section" style="margin-top: 20px;">
+                        <h5 style="margin-bottom: 10px;">📲 从设备连接</h5>
+                        <p style="font-size: 0.9em; color: #6c757d; margin-bottom: 10px;">
+                            输入主设备生成的连接码，同步所有宠物数据、AI设置和头像。
+                        </p>
+
+                        <div style="margin-bottom: 15px;">
+                            <label style="font-weight: bold; margin-bottom: 5px; display: block;">🔑 输入连接码</label>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <input type="text" id="firebase-connection-code-input" placeholder="输入6位连接码"
+                                       maxlength="6" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 16px; text-align: center; letter-spacing: 2px; text-transform: uppercase;">
+                                <button id="firebase-connect-btn" class="firebase-btn firebase-btn-primary">
+                                    🔗 连接同步
+                                </button>
+                            </div>
+                            <small style="color: #6c757d; margin-top: 5px; display: block;">
+                                💡 连接码格式：6位大写字母和数字组合，如：ABC123
+                            </small>
+                        </div>
+                    </div>
+
+                    <!-- 数据管理 -->
+                    <div id="firebase-data-management" class="firebase-section" style="margin-top: 20px; display: none;">
+                        <h5 style="margin-bottom: 10px;">📊 数据管理</h5>
+
+                        <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                            <button id="firebase-restore-btn" class="firebase-btn firebase-btn-info">
+                                📥 恢复数据
+                            </button>
+                            <button id="firebase-check-status-btn" class="firebase-btn firebase-btn-outline">
+                                🔍 检查同步状态
+                            </button>
+                            <button id="firebase-disconnect-btn" class="firebase-btn firebase-btn-danger">
+                                🔌 断开连接
+                            </button>
+                        </div>
+
+                        <!-- 同步状态详情 -->
+                        <div id="firebase-sync-details" style="display: none; background: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 0.9em;">
+                            <div><strong>📱 宠物数据:</strong> <span id="sync-pet-status">-</span></div>
+                            <div><strong>🤖 AI设置:</strong> <span id="sync-ai-status">-</span></div>
+                            <div><strong>🎨 头像:</strong> <span id="sync-avatar-status">-</span></div>
+                            <div><strong>⏰ 最后同步:</strong> <span id="sync-last-time">-</span></div>
+                        </div>
+                    </div>
+
+                    <!-- 帮助信息 -->
+                    <div class="firebase-section" style="margin-top: 20px;">
+                        <details style="cursor: pointer;">
+                            <summary style="font-weight: bold; color: #007bff;">❓ 使用帮助</summary>
+                            <div style="margin-top: 10px; font-size: 0.9em; color: #6c757d;">
+                                <p><strong>🔧 首次设置：</strong></p>
+                                <ol style="margin-left: 20px;">
+                                    <li>在主设备上点击"初始化云端备份"</li>
+                                    <li>点击"生成连接码"获取6位连接码</li>
+                                    <li>在其他设备上输入连接码并点击"连接同步"</li>
+                                </ol>
+
+                                <p style="margin-top: 15px;"><strong>📱 支持的数据：</strong></p>
+                                <ul style="margin-left: 20px;">
+                                    <li>🐾 宠物数据（等级、属性、金币等）</li>
+                                    <li>🤖 AI设置（API配置、模型选择等）</li>
+                                    <li>🎨 自定义头像</li>
+                                    <li>⚙️ 个性化设置</li>
+                                </ul>
+
+                                <p style="margin-top: 15px;"><strong>🔒 隐私保护：</strong></p>
+                                <ul style="margin-left: 20px;">
+                                    <li>使用Firebase匿名登录，无需注册账号</li>
+                                    <li>数据仅在你的设备间同步</li>
+                                    <li>连接码5分钟后自动失效</li>
+                                    <li>可随时断开连接并清除云端数据</li>
+                                </ul>
+                            </div>
+                        </details>
+                    </div>
                 </div>
             </div>
         </div>

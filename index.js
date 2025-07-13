@@ -19,6 +19,25 @@ jQuery(async () => {
     const STORAGE_KEY_ENABLED = "virtual-pet-enabled";
     const STORAGE_KEY_PET_DATA = "virtual-pet-data";
     const STORAGE_KEY_CUSTOM_AVATAR = "virtual-pet-custom-avatar";
+
+    // Firebase 相关常量
+    const FIREBASE_CONFIG = {
+        apiKey: "AIzaSyA74TnN9IoyQjCncKOIOShWEktrL1hd96o",
+        authDomain: "kpop-pett.firebaseapp.com",
+        projectId: "kpop-pett",
+        storageBucket: "kpop-pett.firebasestorage.app",
+        messagingSenderId: "264650615774",
+        appId: "1:264650615774:web:f500ff555183110c3f0b4f",
+        measurementId: "G-3BH0GMJR3D"
+    };
+
+    const FIREBASE_STORAGE_KEYS = {
+        PET_DATA: "pet_data",
+        AI_SETTINGS: "ai_settings",
+        AVATAR: "avatar",
+        USER_PROFILE: "user_profile",
+        CONNECTION_CODES: "connection_codes"
+    };
     
     // DOM IDs and Selectors
     const BUTTON_ID = "virtual-pet-button";
@@ -27,15 +46,6 @@ jQuery(async () => {
     const CLOSE_BUTTON_ID = "virtual-pet-popup-close-button";
     const TOGGLE_ID = "#virtual-pet-enabled-toggle";
     
-    // Firebase 相关常量和变量
-    const STORAGE_KEY_FIREBASE_UID = "virtual-pet-firebase-uid";
-    let firebaseApp;
-    let firestore;
-    let auth;
-    let currentUser = null;
-    let unsubscribeFirestore = null; // 用于取消实时监听
-    let isSyncing = false; // 防止重复同步
-
     // DOM 元素引用
     let overlay, mainView, petView, settingsView;
     let petContainer;
@@ -49,6 +59,16 @@ jQuery(async () => {
     // 同步保存限制机制
     let lastSyncSaveTime = 0;
     const SYNC_SAVE_COOLDOWN = 2000; // 2秒冷却时间，避免频繁保存
+
+    // Firebase 状态管理
+    let firebaseApp = null;
+    let firebaseAuth = null;
+    let firebaseDb = null;
+    let firebaseStorage = null;
+    let currentUser = null;
+    let isFirebaseInitialized = false;
+    let connectionCode = null;
+    let connectionCodeExpiry = null;
 
     // 安全的z-index值，避免影响其他插件
     const SAFE_Z_INDEX = {
@@ -386,9 +406,885 @@ jQuery(async () => {
 
         dataVersion: 4.0 // 数据版本标记 - 升级到4.0表示拓麻歌子系统
     };
-    
+
     // -----------------------------------------------------------------
-    // 2. 预设人设定义
+    // 2. Firebase 云端备份系统
+    // -----------------------------------------------------------------
+
+    /**
+     * 初始化Firebase服务
+     */
+    async function initializeFirebase() {
+        try {
+            console.log(`[${extensionName}] 🔥 初始化Firebase服务...`);
+
+            // 检查Firebase SDK是否已加载
+            if (typeof firebase === 'undefined') {
+                console.log(`[${extensionName}] 📦 加载Firebase SDK...`);
+                await loadFirebaseSDK();
+            }
+
+            // 初始化Firebase应用
+            if (!firebaseApp) {
+                firebaseApp = firebase.initializeApp(FIREBASE_CONFIG);
+                firebaseAuth = firebase.auth();
+                firebaseDb = firebase.firestore();
+                firebaseStorage = firebase.storage();
+
+                // 初始化Analytics (可选)
+                try {
+                    if (firebase.analytics && FIREBASE_CONFIG.measurementId) {
+                        firebase.analytics();
+                        console.log(`[${extensionName}] 📊 Firebase Analytics已启用`);
+                    }
+                } catch (analyticsError) {
+                    console.warn(`[${extensionName}] ⚠️ Firebase Analytics初始化失败:`, analyticsError);
+                }
+
+                console.log(`[${extensionName}] ✅ Firebase应用初始化成功`);
+            }
+
+            // 设置认证状态监听器
+            firebaseAuth.onAuthStateChanged((user) => {
+                currentUser = user;
+                updateFirebaseStatus();
+
+                if (user) {
+                    console.log(`[${extensionName}] 👤 用户已登录: ${user.uid}`);
+                } else {
+                    console.log(`[${extensionName}] 👤 用户未登录`);
+                }
+            });
+
+            isFirebaseInitialized = true;
+            updateFirebaseStatus();
+
+            return true;
+        } catch (error) {
+            console.error(`[${extensionName}] ❌ Firebase初始化失败:`, error);
+            updateFirebaseStatus('error', `初始化失败: ${error.message}`);
+            return false;
+        }
+    }
+
+    /**
+     * 动态加载Firebase SDK
+     */
+    async function loadFirebaseSDK() {
+        return new Promise((resolve, reject) => {
+            // 检查是否已经加载了Firebase
+            if (typeof firebase !== 'undefined') {
+                console.log(`[${extensionName}] 📦 Firebase SDK已存在`);
+                resolve();
+                return;
+            }
+
+            // Firebase核心SDK (使用compat版本以保持兼容性)
+            const coreScript = document.createElement('script');
+            coreScript.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js';
+            coreScript.onload = () => {
+                // Firebase认证SDK
+                const authScript = document.createElement('script');
+                authScript.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js';
+                authScript.onload = () => {
+                    // Firebase Firestore SDK
+                    const firestoreScript = document.createElement('script');
+                    firestoreScript.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js';
+                    firestoreScript.onload = () => {
+                        // Firebase Storage SDK
+                        const storageScript = document.createElement('script');
+                        storageScript.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js';
+                        storageScript.onload = () => {
+                            // Firebase Analytics SDK (可选)
+                            const analyticsScript = document.createElement('script');
+                            analyticsScript.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-analytics-compat.js';
+                            analyticsScript.onload = () => {
+                                console.log(`[${extensionName}] 📦 Firebase SDK加载完成`);
+                                resolve();
+                            };
+                            analyticsScript.onerror = () => {
+                                console.warn(`[${extensionName}] ⚠️ Firebase Analytics加载失败，继续使用其他功能`);
+                                resolve(); // Analytics失败不影响其他功能
+                            };
+                            document.head.appendChild(analyticsScript);
+                        };
+                        storageScript.onerror = reject;
+                        document.head.appendChild(storageScript);
+                    };
+                    firestoreScript.onerror = reject;
+                    document.head.appendChild(firestoreScript);
+                };
+                authScript.onerror = reject;
+                document.head.appendChild(authScript);
+            };
+            coreScript.onerror = reject;
+            document.head.appendChild(coreScript);
+        });
+    }
+
+    /**
+     * 匿名登录Firebase
+     */
+    async function signInAnonymously() {
+        try {
+            if (!isFirebaseInitialized) {
+                throw new Error('Firebase未初始化');
+            }
+
+            console.log(`[${extensionName}] 🔐 执行匿名登录...`);
+            updateFirebaseStatus('connecting', '正在登录...');
+
+            const userCredential = await firebaseAuth.signInAnonymously();
+            currentUser = userCredential.user;
+
+            console.log(`[${extensionName}] ✅ 匿名登录成功: ${currentUser.uid}`);
+
+            // 创建用户配置文档
+            await createUserProfile();
+
+            updateFirebaseStatus('connected', '已连接');
+            return currentUser;
+        } catch (error) {
+            console.error(`[${extensionName}] ❌ 匿名登录失败:`, error);
+            updateFirebaseStatus('error', `登录失败: ${error.message}`);
+            throw error;
+        }
+    }
+
+    /**
+     * 创建用户配置文档
+     */
+    async function createUserProfile() {
+        try {
+            if (!currentUser) return;
+
+            const userDoc = firebaseDb.collection('users').doc(currentUser.uid);
+            const docSnapshot = await userDoc.get();
+
+            if (!docSnapshot.exists) {
+                const userProfile = {
+                    uid: currentUser.uid,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    deviceName: getDeviceName(),
+                    lastActive: firebase.firestore.FieldValue.serverTimestamp(),
+                    dataVersion: '1.0'
+                };
+
+                await userDoc.set(userProfile);
+                console.log(`[${extensionName}] 👤 用户配置文档已创建`);
+            } else {
+                // 更新最后活跃时间
+                await userDoc.update({
+                    lastActive: firebase.firestore.FieldValue.serverTimestamp(),
+                    deviceName: getDeviceName()
+                });
+                console.log(`[${extensionName}] 👤 用户配置文档已更新`);
+            }
+        } catch (error) {
+            console.error(`[${extensionName}] ❌ 创建用户配置失败:`, error);
+        }
+    }
+
+    /**
+     * 获取设备名称
+     */
+    function getDeviceName() {
+        const userAgent = navigator.userAgent;
+        if (/iPad|iPhone|iPod/.test(userAgent)) {
+            return 'iOS设备';
+        } else if (/Android/.test(userAgent)) {
+            return 'Android设备';
+        } else if (/Windows/.test(userAgent)) {
+            return 'Windows电脑';
+        } else if (/Mac/.test(userAgent)) {
+            return 'Mac电脑';
+        } else {
+            return '未知设备';
+        }
+    }
+
+    /**
+     * 生成设备连接码
+     */
+    async function generateConnectionCode() {
+        try {
+            if (!currentUser) {
+                throw new Error('用户未登录');
+            }
+
+            console.log(`[${extensionName}] 🔑 生成连接码...`);
+
+            // 生成6位随机连接码
+            const code = generateRandomCode();
+            const expiry = Date.now() + (5 * 60 * 1000); // 5分钟后过期
+
+            // 保存连接码到Firestore
+            const codeDoc = firebaseDb.collection('connectionCodes').doc(code);
+            await codeDoc.set({
+                userId: currentUser.uid,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                expiresAt: new Date(expiry),
+                used: false
+            });
+
+            connectionCode = code;
+            connectionCodeExpiry = expiry;
+
+            console.log(`[${extensionName}] ✅ 连接码生成成功: ${code}`);
+
+            // 5分钟后自动清理过期连接码
+            setTimeout(() => {
+                cleanupExpiredCode(code);
+            }, 5 * 60 * 1000);
+
+            return code;
+        } catch (error) {
+            console.error(`[${extensionName}] ❌ 生成连接码失败:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * 生成随机连接码
+     */
+    function generateRandomCode() {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let result = '';
+        for (let i = 0; i < 6; i++) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
+    }
+
+    /**
+     * 清理过期连接码
+     */
+    async function cleanupExpiredCode(code) {
+        try {
+            const codeDoc = firebaseDb.collection('connectionCodes').doc(code);
+            await codeDoc.delete();
+            console.log(`[${extensionName}] 🧹 已清理过期连接码: ${code}`);
+        } catch (error) {
+            console.error(`[${extensionName}] ❌ 清理连接码失败:`, error);
+        }
+    }
+
+    /**
+     * 使用连接码连接到主设备
+     */
+    async function connectWithCode(code) {
+        try {
+            if (!isFirebaseInitialized) {
+                throw new Error('Firebase未初始化');
+            }
+
+            console.log(`[${extensionName}] 🔗 尝试连接码: ${code}`);
+
+            // 查找连接码
+            const codeDoc = firebaseDb.collection('connectionCodes').doc(code.toUpperCase());
+            const docSnapshot = await codeDoc.get();
+
+            if (!docSnapshot.exists) {
+                throw new Error('连接码不存在或已过期');
+            }
+
+            const codeData = docSnapshot.data();
+
+            // 检查连接码是否过期
+            if (codeData.expiresAt.toDate() < new Date()) {
+                await codeDoc.delete();
+                throw new Error('连接码已过期');
+            }
+
+            // 检查连接码是否已使用
+            if (codeData.used) {
+                throw new Error('连接码已被使用');
+            }
+
+            // 匿名登录
+            await signInAnonymously();
+
+            // 采用主设备的用户ID
+            const primaryUserId = codeData.userId;
+
+            // 标记连接码为已使用
+            await codeDoc.update({
+                used: true,
+                usedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                secondaryUserId: currentUser.uid
+            });
+
+            // 从主设备同步数据
+            await syncDataFromPrimary(primaryUserId);
+
+            console.log(`[${extensionName}] ✅ 连接成功，数据已同步`);
+
+            return true;
+        } catch (error) {
+            console.error(`[${extensionName}] ❌ 连接失败:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * 从主设备同步数据
+     */
+    async function syncDataFromPrimary(primaryUserId) {
+        try {
+            console.log(`[${extensionName}] 📥 从主设备同步数据...`);
+
+            const userDoc = firebaseDb.collection('users').doc(primaryUserId);
+            const docSnapshot = await userDoc.get();
+
+            if (!docSnapshot.exists) {
+                throw new Error('主设备数据不存在');
+            }
+
+            const userData = docSnapshot.data();
+
+            // 同步宠物数据
+            if (userData.petData) {
+                petData = { ...petData, ...userData.petData };
+                savePetData();
+                console.log(`[${extensionName}] ✅ 宠物数据已同步`);
+            }
+
+            // 同步AI设置
+            if (userData.aiSettings) {
+                localStorage.setItem(`${extensionName}-ai-settings`, JSON.stringify(userData.aiSettings));
+                console.log(`[${extensionName}] ✅ AI设置已同步`);
+            }
+
+            // 同步头像
+            if (userData.avatar) {
+                customAvatarData = userData.avatar;
+                localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, userData.avatar);
+                console.log(`[${extensionName}] ✅ 头像已同步`);
+            }
+
+            // 更新UI
+            renderPetStatus();
+            loadAISettings();
+            loadCustomAvatar();
+
+            toastr.success('所有数据已从主设备同步完成！', '🎉 同步成功');
+
+        } catch (error) {
+            console.error(`[${extensionName}] ❌ 数据同步失败:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * 备份所有数据到Firebase
+     */
+    async function backupAllDataToFirebase() {
+        try {
+            if (!currentUser) {
+                throw new Error('用户未登录');
+            }
+
+            console.log(`[${extensionName}] ☁️ 备份所有数据到Firebase...`);
+
+            const userDoc = firebaseDb.collection('users').doc(currentUser.uid);
+
+            // 准备备份数据
+            const backupData = {
+                lastBackup: firebase.firestore.FieldValue.serverTimestamp(),
+                deviceName: getDeviceName(),
+                dataVersion: '1.0'
+            };
+
+            // 备份宠物数据
+            if (petData) {
+                backupData.petData = {
+                    ...petData,
+                    lastSyncTime: Date.now()
+                };
+            }
+
+            // 备份AI设置
+            const aiSettings = localStorage.getItem(`${extensionName}-ai-settings`);
+            if (aiSettings) {
+                try {
+                    backupData.aiSettings = JSON.parse(aiSettings);
+                } catch (e) {
+                    console.warn(`[${extensionName}] AI设置解析失败，跳过备份`);
+                }
+            }
+
+            // 备份头像（如果小于500KB）
+            if (customAvatarData && customAvatarData.length < 500000) {
+                backupData.avatar = customAvatarData;
+            } else if (customAvatarData) {
+                console.warn(`[${extensionName}] 头像过大(${Math.round(customAvatarData.length/1024)}KB)，跳过备份`);
+            }
+
+            // 执行备份
+            await userDoc.set(backupData, { merge: true });
+
+            console.log(`[${extensionName}] ✅ 数据备份完成`);
+            toastr.success('所有数据已备份到云端！', '☁️ 备份成功');
+
+            return true;
+        } catch (error) {
+            console.error(`[${extensionName}] ❌ 数据备份失败:`, error);
+            toastr.error(`备份失败: ${error.message}`, '❌ 备份失败');
+            throw error;
+        }
+    }
+
+    /**
+     * 从Firebase恢复数据
+     */
+    async function restoreDataFromFirebase() {
+        try {
+            if (!currentUser) {
+                throw new Error('用户未登录');
+            }
+
+            console.log(`[${extensionName}] 📥 从Firebase恢复数据...`);
+
+            const userDoc = firebaseDb.collection('users').doc(currentUser.uid);
+            const docSnapshot = await userDoc.get();
+
+            if (!docSnapshot.exists) {
+                throw new Error('云端没有找到备份数据');
+            }
+
+            const userData = docSnapshot.data();
+            let restoredCount = 0;
+
+            // 恢复宠物数据
+            if (userData.petData) {
+                petData = { ...petData, ...userData.petData };
+                savePetData();
+                restoredCount++;
+                console.log(`[${extensionName}] ✅ 宠物数据已恢复`);
+            }
+
+            // 恢复AI设置
+            if (userData.aiSettings) {
+                localStorage.setItem(`${extensionName}-ai-settings`, JSON.stringify(userData.aiSettings));
+                restoredCount++;
+                console.log(`[${extensionName}] ✅ AI设置已恢复`);
+            }
+
+            // 恢复头像
+            if (userData.avatar) {
+                customAvatarData = userData.avatar;
+                localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, userData.avatar);
+                restoredCount++;
+                console.log(`[${extensionName}] ✅ 头像已恢复`);
+            }
+
+            // 更新UI
+            renderPetStatus();
+            loadAISettings();
+            loadCustomAvatar();
+            updateAvatarDisplay();
+            updateFloatingButtonAvatar();
+
+            const lastBackup = userData.lastBackup ? userData.lastBackup.toDate().toLocaleString() : '未知';
+            toastr.success(`已恢复 ${restoredCount} 项数据\n最后备份时间: ${lastBackup}`, '📥 恢复成功', { timeOut: 5000 });
+
+            return restoredCount;
+        } catch (error) {
+            console.error(`[${extensionName}] ❌ 数据恢复失败:`, error);
+            toastr.error(`恢复失败: ${error.message}`, '❌ 恢复失败');
+            throw error;
+        }
+    }
+
+    /**
+     * 检查Firebase同步状态
+     */
+    async function checkFirebaseSyncStatus() {
+        try {
+            if (!currentUser) {
+                return {
+                    connected: false,
+                    message: '未连接到云端'
+                };
+            }
+
+            const userDoc = firebaseDb.collection('users').doc(currentUser.uid);
+            const docSnapshot = await userDoc.get();
+
+            if (!docSnapshot.exists) {
+                return {
+                    connected: true,
+                    hasBackup: false,
+                    message: '已连接，但没有备份数据'
+                };
+            }
+
+            const userData = docSnapshot.data();
+            const lastBackup = userData.lastBackup ? userData.lastBackup.toDate() : null;
+
+            return {
+                connected: true,
+                hasBackup: true,
+                lastBackup: lastBackup,
+                hasPetData: !!userData.petData,
+                hasAISettings: !!userData.aiSettings,
+                hasAvatar: !!userData.avatar,
+                deviceName: userData.deviceName,
+                message: lastBackup ? `最后备份: ${lastBackup.toLocaleString()}` : '有备份数据'
+            };
+        } catch (error) {
+            console.error(`[${extensionName}] ❌ 检查同步状态失败:`, error);
+            return {
+                connected: false,
+                error: true,
+                message: `检查失败: ${error.message}`
+            };
+        }
+    }
+
+    /**
+     * 断开Firebase连接
+     */
+    async function disconnectFirebase() {
+        try {
+            if (currentUser) {
+                await firebaseAuth.signOut();
+                console.log(`[${extensionName}] 👋 已断开Firebase连接`);
+            }
+
+            currentUser = null;
+            connectionCode = null;
+            connectionCodeExpiry = null;
+
+            updateFirebaseStatus('disconnected', '已断开连接');
+            toastr.info('已断开云端连接', '🔌 断开连接');
+
+            return true;
+        } catch (error) {
+            console.error(`[${extensionName}] ❌ 断开连接失败:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * 更新Firebase状态显示
+     */
+    function updateFirebaseStatus(status = 'disconnected', message = '') {
+        const statusContainer = $('#firebase-status');
+        const statusIcon = $('#firebase-status-icon');
+        const statusText = $('#firebase-status-text');
+        const userInfo = $('#firebase-user-info');
+        const userId = $('#firebase-user-id');
+        const deviceName = $('#firebase-device-name');
+
+        // 移除所有状态类
+        statusContainer.removeClass('connected connecting error');
+        statusIcon.removeClass('spinning');
+
+        switch (status) {
+            case 'connected':
+                statusContainer.addClass('connected');
+                statusIcon.text('🟢');
+                statusText.text(message || '已连接');
+                if (currentUser) {
+                    userId.text(currentUser.uid.substring(0, 8) + '...');
+                    deviceName.text(getDeviceName());
+                    userInfo.show();
+                }
+                // 启用相关按钮
+                $('#firebase-generate-code-btn, #firebase-backup-now-btn').prop('disabled', false);
+                $('#firebase-data-management').show();
+                break;
+
+            case 'connecting':
+                statusContainer.addClass('connecting');
+                statusIcon.text('🟡').addClass('spinning');
+                statusText.text(message || '连接中...');
+                userInfo.hide();
+                break;
+
+            case 'error':
+                statusContainer.addClass('error');
+                statusIcon.text('🔴');
+                statusText.text(message || '连接错误');
+                userInfo.hide();
+                // 禁用相关按钮
+                $('#firebase-generate-code-btn, #firebase-backup-now-btn').prop('disabled', true);
+                $('#firebase-data-management').hide();
+                break;
+
+            default: // disconnected
+                statusIcon.text('⚪');
+                statusText.text(message || '未连接');
+                userInfo.hide();
+                // 禁用相关按钮
+                $('#firebase-generate-code-btn, #firebase-backup-now-btn').prop('disabled', true);
+                $('#firebase-data-management').hide();
+                break;
+        }
+    }
+
+    /**
+     * 绑定Firebase UI事件
+     */
+    function bindFirebaseEvents() {
+        // 初始化云端备份按钮
+        $('#firebase-init-btn').on('click', async function() {
+            const button = $(this);
+            const originalText = button.text();
+
+            try {
+                button.prop('disabled', true).text('🔄 初始化中...');
+
+                await initializeFirebase();
+                await signInAnonymously();
+
+                button.text('✅ 初始化完成').removeClass('firebase-btn-primary').addClass('firebase-btn-success');
+
+                setTimeout(() => {
+                    button.text(originalText).removeClass('firebase-btn-success').addClass('firebase-btn-primary').prop('disabled', false);
+                }, 2000);
+
+            } catch (error) {
+                button.text('❌ 初始化失败').removeClass('firebase-btn-primary').addClass('firebase-btn-danger');
+                toastr.error(`初始化失败: ${error.message}`, '❌ 错误');
+
+                setTimeout(() => {
+                    button.text(originalText).removeClass('firebase-btn-danger').addClass('firebase-btn-primary').prop('disabled', false);
+                }, 3000);
+            }
+        });
+
+        // 生成连接码按钮
+        $('#firebase-generate-code-btn').on('click', async function() {
+            const button = $(this);
+            const originalText = button.text();
+
+            try {
+                button.prop('disabled', true).text('🔄 生成中...');
+
+                const code = await generateConnectionCode();
+
+                // 显示连接码
+                $('#firebase-connection-code-text').val(code);
+                $('#firebase-connection-code-display').show();
+
+                button.text('✅ 已生成').removeClass('firebase-btn-secondary').addClass('firebase-btn-success');
+
+                setTimeout(() => {
+                    button.text(originalText).removeClass('firebase-btn-success').addClass('firebase-btn-secondary').prop('disabled', false);
+                }, 2000);
+
+            } catch (error) {
+                button.text('❌ 生成失败').removeClass('firebase-btn-secondary').addClass('firebase-btn-danger');
+                toastr.error(`生成连接码失败: ${error.message}`, '❌ 错误');
+
+                setTimeout(() => {
+                    button.text(originalText).removeClass('firebase-btn-danger').addClass('firebase-btn-secondary').prop('disabled', false);
+                }, 3000);
+            }
+        });
+
+        // 复制连接码按钮
+        $('#firebase-copy-code-btn').on('click', function() {
+            const codeInput = $('#firebase-connection-code-text')[0];
+            codeInput.select();
+            codeInput.setSelectionRange(0, 99999); // 移动端兼容
+
+            try {
+                document.execCommand('copy');
+                toastr.success('连接码已复制到剪贴板！', '📋 复制成功');
+
+                const button = $(this);
+                const originalText = button.text();
+                button.text('✅ 已复制');
+                setTimeout(() => {
+                    button.text(originalText);
+                }, 2000);
+            } catch (error) {
+                toastr.error('复制失败，请手动复制', '❌ 复制失败');
+            }
+        });
+
+        // 连接同步按钮
+        $('#firebase-connect-btn').on('click', async function() {
+            const button = $(this);
+            const originalText = button.text();
+            const codeInput = $('#firebase-connection-code-input');
+            const code = codeInput.val().trim().toUpperCase();
+
+            if (!code || code.length !== 6) {
+                toastr.warning('请输入6位连接码', '⚠️ 输入错误');
+                codeInput.focus();
+                return;
+            }
+
+            try {
+                button.prop('disabled', true).text('🔄 连接中...');
+                codeInput.prop('disabled', true);
+
+                await initializeFirebase();
+                await connectWithCode(code);
+
+                button.text('✅ 连接成功').removeClass('firebase-btn-primary').addClass('firebase-btn-success');
+                codeInput.val('').prop('disabled', false);
+
+                setTimeout(() => {
+                    button.text(originalText).removeClass('firebase-btn-success').addClass('firebase-btn-primary').prop('disabled', false);
+                }, 2000);
+
+            } catch (error) {
+                button.text('❌ 连接失败').removeClass('firebase-btn-primary').addClass('firebase-btn-danger');
+                toastr.error(`连接失败: ${error.message}`, '❌ 连接错误');
+                codeInput.prop('disabled', false);
+
+                setTimeout(() => {
+                    button.text(originalText).removeClass('firebase-btn-danger').addClass('firebase-btn-primary').prop('disabled', false);
+                }, 3000);
+            }
+        });
+
+        // 立即备份按钮
+        $('#firebase-backup-now-btn').on('click', async function() {
+            const button = $(this);
+            const originalText = button.text();
+
+            try {
+                button.prop('disabled', true).text('☁️ 备份中...');
+
+                await backupAllDataToFirebase();
+
+                button.text('✅ 备份完成').removeClass('firebase-btn-success').addClass('firebase-btn-info');
+
+                setTimeout(() => {
+                    button.text(originalText).removeClass('firebase-btn-info').addClass('firebase-btn-success').prop('disabled', false);
+                }, 2000);
+
+            } catch (error) {
+                button.text('❌ 备份失败').removeClass('firebase-btn-success').addClass('firebase-btn-danger');
+
+                setTimeout(() => {
+                    button.text(originalText).removeClass('firebase-btn-danger').addClass('firebase-btn-success').prop('disabled', false);
+                }, 3000);
+            }
+        });
+
+        // 恢复数据按钮
+        $('#firebase-restore-btn').on('click', async function() {
+            const button = $(this);
+            const originalText = button.text();
+
+            if (!confirm('确定要从云端恢复数据吗？\n\n这将覆盖当前的所有本地数据！')) {
+                return;
+            }
+
+            try {
+                button.prop('disabled', true).text('📥 恢复中...');
+
+                await restoreDataFromFirebase();
+
+                button.text('✅ 恢复完成').removeClass('firebase-btn-info').addClass('firebase-btn-success');
+
+                setTimeout(() => {
+                    button.text(originalText).removeClass('firebase-btn-success').addClass('firebase-btn-info').prop('disabled', false);
+                }, 2000);
+
+            } catch (error) {
+                button.text('❌ 恢复失败').removeClass('firebase-btn-info').addClass('firebase-btn-danger');
+
+                setTimeout(() => {
+                    button.text(originalText).removeClass('firebase-btn-danger').addClass('firebase-btn-info').prop('disabled', false);
+                }, 3000);
+            }
+        });
+
+        // 检查同步状态按钮
+        $('#firebase-check-status-btn').on('click', async function() {
+            const button = $(this);
+            const originalText = button.text();
+
+            try {
+                button.prop('disabled', true).text('🔍 检查中...');
+
+                const status = await checkFirebaseSyncStatus();
+
+                // 更新同步详情显示
+                $('#sync-pet-status').text(status.hasPetData ? '✅ 已同步' : '❌ 未同步');
+                $('#sync-ai-status').text(status.hasAISettings ? '✅ 已同步' : '❌ 未同步');
+                $('#sync-avatar-status').text(status.hasAvatar ? '✅ 已同步' : '❌ 未同步');
+                $('#sync-last-time').text(status.lastBackup ? status.lastBackup.toLocaleString() : '从未备份');
+
+                $('#firebase-sync-details').show();
+
+                button.text('✅ 检查完成').removeClass('firebase-btn-outline').addClass('firebase-btn-success');
+
+                setTimeout(() => {
+                    button.text(originalText).removeClass('firebase-btn-success').addClass('firebase-btn-outline').prop('disabled', false);
+                }, 2000);
+
+            } catch (error) {
+                button.text('❌ 检查失败').removeClass('firebase-btn-outline').addClass('firebase-btn-danger');
+                toastr.error(`检查失败: ${error.message}`, '❌ 错误');
+
+                setTimeout(() => {
+                    button.text(originalText).removeClass('firebase-btn-danger').addClass('firebase-btn-outline').prop('disabled', false);
+                }, 3000);
+            }
+        });
+
+        // 断开连接按钮
+        $('#firebase-disconnect-btn').on('click', async function() {
+            const button = $(this);
+            const originalText = button.text();
+
+            if (!confirm('确定要断开云端连接吗？\n\n断开后将无法同步数据，但本地数据会保留。')) {
+                return;
+            }
+
+            try {
+                button.prop('disabled', true).text('🔌 断开中...');
+
+                await disconnectFirebase();
+
+                // 隐藏相关UI
+                $('#firebase-connection-code-display').hide();
+                $('#firebase-sync-details').hide();
+
+                button.text('✅ 已断开').removeClass('firebase-btn-danger').addClass('firebase-btn-success');
+
+                setTimeout(() => {
+                    button.text(originalText).removeClass('firebase-btn-success').addClass('firebase-btn-danger').prop('disabled', false);
+                }, 2000);
+
+            } catch (error) {
+                button.text('❌ 断开失败').removeClass('firebase-btn-danger').addClass('firebase-btn-warning');
+                toastr.error(`断开失败: ${error.message}`, '❌ 错误');
+
+                setTimeout(() => {
+                    button.text(originalText).removeClass('firebase-btn-warning').addClass('firebase-btn-danger').prop('disabled', false);
+                }, 3000);
+            }
+        });
+
+        // 连接码输入框格式化
+        $('#firebase-connection-code-input').on('input', function() {
+            let value = $(this).val().toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (value.length > 6) {
+                value = value.substring(0, 6);
+            }
+            $(this).val(value);
+        });
+
+        // 连接码输入框回车键
+        $('#firebase-connection-code-input').on('keypress', function(e) {
+            if (e.which === 13) { // Enter键
+                $('#firebase-connect-btn').click();
+            }
+        });
+    }
+
+    // -----------------------------------------------------------------
+    // 7. 预设人设定义
     // -----------------------------------------------------------------
 
     const PRESET_PERSONALITIES = {
@@ -1948,120 +2844,6 @@ ${currentPersonality}
         console.log(`[${extensionName}] 💡   - diagnoseSillyTavernEnvironment() // 环境诊断`);
         console.log(`[${extensionName}] 💡   - testVirtualPetAPIDiscovery() // API发现测试`);
         console.log(`[${extensionName}] 💡   - quickAPITest() // 快速API测试`);
-
-        // 绑定Firebase同步按钮事件
-        $('#firebase-generate-code-btn').on('click', generateConnectionCode);
-        $('#firebase-connect-btn').on('click', connectWithCode);
-        $('#firebase-disconnect-btn').on('click', disconnectFirebase);
-
-        // 初始化Firebase
-        initializeFirebase();
-    }
-
-    /**
-     * 生成用于设备同步的连��码
-     */
-    async function generateConnectionCode() {
-        if (!currentUser) {
-            toastr.error("尚未连接到同步服务，请稍后再试。");
-            return;
-        }
-
-        const button = $('#firebase-generate-code-btn');
-        button.prop('disabled', true).text('生成中...');
-
-        try {
-            const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-            const expires = Date.now() + 10 * 60 * 1000; // 10分钟有效期
-
-            const codeRef = firestore.collection('syncCodes').doc(code);
-            await codeRef.set({
-                uid: currentUser.uid,
-                expires: firebase.firestore.Timestamp.fromMillis(expires)
-            });
-
-            $('#firebase-connection-code').text(code);
-            $('#firebase-code-display').show();
-            toastr.success("连接码已生成，请在10分钟内在新设备上使用。");
-
-        } catch (error) {
-            console.error(`[${extensionName}] ❌ 生成连接码失败:`, error);
-            toastr.error("生成连接码失败，请检查网络并重试。");
-        } finally {
-            button.prop('disabled', false).text('生成连接码');
-        }
-    }
-
-    /**
-     * 使用连接码连接到同步服务
-     */
-    async function connectWithCode() {
-        const code = $('#firebase-code-input').val().toUpperCase();
-        if (code.length !== 6) {
-            toastr.warning("请输入一个6位数的连接码。");
-            return;
-        }
-
-        const button = $('#firebase-connect-btn');
-        button.prop('disabled', true).text('连接中...');
-
-        try {
-            const codeRef = firestore.collection('syncCodes').doc(code);
-            const doc = await codeRef.get();
-
-            if (doc.exists) {
-                const data = doc.data();
-                if (data.expires.toMillis() > Date.now()) {
-                    // 连接码有效
-                    const newUid = data.uid;
-                    
-                    // 1. 清除当前匿名用户
-                    if (currentUser) {
-                       await auth.signOut();
-                    }
-                    
-                    // 2. 保存新的UID并强制重新认证
-                    localStorage.setItem(STORAGE_KEY_FIREBASE_UID, newUid);
-                    
-                    // 3. 重新初始化Firebase流程，它会自动使用新的UID登录
-                    await initializeFirebase();
-
-                    toastr.success("🎉 连接成功！正在同步数据...");
-                    
-                    // 4. 清除已使用的连接码
-                    await codeRef.delete();
-
-                } else {
-                    toastr.error("连接码已过期，请重新生成。");
-                }
-            } else {
-                toastr.error("无效的连接码，请检查后重试。");
-            }
-        } catch (error) {
-            console.error(`[${extensionName}] ❌ 使用连接码失败:`, error);
-            toastr.error("连接失败，请检查网络并重试。");
-        } finally {
-            button.prop('disabled', false).text('连接');
-        }
-    }
-
-    /**
-     * 断开Firebase同步
-     */
-    async function disconnectFirebase() {
-        if (unsubscribeFirestore) {
-            unsubscribeFirestore();
-            unsubscribeFirestore = null;
-        }
-        if (auth.currentUser) {
-            await auth.signOut();
-        }
-        localStorage.removeItem(STORAGE_KEY_FIREBASE_UID);
-        currentUser = null;
-        updateSyncStatus(false);
-        toastr.info("已断开云同步。");
-        // 重新加载本地数据
-        loadPetData();
     }
 
     /**
@@ -2077,219 +2859,50 @@ ${currentPersonality}
     }
 
     // -----------------------------------------------------------------
-    // 4. Firebase 同步逻辑
-    // -----------------------------------------------------------------
-
-    /**
-     * 初始化Firebase并处理匿名登录
-     */
-    async function initializeFirebase() {
-        try {
-            // 您的 Firebase 配置
-            const firebaseConfig = {
-                apiKey: "AIzaSyA74TnN9IoyQjCncKOIOShWEktrL1hd96o",
-                authDomain: "kpop-pett.firebaseapp.com",
-                projectId: "kpop-pett",
-                storageBucket: "kpop-pett.appspot.com",
-                messagingSenderId: "264650615774",
-                appId: "1:264650615774:web:f500ff555183110c3f0b4f",
-                measurementId: "G-3BH0GMJR3D"
-            };
-
-            // 初始化 Firebase
-            if (!firebase.apps.length) {
-                firebaseApp = firebase.initializeApp(firebaseConfig);
-            } else {
-                firebaseApp = firebase.app();
-            }
-
-            auth = firebase.auth();
-            firestore = firebase.firestore();
-
-            // 监听认证状态变化
-            auth.onAuthStateChanged(async (user) => {
-                if (user) {
-                    // 用户已登录
-                    currentUser = user;
-                    console.log(`[${extensionName}] 🔥 Firebase 匿名登录成功, UID: ${user.uid}`);
-                    localStorage.setItem(STORAGE_KEY_FIREBASE_UID, user.uid);
-                    
-                    // 设置实时监听
-                    await setupFirestoreListener();
-                    updateSyncStatus(true);
-
-                } else {
-                    // 用户未登录，尝试登录
-                    console.log(`[${extensionName}] ⏳ Firebase 用户未登录, 尝试匿名登录...`);
-                    currentUser = null;
-                    updateSyncStatus(false);
-                    try {
-                        const userCredential = await auth.signInAnonymously();
-                        currentUser = userCredential.user;
-                        console.log(`[${extensionName}] ✅ Firebase 新匿名用户登录成功, UID: ${currentUser.uid}`);
-                    } catch (error) {
-                        console.error(`[${extensionName}] ❌ Firebase 匿名登录失败:`, error);
-                        toastr.error("云同步服务连接失败，请检查网络或刷新页面重试。");
-                    }
-                }
-            });
-
-        } catch (error) {
-            console.error(`[${extensionName}] ❌ Firebase 初始化失败:`, error);
-            toastr.error("加载云同步服务失败，部分功能可能无法使用。");
-        }
-    }
-    
-    /**
-     * 设置Firestore实时监听器
-     */
-    async function setupFirestoreListener() {
-        if (unsubscribeFirestore) {
-            unsubscribeFirestore(); // 取消之前的监听
-        }
-
-        if (!currentUser) return;
-
-        const petDocRef = firestore.collection('pets').doc(currentUser.uid);
-
-        unsubscribeFirestore = petDocRef.onSnapshot(async (doc) => {
-            if (isSyncing) return; // 如果正在同步，则忽略收到的更新
-
-            console.log(`[${extensionName}] ☁️ 收到云端数据更新`);
-            if (doc.exists) {
-                const cloudData = doc.data();
-                
-                // 检查云端数据是否比本地新
-                const localUpdateTime = petData.lastUpdateTime || 0;
-                const cloudUpdateTime = cloudData.lastUpdateTime || 0;
-
-                if (cloudUpdateTime > localUpdateTime) {
-                    console.log(`[${extensionName}] ☁️ 云端数据较新，正在同步到本地...`);
-                    isSyncing = true;
-                    petData = { ...petData, ...cloudData };
-                    localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(petData));
-                    updateUI();
-                    toastr.info("宠物数据已从云端同步更新！");
-                    setTimeout(() => { isSyncing = false; }, 1000);
-                }
-            } else {
-                 // 云端没有数据，将本地数据上传
-                console.log(`[${extensionName}] ☁️ 云端无数据，将本地数据上传...`);
-                await savePetData(true); // 强制保存到云
-            }
-        }, (error) => {
-            console.error(`[${extensionName}] ❌ Firestore 监听失败:`, error);
-            updateSyncStatus(false);
-        });
-    }
-
-    /**
-     * 更新同步状态的UI显示
-     * @param {boolean} isConnected - 是否已连接
-     */
-    function updateSyncStatus(isConnected) {
-        const statusEl = $('#firebase-sync-status');
-        if (isConnected) {
-            statusEl.text('已连接，同步中').css('color', '#48bb78');
-            $('#firebase-disconnect-btn').show();
-        } else {
-            statusEl.text('未连接').css('color', '#ffa500');
-            $('#firebase-disconnect-btn').hide();
-        }
-    }
-
-    // -----------------------------------------------------------------
     // 3. 宠物系统核心逻辑
     // -----------------------------------------------------------------
     
     /**
-     * 加载宠物数据（已集成Firebase同步）
+     * 加载宠物数据（支持跨设备同步）
      */
-    async function loadPetData() {
-        console.log(`[${extensionName}] 正在加载宠物数据...`);
-        
-        // 如果已登录Firebase，优先从云端加载
-        if (currentUser) {
-            try {
-                const petDocRef = firestore.collection('pets').doc(currentUser.uid);
-                const doc = await petDocRef.get();
-
-                if (doc.exists) {
-                    console.log(`[${extensionName}] ✅ 成功从Firestore加载数据`);
-                    petData = doc.data();
-                    // 将云端数据同步到本地
-                    localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(petData));
-                    return; // 加载成功，结束函数
-                } else {
-                    console.log(`[${extensionName}] ⚠️ Firestore中无此用户数据，尝试使用本地数据...`);
-                }
-            } catch (error) {
-                console.error(`[${extensionName}] ❌ 从Firestore加载数据失败:`, error);
-            }
-        }
-
-        // 如果无法从云端加载，则回退到本地加载
-        console.log(`[${extensionName}] 尝试从本地存储加载数据...`);
+    function loadPetData() {
+        // 首先尝试从同步存储加载
+        const syncData = loadFromSyncStorage();
         const localData = localStorage.getItem(STORAGE_KEY_PET_DATA);
-        if (localData) {
-            try {
-                petData = JSON.parse(localData);
-                console.log(`[${extensionName}] ✅ 成功从本地存储加载数据`);
 
-                // 如果此时已经登录了Firebase但云端没数据，则将本地数据上传
-                if (currentUser) {
-                    console.log(`[${extensionName}] 🚀 将本地数据首次同步到云端...`);
-                    await savePetData(true); // 强制保存到云
+        let savedData = null;
+        let dataSource = 'none';
+
+        // 比较同步数据和本地数据，选择最新的
+        if (syncData && localData) {
+            try {
+                const syncParsed = typeof syncData === 'object' ? syncData : JSON.parse(syncData);
+                const localParsed = JSON.parse(localData);
+
+                const syncTime = syncParsed.lastSyncTime || 0;
+                const localTime = localParsed.lastSyncTime || 0;
+
+                if (syncTime > localTime) {
+                    savedData = syncParsed;
+                    dataSource = 'sync';
+                    console.log(`[${extensionName}] 使用同步数据（更新）`);
+                } else {
+                    savedData = localParsed;
+                    dataSource = 'local';
+                    console.log(`[${extensionName}] 使用本地数据（更新）`);
                 }
             } catch (error) {
-                console.error(`[${extensionName}] ❌ 解析本地数据失败:`, error);
-                // 如果解析失败，使用默认数据并保存
-                initializeDefaultPetData();
-                savePetData();
+                console.warn(`[${extensionName}] 数据比较失败，使用本地数据:`, error);
+                savedData = JSON.parse(localData);
+                dataSource = 'local';
             }
-        } else {
-            // 如果本地也没有数据，则初始化为默认数据
-            console.log(`[${extensionName}] ℹ️ 无本地数据，初始化为默认宠物数据`);
-            initializeDefaultPetData();
-            savePetData();
-        }
-    }
-
-    /**
-     * 保存宠物数据（已集成Firebase同步）
-     * @param {boolean} forceCloudSave - 是否强制保存到��端
-     */
-    async function savePetData(forceCloudSave = false) {
-        if (isSyncing && !forceCloudSave) {
-            console.log(`[${extensionName}] 正在同步中，跳过此次保存...`);
-            return;
-        }
-
-        // 更新时间戳
-        petData.lastUpdateTime = Date.now();
-
-        // 1. 保存到本地存储
-        try {
-            localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(petData));
-        } catch (error) {
-            console.error(`[${extensionName}] ❌ 保存到本地存储失败:`, error);
-        }
-
-        // 2. 如果已登录Firebase，保存到Firestore
-        if (currentUser) {
-            try {
-                isSyncing = true; // 开始同步标记
-                const petDocRef = firestore.collection('pets').doc(currentUser.uid);
-                await petDocRef.set(petData, { merge: true }); // 使用merge:true防止覆盖
-                console.log(`[${extensionName}] ✅ 数据成功保存到Firestore`);
-            } catch (error) {
-                console.error(`[${extensionName}] ❌ 保存到Firestore失败:`, error);
-                toastr.error("数据同步到云端失败，请检查网络连接。");
-            } finally {
-                setTimeout(() => { isSyncing = false; }, 500); // 结束同步标记
-            }
-        }
-    }
+        } else if (syncData) {
+            savedData = typeof syncData === 'object' ? syncData : JSON.parse(syncData);
+            dataSource = 'sync';
+            console.log(`[${extensionName}] 使用同步数据（仅有同步）`);
+        } else if (localData) {
+            savedData = JSON.parse(localData);
+            dataSource = 'local';
             console.log(`[${extensionName}] 使用本地数据（仅有本地）`);
         }
 
@@ -4735,7 +5348,10 @@ ${currentPersonality}
             }, 3000); // 延迟3秒创建，确保页面完全加载
         }
 
-        // 10. 设置卸载检测
+        // 10. 绑定Firebase事件
+        bindFirebaseEvents();
+
+        // 11. 设置卸载检测
         setupUnloadDetection();
 
         console.log(`[${extensionName}] Extension loaded successfully.`);

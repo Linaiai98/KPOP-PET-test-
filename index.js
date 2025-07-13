@@ -447,7 +447,7 @@ jQuery(async () => {
             // 设置认证状态监听器
             firebaseAuth.onAuthStateChanged((user) => {
                 currentUser = user;
-                updateFirebaseStatus();
+                updateFirebaseStatus('auth_changed'); // Use a specific status to trigger UI update
 
                 if (user) {
                     console.log(`[${extensionName}] 👤 用户已登录: ${user.uid}`);
@@ -457,7 +457,7 @@ jQuery(async () => {
             });
 
             isFirebaseInitialized = true;
-            updateFirebaseStatus();
+            updateFirebaseStatus('auth_changed'); // Initial check
 
             return true;
         } catch (error) {

@@ -5080,16 +5080,19 @@ ${currentPersonality}
                                 </div>
 
                                 <!-- 连接码显示 -->
-                                <div id="firebase-connection-code-display" style="display: none;">
+                                <div id="firebase-connection-code-display" style="display: none; margin-bottom: 8px;">
+                                    <label style="font-size: 0.85em; margin-bottom: 4px; display: block; color: #28a745; font-weight: bold;">
+                                        🔑 连接码（分享给其他设备）
+                                    </label>
                                     <div style="display: flex; gap: 8px; align-items: center;">
                                         <input type="text" id="firebase-connection-code-text" readonly
-                                               style="flex: 1; padding: 6px; border: 1px solid #28a745; border-radius: 4px; background: #f8fff9; font-family: monospace; font-size: 14px; text-align: center; letter-spacing: 1px;">
-                                        <button id="firebase-copy-code-btn" class="firebase-btn firebase-btn-outline" style="padding: 6px 10px; font-size: 0.8em;">
-                                            📋
+                                               style="flex: 1; padding: 8px; border: 2px solid #28a745; border-radius: 4px; background: #f8fff9; font-family: monospace; font-size: 16px; text-align: center; letter-spacing: 2px; font-weight: bold;">
+                                        <button id="firebase-copy-code-btn" class="firebase-btn firebase-btn-outline" style="padding: 8px 12px; font-size: 0.85em;">
+                                            📋 复制
                                         </button>
                                     </div>
-                                    <small style="color: #28a745; margin-top: 3px; display: block; font-size: 0.8em;">
-                                        有效期5分钟
+                                    <small style="color: #28a745; margin-top: 4px; display: block; font-size: 0.8em; text-align: center;">
+                                        ⏰ 有效期5分钟，请尽快在其他设备上使用
                                     </small>
                                 </div>
                             </div>

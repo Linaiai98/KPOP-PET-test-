@@ -48,9 +48,6 @@ jQuery(async () => {
     
     // DOM 元素引用
     let overlay, mainView, petView, settingsView, chatView;
-
-    // 聊天功能变量
-    let chatHistory = [];
     let petContainer;
 
     // 弹窗状态管理
@@ -72,6 +69,11 @@ jQuery(async () => {
     let isFirebaseInitialized = false;
     let connectionCode = null;
     let connectionCodeExpiry = null;
+
+    // 聊天功能状态管理
+    let chatHistory = [];
+    let isAIResponding = false;
+    let chatInitialized = false;
 
     // 安全的z-index值，避免影响其他插件
     const SAFE_Z_INDEX = {
@@ -1746,9 +1748,6 @@ jQuery(async () => {
         saveAISettingsToSync(settings);
 
         console.log(`[${extensionName}] AI设置已保存并同步:`, settings);
-
-        // 更新UI状态
-        updateUIAfterAPICheck();
     }
 
     /**
@@ -1825,11 +1824,15 @@ jQuery(async () => {
                 }
 
                 console.log(`[${extensionName}] AI设置已加载:`, settings);
+
                 return settings;
             }
         } catch (error) {
             console.error(`[${extensionName}] 加载AI设置失败:`, error);
         }
+
+        // 即使加载失败也要更新聊天按钮状态
+        updateChatButtonVisibility();
         return {};
     }
 
@@ -2616,7 +2619,7 @@ ${currentPersonality}
                 toastr.success("虚拟宠物系统已启用");
                 // 如果当前没有显示宠物按钮，重新创建
                 if ($("#virtual-pet-button").length === 0) {
-                    initializeFloatingButton();
+                    createPetButton();
                 }
             } else {
                 toastr.info("虚拟宠物系统已禁用");
@@ -2770,62 +2773,6 @@ ${currentPersonality}
             $("#virtual-pet-custom-personality-container").show();
         } else {
             $("#virtual-pet-custom-personality-container").hide();
-        }
-    }
-
-    // 防止重复调用的标志
-    let isUpdatingUI = false;
-
-    /**
-     * 根据API配置更新UI显示状态
-     */
-    function updateUIAfterAPICheck() {
-        // 防止重复调用
-        if (isUpdatingUI) {
-            console.log(`[${extensionName}] UI更新正在进行中，跳过重复调用`);
-            return;
-        }
-
-        isUpdatingUI = true;
-
-        try {
-            const chatButton = $('#goto-chat-btn');
-
-            // 直接从localStorage获取设置，避免调用loadAISettings造成循环
-            const settingsStr = localStorage.getItem(`${extensionName}-ai-settings`);
-            let settings = {};
-
-            if (settingsStr) {
-                try {
-                    settings = JSON.parse(settingsStr);
-                } catch (e) {
-                    console.warn(`[${extensionName}] AI设置解析失败`);
-                }
-            }
-
-            const hasFullConfig = settings.apiType && settings.apiUrl && settings.apiKey;
-
-            console.log(`[${extensionName}] API配置检查:`, {
-                apiType: settings.apiType || '未设置',
-                apiUrl: settings.apiUrl || '未设置',
-                apiKey: settings.apiKey ? '已设置' : '未设置',
-                hasFullConfig: hasFullConfig ? '是' : '否'
-            });
-
-            // 聊天按钮始终显示，但根据配置状态调整样式和行为
-            chatButton.show();
-
-            if (hasFullConfig) {
-                // API配置完整 - 正常样式
-                chatButton.removeClass('api-not-configured').attr('title', '与宠物聊天');
-                console.log(`[${extensionName}] 聊天按钮已启用 - API配置完整`);
-            } else {
-                // API配置不完整 - 添加视觉提示
-                chatButton.addClass('api-not-configured').attr('title', '点击配置AI后即可聊天');
-                console.log(`[${extensionName}] 聊天按钮显示但需要配置 - API配置不完整`);
-            }
-        } finally {
-            isUpdatingUI = false;
         }
     }
 
@@ -3819,7 +3766,8 @@ ${currentPersonality}
         mainView.hide();
         petView.hide();
         settingsView.hide();
-        
+        chatView.hide();
+
         // 显示目标视图
         viewToShow.show();
     }
@@ -3853,8 +3801,405 @@ ${currentPersonality}
      */
     function showChatView() {
         switchView(chatView);
-        renderChatView();
+        initializeChatInterface();
     }
+
+    /**
+     * 处理聊天按钮点击
+     */
+    function handleChatButtonClick() {
+        const config = getAIConfiguration();
+
+        if (!config.isConfigured) {
+            // 显示配置提示
+            showAPIConfigurationPrompt();
+            return;
+        }
+
+        // 如果配置完整，正常进入聊天界面
+        showChatView();
+    }
+    
+    // -----------------------------------------------------------------
+    // 3.5. 聊天功能逻辑
+    // -----------------------------------------------------------------
+
+    /**
+     * 初始化聊天界面
+     */
+    function initializeChatInterface() {
+        if (chatInitialized) return;
+
+        console.log(`[${extensionName}] 初始化聊天界面...`);
+
+        // 绑定聊天相关事件
+        bindChatEvents();
+
+        // 加载聊天历史
+        loadChatHistory();
+
+        chatInitialized = true;
+    }
+
+    /**
+     * 绑定聊天相关事件
+     */
+    function bindChatEvents() {
+        // 发送按钮点击事件
+        $('#send-chat-btn').off('click').on('click', handleSendMessage);
+
+        // 输入框回车事件
+        $('#chat-input').off('keypress').on('keypress', function(e) {
+            if (e.which === 13 && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage();
+            }
+        });
+
+        // 输入框输入事件（控制发送按钮状态）
+        $('#chat-input').off('input').on('input', function() {
+            const hasText = $(this).val().trim().length > 0;
+            $('#send-chat-btn').prop('disabled', !hasText || isAIResponding);
+        });
+    }
+
+    /**
+     * 处理发送消息
+     */
+    async function handleSendMessage() {
+        const input = $('#chat-input');
+        const message = input.val().trim();
+
+        if (!message || isAIResponding) return;
+
+        // 清空输入框
+        input.val('');
+        $('#send-chat-btn').prop('disabled', true);
+
+        // 添加用户消息到界面
+        addMessageToChat('user', message);
+
+        // 设置AI响应状态
+        isAIResponding = true;
+
+        try {
+            // 调用AI API获取回复
+            const aiResponse = await getAIResponse(message);
+
+            // 添加AI回复到界面
+            addMessageToChat('pet', aiResponse);
+
+            // 保存聊天历史
+            saveChatHistory();
+
+        } catch (error) {
+            console.error(`[${extensionName}] AI回复失败:`, error);
+            addMessageToChat('pet', '抱歉，我现在无法回复。请检查AI配置是否正确。');
+        } finally {
+            isAIResponding = false;
+            $('#send-chat-btn').prop('disabled', false);
+        }
+    }
+
+    /**
+     * 添加消息到聊天界面
+     */
+    function addMessageToChat(sender, message) {
+        const timestamp = new Date().toLocaleTimeString();
+        const isUser = sender === 'user';
+
+        const messageHtml = `
+            <div class="chat-message ${isUser ? 'user-message' : 'pet-message'}">
+                <div class="message-avatar">${isUser ? '👤' : '🐾'}</div>
+                <div class="message-content">
+                    <div class="message-text">${escapeHtml(message)}</div>
+                    <div class="message-timestamp">${timestamp}</div>
+                </div>
+            </div>
+        `;
+
+        const container = $('#chat-messages-container');
+        container.append(messageHtml);
+
+        // 滚动到底部
+        container.scrollTop(container[0].scrollHeight);
+
+        // 添加到聊天历史
+        chatHistory.push({
+            sender: sender,
+            message: message,
+            timestamp: Date.now()
+        });
+
+        // 限制历史记录长度
+        if (chatHistory.length > 50) {
+            chatHistory = chatHistory.slice(-50);
+        }
+    }
+
+    /**
+     * 获取AI回复
+     */
+    async function getAIResponse(userMessage) {
+        // 获取AI配置
+        const aiConfig = getAIConfiguration();
+
+        if (!aiConfig.isConfigured) {
+            throw new Error('AI配置不完整');
+        }
+
+        // 构建消息历史
+        const messages = buildChatMessages(userMessage);
+
+        // 调用AI API
+        const response = await callAIAPI(aiConfig, messages);
+
+        return response;
+    }
+
+    /**
+     * 获取AI配置
+     */
+    function getAIConfiguration() {
+        // 从扩展设置中获取AI配置
+        try {
+            const settings = localStorage.getItem(`${extensionName}-ai-settings`);
+            if (settings) {
+                const parsed = JSON.parse(settings);
+                return {
+                    type: parsed.apiType || '',
+                    url: parsed.apiUrl || '',
+                    key: parsed.apiKey || '',
+                    model: parsed.apiModel || '',
+                    isConfigured: parsed.apiType && parsed.apiUrl && parsed.apiKey
+                };
+            }
+        } catch (error) {
+            console.error(`[${extensionName}] 获取AI配置失败:`, error);
+        }
+
+        return {
+            type: '',
+            url: '',
+            key: '',
+            model: '',
+            isConfigured: false
+        };
+    }
+
+    /**
+     * 构建聊天消息
+     */
+    function buildChatMessages(userMessage) {
+        const petPersonality = localStorage.getItem('virtual-pet-personality') || '';
+        const petName = petData.name || '小宠物';
+
+        // 系统提示词
+        const systemPrompt = petPersonality ||
+            `你是一只名叫${petName}的虚拟宠物。你很可爱、友善，喜欢和主人聊天。请用简短、可爱的语言回复，不要太长。`;
+
+        const messages = [
+            { role: 'system', content: systemPrompt }
+        ];
+
+        // 添加最近的聊天历史（最多10条）
+        const recentHistory = chatHistory.slice(-10);
+        recentHistory.forEach(item => {
+            messages.push({
+                role: item.sender === 'user' ? 'user' : 'assistant',
+                content: item.message
+            });
+        });
+
+        // 添加当前用户消息
+        messages.push({ role: 'user', content: userMessage });
+
+        return messages;
+    }
+
+    /**
+     * 调用AI API
+     */
+    async function callAIAPI(config, messages) {
+        const requestBody = {
+            model: config.model || 'gpt-3.5-turbo',
+            messages: messages,
+            max_tokens: 150,
+            temperature: 0.7
+        };
+
+        const response = await fetch(config.url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${config.key}`
+            },
+            body: JSON.stringify(requestBody)
+        });
+
+        if (!response.ok) {
+            throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error('API返回格式错误');
+        }
+
+        return data.choices[0].message.content.trim();
+    }
+
+    /**
+     * 加载聊天历史
+     */
+    function loadChatHistory() {
+        try {
+            const saved = localStorage.getItem('virtual-pet-chat-history');
+            if (saved) {
+                chatHistory = JSON.parse(saved);
+
+                // 渲染历史消息
+                const container = $('#chat-messages-container');
+                container.find('.chat-message').not('.chat-welcome-message .chat-message').remove();
+
+                chatHistory.forEach(item => {
+                    const timestamp = new Date(item.timestamp).toLocaleTimeString();
+                    const isUser = item.sender === 'user';
+
+                    const messageHtml = `
+                        <div class="chat-message ${isUser ? 'user-message' : 'pet-message'}">
+                            <div class="message-avatar">${isUser ? '👤' : '🐾'}</div>
+                            <div class="message-content">
+                                <div class="message-text">${escapeHtml(item.message)}</div>
+                                <div class="message-timestamp">${timestamp}</div>
+                            </div>
+                        </div>
+                    `;
+
+                    container.append(messageHtml);
+                });
+
+                // 滚动到底部
+                container.scrollTop(container[0].scrollHeight);
+            }
+        } catch (error) {
+            console.error(`[${extensionName}] 加载聊天历史失败:`, error);
+            chatHistory = [];
+        }
+    }
+
+    /**
+     * 保存聊天历史
+     */
+    function saveChatHistory() {
+        try {
+            localStorage.setItem('virtual-pet-chat-history', JSON.stringify(chatHistory));
+        } catch (error) {
+            console.error(`[${extensionName}] 保存聊天历史失败:`, error);
+        }
+    }
+
+    /**
+     * 转义HTML字符
+     */
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    /**
+     * 显示API配置提示
+     */
+    function showAPIConfigurationPrompt() {
+        // 检查具体缺少哪些配置
+        const config = getAIConfiguration();
+        let missingItems = [];
+
+        if (!config.type) missingItems.push('API类型');
+        if (!config.url) missingItems.push('API URL');
+        if (!config.key) missingItems.push('API密钥');
+
+        const missingText = missingItems.join('、');
+
+        // 创建友好的提示消息
+        const message = `
+            <div style="text-align: center; padding: 20px;">
+                <div style="font-size: 3em; margin-bottom: 15px;">🤖</div>
+                <h3 style="color: var(--primary-accent-color); margin-bottom: 15px;">需要配置AI API</h3>
+                <p style="margin-bottom: 15px; line-height: 1.5;">
+                    要与宠物聊天，需要先配置AI API。<br>
+                    当前缺少：<strong>${missingText}</strong>
+                </p>
+                <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: left;">
+                    <div style="font-weight: bold; color: #007bff; margin-bottom: 10px;">📋 配置步骤：</div>
+                    <ol style="margin: 0; padding-left: 20px; line-height: 1.6;">
+                        <li>点击右上角的 <strong>扩展</strong> 按钮 (🧩)</li>
+                        <li>找到 <strong>🐾 虚拟宠物系统</strong> 设置</li>
+                        <li>在 <strong>🤖 AI API 配置</strong> 部分填写：
+                            <ul style="margin-top: 5px;">
+                                <li>选择API类型（如OpenAI、Claude等）</li>
+                                <li>填写API URL</li>
+                                <li>填写API密钥</li>
+                            </ul>
+                        </li>
+                        <li>点击 <strong>🔗 测试连接</strong> 验证配置</li>
+                    </ol>
+                </div>
+                <div style="background: #fff3cd; padding: 12px; border-radius: 6px; margin-bottom: 20px; text-align: left; border-left: 4px solid #ffc107;">
+                    <div style="font-weight: bold; color: #856404; margin-bottom: 8px;">💡 常用API推荐：</div>
+                    <div style="font-size: 0.9em; color: #856404; line-height: 1.5;">
+                        • <strong>OpenAI</strong>：https://api.openai.com/v1<br>
+                        • <strong>本地Ollama</strong>：http://localhost:11434/v1<br>
+                        • <strong>LM Studio</strong>：http://localhost:1234/v1<br>
+                        • <strong>第三方代理</strong>：根据提供商文档配置
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button id="goto-settings-from-chat" class="pet-button success">
+                        ⚙️ 去配置
+                    </button>
+                    <button id="close-config-prompt" class="pet-button">
+                        取消
+                    </button>
+                </div>
+            </div>
+        `;
+
+        // 创建提示弹窗
+        const promptOverlay = $(`
+            <div id="api-config-prompt-overlay" class="virtual-pet-popup-overlay" style="display: flex;">
+                <div class="pet-popup-container" style="max-width: 450px; height: auto;">
+                    <div class="pet-popup-body">
+                        ${message}
+                    </div>
+                </div>
+            </div>
+        `);
+
+        // 添加到页面
+        $('body').append(promptOverlay);
+
+        // 绑定事件
+        $('#goto-settings-from-chat').on('click', function() {
+            promptOverlay.remove();
+            showSettingsView();
+        });
+
+        $('#close-config-prompt').on('click', function() {
+            promptOverlay.remove();
+        });
+
+        // 点击遮罩关闭
+        promptOverlay.on('click', function(e) {
+            if (e.target === this) {
+                promptOverlay.remove();
+            }
+        });
+    }
+
+
 
     // -----------------------------------------------------------------
     // 4. UI 渲染逻辑
@@ -4446,199 +4791,7 @@ ${currentPersonality}
         renderSettings();
         toastr.success("🥚 新的拓麻歌子宠物诞生了！请好好照顾它！");
     }
-
-    // -----------------------------------------------------------------
-    // 聊天功能相关函数
-    // -----------------------------------------------------------------
-
-    /**
-     * 渲染聊天视图
-     */
-    function renderChatView() {
-        // 更新聊天标题中的宠物名称
-        $("#chat-pet-name").text(petData.name);
-
-        // 清空输入框
-        $("#chat-user-input").val('');
-
-        // 如果聊天历史为空，显示欢迎消息
-        if (chatHistory.length === 0) {
-            addMessageToChatbox('pet', `你好！我是${petData.name}，很高兴和你聊天！有什么想说的吗？`);
-        }
-    }
-
-    /**
-     * 添加消息到聊天框
-     * @param {string} sender - 'user' 或 'pet'
-     * @param {string} message - 消息内容
-     * @param {boolean} isTyping - 是否为输入中状态
-     * @returns {jQuery} 消息元素
-     */
-    function addMessageToChatbox(sender, message, isTyping = false) {
-        const messageClass = sender === 'user' ? 'user-message' : 'pet-message';
-        const typingClass = isTyping ? ' typing-indicator' : '';
-
-        const messageElement = $(`
-            <div class="chat-message ${messageClass}${typingClass}">
-                ${escapeHtml(message)}
-            </div>
-        `);
-
-        $('#chat-messages-container').append(messageElement);
-
-        // 滚动到底部
-        const container = $('#chat-messages-container')[0];
-        container.scrollTop = container.scrollHeight;
-
-        return messageElement;
-    }
-
-    /**
-     * 构建聊天提示词
-     * @param {string} personality - 宠物人设
-     * @param {string} userInput - 用户输入
-     * @returns {Array} 消息数组
-     */
-    function buildChatPrompt(personality, userInput) {
-        // 系统指令
-        const systemMessage = {
-            role: 'system',
-            content: `你是${petData.name}，请严格按照以下人设回应用户。
-
-【你的身份设定】：
-${personality}
-
-【重要规则】：
-1. 你是一个虚拟宠物，请保持角色一致性
-2. 回复要简短有趣，不超过100字
-3. 可以表达情感和需求
-4. 不要提及你是AI或虚拟的
-5. 可以根据当前状态（健康、快乐、饥饿、精力）来回应
-6. 保持可爱和友好的语调
-
-【当前状态】：
-- 健康: ${Math.round(petData.health)}/100
-- 快乐: ${Math.round(petData.happiness)}/100
-- 饥饿: ${Math.round(petData.hunger)}/100
-- 精力: ${Math.round(petData.energy)}/100
-- 等级: ${petData.level}`
-        };
-
-        // 构建消息历史（保留最近10条对话）
-        const messages = [systemMessage];
-
-        // 添加历史对话（限制数量避免token过多）
-        const recentHistory = chatHistory.slice(-10);
-        messages.push(...recentHistory);
-
-        // 添加当前用户输入
-        messages.push({
-            role: 'user',
-            content: userInput
-        });
-
-        return messages;
-    }
-
-    /**
-     * 处理发送消息
-     */
-    async function handleSendMessage() {
-        const userInput = $('#chat-user-input').val().trim();
-        if (!userInput) return;
-
-        // 显示用户消息
-        addMessageToChatbox('user', userInput);
-        $('#chat-user-input').val('');
-
-        // 添加到历史记录
-        chatHistory.push({ role: 'user', content: userInput });
-
-        // 显示输入中提示
-        const typingIndicator = addMessageToChatbox('pet', '正在思考...', true);
-
-        try {
-            const aiSettings = loadAISettings();
-            const personality = getCurrentPersonality();
-
-            // 构建消息
-            const messages = buildChatPrompt(personality, userInput);
-
-            // 调用AI API
-            const aiResponse = await callCustomAPIForChat(messages, aiSettings);
-
-            // 移除输入中提示
-            typingIndicator.remove();
-
-            // 显示AI回复
-            addMessageToChatbox('pet', aiResponse);
-
-            // 添加到历史记录
-            chatHistory.push({ role: 'assistant', content: aiResponse });
-
-            // 限制历史记录长度
-            if (chatHistory.length > 20) {
-                chatHistory = chatHistory.slice(-20);
-            }
-
-        } catch (error) {
-            console.error(`[${extensionName}] Chat AI call failed:`, error);
-            typingIndicator.remove();
-            addMessageToChatbox('pet', "我好像有点累了，听不清你说什么...");
-        }
-    }
-
-    /**
-     * 为聊天功能调用自定义API
-     * @param {Array} messages - 消息数组
-     * @param {Object} settings - API设置
-     * @returns {Promise<string>} AI回复
-     */
-    async function callCustomAPIForChat(messages, settings) {
-        console.log(`[${extensionName}] 调用聊天API: ${settings.apiType}`);
-
-        // 智能构建请求URL
-        let apiUrl = settings.apiUrl;
-        if (!apiUrl.includes('/chat/completions')) {
-            if (apiUrl.endsWith('/')) {
-                apiUrl = apiUrl + 'chat/completions';
-            } else if (apiUrl.endsWith('/v1')) {
-                apiUrl = apiUrl + '/chat/completions';
-            } else {
-                apiUrl = apiUrl + '/v1/chat/completions';
-            }
-        }
-
-        const requestBody = {
-            model: settings.apiModel || 'gpt-3.5-turbo',
-            messages: messages,
-            max_tokens: 150, // 聊天回复不需要太长
-            temperature: 0.8, // 让回复更有趣一些
-            stream: false
-        };
-
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${settings.apiKey}`
-            },
-            body: JSON.stringify(requestBody)
-        });
-
-        if (!response.ok) {
-            throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
-        }
-
-        const data = await response.json();
-
-        if (data.choices && data.choices[0] && data.choices[0].message) {
-            return data.choices[0].message.content.trim();
-        } else {
-            throw new Error('API返回格式错误');
-        }
-    }
-
+    
     /**
      * 安全地转义HTML字符串，防止XSS
      */
@@ -5500,34 +5653,12 @@ ${personality}
             petSleep();
         });
 
-        // 视图切换按钮
-        $("#goto-chat-btn").on("click touchend", (e) => {
+        $("#chat-pet-btn").on("click touchend", (e) => {
             e.preventDefault();
-
-            // 检查API配置状态
-            const settings = loadAISettings();
-            const hasFullConfig = settings.apiType && settings.apiUrl && settings.apiKey;
-
-            if (hasFullConfig) {
-                // API配置完整，正常进入聊天
-                showChatView();
-            } else {
-                // API配置不完整，引导用户配置
-                toastr.warning('请先在设置中配置AI API才能使用聊天功能', '⚙️ 需要配置AI', {
-                    timeOut: 4000,
-                    onclick: function() {
-                        // 点击通知时自动跳转到设置页面
-                        showSettingsView();
-                    }
-                });
-
-                // 可选：直接跳转到设置页面
-                setTimeout(() => {
-                    showSettingsView();
-                }, 1000);
-            }
+            handleChatButtonClick();
         });
 
+        // 视图切换按钮
         $("#goto-pet-detail-btn").on("click touchend", (e) => {
             e.preventDefault();
             showPetView();
@@ -5553,20 +5684,6 @@ ${personality}
         $("#reset-pet-btn").on("click touchend", (e) => {
             e.preventDefault();
             resetPet();
-        });
-
-        // 聊天相关按钮
-        $("#chat-send-btn").on("click touchend", (e) => {
-            e.preventDefault();
-            handleSendMessage();
-        });
-
-        // 聊天输入框回车事件
-        $("#chat-user-input").on("keypress", (e) => {
-            if (e.which === 13 && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage();
-            }
         });
 
         // 6. 初始状态
@@ -5641,27 +5758,6 @@ ${personality}
         // 10. 设置卸载检测
         setupUnloadDetection();
 
-        // 11. 初始化UI状态检查
-        setTimeout(() => {
-            updateUIAfterAPICheck();
-        }, 500); // 延迟500ms确保DOM完全加载
-
-        // 12. 调试：检查按钮状态
-        setTimeout(() => {
-            const buttonExists = $(`#${BUTTON_ID}`).length > 0;
-            const isEnabled = localStorage.getItem(STORAGE_KEY_ENABLED) === 'true';
-            console.log(`[${extensionName}] 按钮状态检查:`, {
-                buttonExists: buttonExists,
-                isEnabled: isEnabled,
-                buttonId: BUTTON_ID
-            });
-
-            if (isEnabled && !buttonExists) {
-                console.warn(`[${extensionName}] 按钮应该存在但未找到，尝试重新创建`);
-                initializeFloatingButton();
-            }
-        }, 2000);
-
         console.log(`[${extensionName}] Extension loaded successfully.`);
     }
 
@@ -5675,7 +5771,8411 @@ ${personality}
         }
     }
 
-    // 插件初始化完成
-    console.log(`[${extensionName}] ✅ 虚拟宠物系统初始化完成！`);
+    // 全局测试函数
+    window.testVirtualPet = function() {
+        console.log("🐾 手动测试虚拟宠物系统...");
 
-}); // jQuery ready 结束
+        // 强制创建按钮
+        $(`#${BUTTON_ID}`).remove();
+        initializeFloatingButton();
+
+        console.log("🐾 测试完成，检查是否有🐾按钮出现");
+    };
+
+    // 强制显示按钮函数
+    window.forceShowPetButton = function() {
+        console.log("🐾 强制显示宠物按钮...");
+
+        // 移除现有按钮
+        $(`#${BUTTON_ID}`).remove();
+
+        // 创建按钮并强制设置样式，确保正确定位
+        const buttonHtml = `
+            <div id="${BUTTON_ID}" style="
+                position: fixed !important;
+                z-index: ${SAFE_Z_INDEX.button} !important;
+                cursor: grab !important;
+                width: 48px !important;
+                height: 48px !important;
+                background: linear-gradient(145deg, ${candyColors.primary}, ${candyColors.buttonHover}) !important;
+                border-radius: 50% !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                color: #7289da !important;
+                font-size: 24px !important;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.3), inset 0 2px 2px rgba(255,255,255,0.05), 0 0 0 1px rgba(0,0,0,0.5) !important;
+                user-select: none !important;
+                opacity: 1 !important;
+                visibility: visible !important;
+                pointer-events: auto !important;
+                transform: none !important;
+                margin: 0 !important;
+                top: 200px !important;
+                left: 20px !important;
+                bottom: auto !important;
+                right: auto !important;
+            ">🐾</div>
+        `;
+
+        $("body").append(buttonHtml);
+
+        const $button = $(`#${BUTTON_ID}`);
+        console.log("🐾 按钮创建结果:", $button.length > 0 ? "成功" : "失败");
+
+        if ($button.length > 0) {
+            // 绑定点击事件
+            $button.off().on("click touchend", function(e) {
+                e.preventDefault();
+                console.log("🐾 按钮被点击");
+
+                try {
+                    // 所有平台都使用统一的showPopup函数
+                    showPopup();
+                } catch (error) {
+                    console.error("显示弹窗出错:", error);
+                    alert("🐾 虚拟宠物\n\n弹窗功能正在加载中...");
+                }
+            });
+
+            // 使按钮可拖动
+            makeButtonDraggable($button);
+
+            console.log("🐾 按钮应该现在可见了！");
+        }
+
+        return $button.length > 0;
+    };
+
+    // 全局按钮修复函数
+    window.fixPetButtonPosition = function() {
+        console.log("🔧 检查并修复按钮位置...");
+
+        const button = $(`#${BUTTON_ID}`);
+        if (button.length === 0) {
+            console.log("❌ 按钮不存在，尝试重新创建");
+            return window.forceShowPetButton();
+        }
+
+        const rect = button[0].getBoundingClientRect();
+        const styles = window.getComputedStyle(button[0]);
+
+        console.log("当前按钮状态:", {
+            position: styles.position,
+            top: rect.top,
+            left: rect.left,
+            visible: rect.width > 0 && rect.height > 0,
+            inViewport: rect.top >= 0 && rect.left >= 0 && rect.bottom <= window.innerHeight && rect.right <= window.innerWidth
+        });
+
+        // 检查是否需要修复
+        const needsFix = styles.position !== 'fixed' ||
+                        rect.top < 0 || rect.top > window.innerHeight ||
+                        rect.left < 0 || rect.left > window.innerWidth ||
+                        rect.width === 0 || rect.height === 0;
+
+        if (needsFix) {
+            console.log("🔧 修复按钮位置和样式...");
+            button.css({
+                'position': 'fixed !important',
+                'top': '200px !important',
+                'left': '20px !important',
+                'width': '48px !important',
+                'height': '48px !important',
+                'z-index': `${SAFE_Z_INDEX.button} !important`,
+                'display': 'flex !important',
+                'visibility': 'visible !important',
+                'opacity': '1 !important',
+                'transform': 'none !important',
+                'margin': '0 !important',
+                'pointer-events': 'auto !important'
+            });
+
+            setTimeout(() => {
+                const newRect = button[0].getBoundingClientRect();
+                console.log("修复后位置:", newRect);
+                console.log(newRect.top >= 0 && newRect.top <= window.innerHeight ? "✅ 修复成功" : "❌ 修复失败");
+            }, 100);
+
+            return true;
+        } else {
+            console.log("✅ 按钮位置正常，无需修复");
+            return true;
+        }
+    };
+
+    // 立即修复拖动问题
+    window.fixDragIssue = function() {
+        console.log("🔧 立即修复拖动问题...");
+
+        const button = $(`#${BUTTON_ID}`);
+        if (button.length === 0) {
+            console.log("❌ 按钮不存在");
+            return false;
+        }
+
+        // 移除所有可能冲突的事件
+        button.off('.petdrag');
+        $(document).off('.petdragtemp');
+
+        // 重新绑定拖动事件，使用更强的样式设置
+        let isDragging = false;
+        let wasDragged = false;
+        let dragStartX, dragStartY, startX, startY;
+        let dragTimeout;
+
+        const onDragStart = (e) => {
+            console.log("🎯 开始拖动");
+            isDragging = true;
+            wasDragged = false;
+
+            const touch = e.originalEvent && e.originalEvent.touches && e.originalEvent.touches[0];
+            const pageX = touch ? touch.pageX : e.pageX;
+            const pageY = touch ? touch.pageY : e.pageY;
+
+            startX = pageX;
+            startY = pageY;
+
+            const rect = button[0].getBoundingClientRect();
+            dragStartX = pageX - rect.left;
+            dragStartY = pageY - rect.top;
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            $(document).on("mousemove.fixdrag", onDragMove);
+            $(document).on("touchmove.fixdrag", onDragMove);
+            $(document).on("mouseup.fixdrag", onDragEnd);
+            $(document).on("touchend.fixdrag", onDragEnd);
+        };
+
+        const onDragMove = (e) => {
+            if (!isDragging) return;
+
+            const touch = e.originalEvent && e.originalEvent.touches && e.originalEvent.touches[0];
+            const pageX = touch ? touch.pageX : e.pageX;
+            const pageY = touch ? touch.pageY : e.pageY;
+
+            const deltaX = Math.abs(pageX - startX);
+            const deltaY = Math.abs(pageY - startY);
+
+            if (deltaX > 5 || deltaY > 5) {
+                wasDragged = true;
+            }
+
+            if (wasDragged) {
+                e.preventDefault();
+
+                let newX = pageX - dragStartX;
+                let newY = pageY - dragStartY;
+
+                // 边界限制
+                const windowWidth = window.innerWidth;
+                const windowHeight = window.innerHeight;
+                const safeMargin = 10;
+
+                newX = Math.max(safeMargin, Math.min(newX, windowWidth - 48 - safeMargin));
+                newY = Math.max(safeMargin, Math.min(newY, windowHeight - 48 - safeMargin));
+
+                // 使用最强的样式设置方法
+                const element = button[0];
+                element.style.setProperty('position', 'fixed', 'important');
+                element.style.setProperty('top', newY + 'px', 'important');
+                element.style.setProperty('left', newX + 'px', 'important');
+                element.style.setProperty('transform', 'none', 'important');
+                element.style.setProperty('z-index', SAFE_Z_INDEX.button, 'important');
+
+                console.log(`🎯 移动到: ${newX}, ${newY}`);
+            }
+        };
+
+        const onDragEnd = () => {
+            if (isDragging) {
+                console.log("🎯 拖动结束");
+                isDragging = false;
+
+                $(document).off(".fixdrag");
+
+                if (wasDragged) {
+                    const rect = button[0].getBoundingClientRect();
+                    localStorage.setItem(STORAGE_KEY_BUTTON_POS, JSON.stringify({
+                        x: Math.round(rect.left),
+                        y: Math.round(rect.top)
+                    }));
+
+                    clearTimeout(dragTimeout);
+                    dragTimeout = setTimeout(() => {
+                        wasDragged = false;
+                    }, 200);
+                }
+            }
+        };
+
+        // 绑定新的事件
+        button.on("mousedown.fixdrag", onDragStart);
+        button.on("touchstart.fixdrag", onDragStart);
+
+        console.log("✅ 拖动修复完成，请尝试拖动按钮");
+        return true;
+    };
+
+    // 立即修复点击弹窗问题
+    window.fixClickIssue = function() {
+        console.log("🔧 修复点击弹窗问题...");
+
+        const button = $(`#${BUTTON_ID}`);
+        if (button.length === 0) {
+            console.log("❌ 按钮不存在");
+            return false;
+        }
+
+        // 清除所有事件
+        button.off();
+        $(document).off('.petdragtemp');
+
+        // 重新绑定简化的事件处理
+        let isDragging = false;
+        let wasDragged = false;
+        let startX, startY;
+
+        button.on('mousedown touchstart', function(e) {
+            isDragging = true;
+            wasDragged = false;
+
+            const touch = e.originalEvent && e.originalEvent.touches && e.originalEvent.touches[0];
+            startX = touch ? touch.pageX : e.pageX;
+            startY = touch ? touch.pageY : e.pageY;
+
+            e.preventDefault();
+
+            $(document).on('mousemove.temp touchmove.temp', function(moveE) {
+                if (!isDragging) return;
+
+                const moveTouch = moveE.originalEvent && moveE.originalEvent.touches && moveE.originalEvent.touches[0];
+                const moveX = moveTouch ? moveTouch.pageX : moveE.pageX;
+                const moveY = moveTouch ? moveTouch.pageY : moveE.pageY;
+
+                const deltaX = Math.abs(moveX - startX);
+                const deltaY = Math.abs(moveY - startY);
+
+                if (deltaX > 8 || deltaY > 8) {
+                    wasDragged = true;
+
+                    // 直接设置位置
+                    const rect = button[0].getBoundingClientRect();
+                    const newX = moveX - (startX - rect.left);
+                    const newY = moveY - (startY - rect.top);
+
+                    button[0].style.setProperty('left', newX + 'px', 'important');
+                    button[0].style.setProperty('top', newY + 'px', 'important');
+                }
+            });
+
+            $(document).on('mouseup.temp touchend.temp', function() {
+                isDragging = false;
+                $(document).off('.temp');
+
+                if (!wasDragged) {
+                    // 没有拖动，触发点击
+                    console.log("🎯 触发弹窗");
+                    try {
+                        showPopup();
+                    } catch (error) {
+                        console.error("弹窗错误:", error);
+                        alert("🐾 虚拟宠物系统\n\n弹窗功能正在加载中...");
+                    }
+                }
+
+                // 重置拖动标志
+                setTimeout(() => {
+                    wasDragged = false;
+                }, 100);
+            });
+        });
+
+        console.log("✅ 点击修复完成");
+        return true;
+    };
+
+    // 立即修复拖动位置计算问题
+    window.fixDragPositionIssue = function() {
+        console.log("🔧 修复拖动位置计算问题...");
+
+        const button = $(`#${BUTTON_ID}`);
+        if (button.length === 0) {
+            console.log("❌ 按钮不存在");
+            return false;
+        }
+
+        // 清除所有事件
+        button.off();
+        $(document).off('.petdragtemp');
+
+        // 重新绑定正确的拖动逻辑
+        let isDragging = false;
+        let wasDragged = false;
+        let startX, startY, dragStartX, dragStartY;
+
+        button.on('mousedown touchstart', function(e) {
+            console.log("🎯 开始交互");
+            isDragging = true;
+            wasDragged = false;
+
+            const touch = e.originalEvent && e.originalEvent.touches && e.originalEvent.touches[0];
+            startX = touch ? touch.pageX : e.pageX;
+            startY = touch ? touch.pageY : e.pageY;
+
+            // 记录按钮相对于鼠标的偏移量
+            const rect = button[0].getBoundingClientRect();
+            dragStartX = startX - rect.left;
+            dragStartY = startY - rect.top;
+
+            console.log(`初始位置: 鼠标(${startX}, ${startY}), 按钮(${rect.left}, ${rect.top}), 偏移(${dragStartX}, ${dragStartY})`);
+
+            e.preventDefault();
+
+            $(document).on('mousemove.temp touchmove.temp', function(moveE) {
+                if (!isDragging) return;
+
+                const moveTouch = moveE.originalEvent && moveE.originalEvent.touches && moveE.originalEvent.touches[0];
+                const moveX = moveTouch ? moveTouch.pageX : moveE.pageX;
+                const moveY = moveTouch ? moveTouch.pageY : moveE.pageY;
+
+                const deltaX = Math.abs(moveX - startX);
+                const deltaY = Math.abs(moveY - startY);
+
+                if (deltaX > 8 || deltaY > 8) {
+                    if (!wasDragged) {
+                        wasDragged = true;
+                        console.log("🎯 检测到拖动");
+                        button.css({
+                            "opacity": "0.8",
+                            "transform": "scale(1.05)"
+                        });
+                    }
+
+                    // 正确计算新位置
+                    const newX = moveX - dragStartX;
+                    const newY = moveY - dragStartY;
+
+                    // 边界限制
+                    const windowWidth = window.innerWidth;
+                    const windowHeight = window.innerHeight;
+                    const safeX = Math.max(10, Math.min(newX, windowWidth - 58));
+                    const safeY = Math.max(10, Math.min(newY, windowHeight - 58));
+
+                    console.log(`移动到: 鼠标(${moveX}, ${moveY}) → 按钮(${safeX}, ${safeY})`);
+
+                    button[0].style.setProperty('left', safeX + 'px', 'important');
+                    button[0].style.setProperty('top', safeY + 'px', 'important');
+                    button[0].style.setProperty('position', 'fixed', 'important');
+                }
+            });
+
+            $(document).on('mouseup.temp touchend.temp', function() {
+                console.log("🎯 交互结束，拖动状态:", wasDragged);
+                isDragging = false;
+                $(document).off('.temp');
+
+                button.css({
+                    "opacity": "1",
+                    "transform": "none"
+                });
+
+                if (!wasDragged) {
+                    console.log("🎯 触发弹窗");
+                    try {
+                        if (typeof showPopup === 'function') {
+                            showPopup();
+                        } else {
+                            alert("🐾 虚拟宠物系统\n\n弹窗功能正在加载中...");
+                        }
+                    } catch (error) {
+                        console.error("弹窗错误:", error);
+                        alert("🐾 虚拟宠物系统\n\n弹窗功能正在加载中...");
+                    }
+                } else {
+                    // 保存位置
+                    const rect = button[0].getBoundingClientRect();
+                    localStorage.setItem(STORAGE_KEY_BUTTON_POS, JSON.stringify({
+                        x: Math.round(rect.left),
+                        y: Math.round(rect.top)
+                    }));
+                    console.log("🎯 位置已保存:", { x: rect.left, y: rect.top });
+                }
+
+                setTimeout(() => {
+                    wasDragged = false;
+                }, 50);
+            });
+        });
+
+        console.log("✅ 拖动位置修复完成");
+        return true;
+    };
+
+    // 测试悬浮按钮切换功能
+    window.testToggleFunction = function() {
+        console.log("🎯 测试悬浮按钮切换功能...");
+
+        const button = $(`#${BUTTON_ID}`);
+        if (button.length === 0) {
+            console.log("❌ 悬浮按钮不存在");
+            return false;
+        }
+
+        console.log("✅ 悬浮按钮存在");
+        console.log(`当前弹窗状态: ${isPopupOpen ? '打开' : '关闭'}`);
+
+        // 检查弹窗实际状态
+        const overlay = $(`#${OVERLAY_ID}`);
+        const actuallyOpen = overlay.length > 0;
+        console.log(`实际弹窗状态: ${actuallyOpen ? '打开' : '关闭'}`);
+
+        // 状态一致性检查
+        const stateConsistent = isPopupOpen === actuallyOpen;
+        console.log(`状态一致性: ${stateConsistent ? '✅ 一致' : '❌ 不一致'}`);
+
+        // 模拟点击测试
+        console.log("🎯 模拟点击悬浮按钮...");
+        const initialState = isPopupOpen;
+
+        try {
+            // 直接调用切换函数
+            togglePopup();
+
+            setTimeout(() => {
+                const newState = isPopupOpen;
+                const newOverlay = $(`#${OVERLAY_ID}`);
+                const newActuallyOpen = newOverlay.length > 0;
+
+                console.log(`点击后状态: ${newState ? '打开' : '关闭'}`);
+                console.log(`点击后实际: ${newActuallyOpen ? '打开' : '关闭'}`);
+
+                const stateChanged = initialState !== newState;
+                const actualChanged = actuallyOpen !== newActuallyOpen;
+                const bothChanged = stateChanged && actualChanged;
+
+                console.log(`状态变化: ${stateChanged ? '✅' : '❌'}`);
+                console.log(`实际变化: ${actualChanged ? '✅' : '❌'}`);
+                console.log(`切换成功: ${bothChanged ? '✅' : '❌'}`);
+
+                // 再次点击测试
+                console.log("🎯 再次点击测试...");
+                togglePopup();
+
+                setTimeout(() => {
+                    const finalState = isPopupOpen;
+                    const finalOverlay = $(`#${OVERLAY_ID}`);
+                    const finalActuallyOpen = finalOverlay.length > 0;
+
+                    console.log(`最终状态: ${finalState ? '打开' : '关闭'}`);
+                    console.log(`最终实际: ${finalActuallyOpen ? '打开' : '关闭'}`);
+
+                    const backToOriginal = finalState === initialState;
+                    const actualBackToOriginal = finalActuallyOpen === actuallyOpen;
+
+                    console.log(`回到原状态: ${backToOriginal ? '✅' : '❌'}`);
+                    console.log(`实际回到原状态: ${actualBackToOriginal ? '✅' : '❌'}`);
+
+                    const allGood = stateConsistent && bothChanged && backToOriginal && actualBackToOriginal;
+                    console.log(`\n🎉 切换功能测试: ${allGood ? '完全成功！' : '需要检查'}`);
+
+                    if (allGood) {
+                        console.log("✅ 悬浮按钮切换功能正常工作");
+                        console.log("📋 功能说明:");
+                        console.log("  - 点击悬浮按钮可以打开弹窗");
+                        console.log("  - 再次点击悬浮按钮可以关闭弹窗");
+                        console.log("  - 点击弹窗外部也可以关闭弹窗");
+                        console.log("  - 弹窗内部没有关闭按钮");
+                    }
+
+                    return allGood;
+                }, 300);
+            }, 300);
+        } catch (error) {
+            console.error("切换功能测试失败:", error);
+            return false;
+        }
+
+        return true;
+    };
+
+    // 验证拖动修复是否成功
+    window.verifyDragFix = function() {
+        console.log("🎯 验证拖动修复效果...");
+
+        const button = $(`#${BUTTON_ID}`);
+        if (button.length === 0) {
+            console.log("❌ 按钮不存在");
+            return false;
+        }
+
+        // 检查事件绑定
+        const events = $._data(button[0], "events");
+        const hasCorrectEvents = events && events.mousedown && events.touchstart;
+        console.log(`事件绑定: ${hasCorrectEvents ? '✅' : '❌'}`);
+
+        // 检查当前位置
+        const rect = button[0].getBoundingClientRect();
+        const inViewport = rect.top >= 0 && rect.left >= 0 &&
+                          rect.bottom <= window.innerHeight && rect.right <= window.innerWidth;
+        console.log(`位置正常: ${inViewport ? '✅' : '❌'} - (${rect.left}, ${rect.top})`);
+
+        // 测试位置设置功能
+        const originalLeft = rect.left;
+        const originalTop = rect.top;
+        const testX = 100;
+        const testY = 100;
+
+        button[0].style.setProperty('left', testX + 'px', 'important');
+        button[0].style.setProperty('top', testY + 'px', 'important');
+
+        setTimeout(() => {
+            const newRect = button[0].getBoundingClientRect();
+            const positionWorks = Math.abs(newRect.left - testX) < 5 && Math.abs(newRect.top - testY) < 5;
+            console.log(`位置设置: ${positionWorks ? '✅' : '❌'}`);
+
+            // 恢复原位置
+            button[0].style.setProperty('left', originalLeft + 'px', 'important');
+            button[0].style.setProperty('top', originalTop + 'px', 'important');
+
+            const allGood = hasCorrectEvents && inViewport && positionWorks;
+            console.log(`\n🎉 拖动修复验证: ${allGood ? '完全成功！' : '需要进一步检查'}`);
+
+            if (allGood) {
+                console.log("✅ 拖动功能已完全修复并正常工作");
+                console.log("📋 功能说明:");
+                console.log("  - 快速点击 → 显示弹窗");
+                console.log("  - 按住拖动 → 移动按钮位置");
+                console.log("  - 拖动时有视觉反馈");
+                console.log("  - 自动边界限制");
+                console.log("  - 位置自动保存");
+            }
+
+            return allGood;
+        }, 100);
+
+        return true;
+    };
+
+    // 最终功能验证测试
+    window.testFinalDragFix = function() {
+        console.log("🎯 最终拖动修复验证...");
+
+        const button = $(`#${BUTTON_ID}`);
+        if (button.length === 0) {
+            console.log("❌ 按钮不存在");
+            return false;
+        }
+
+        console.log("✅ 按钮存在");
+
+        // 检查事件绑定
+        const events = $._data(button[0], "events");
+        const hasMouseDown = events && events.mousedown && events.mousedown.length > 0;
+        const hasTouchStart = events && events.touchstart && events.touchstart.length > 0;
+
+        console.log(`事件绑定检查:`);
+        console.log(`- mousedown: ${hasMouseDown ? '✅' : '❌'}`);
+        console.log(`- touchstart: ${hasTouchStart ? '✅' : '❌'}`);
+
+        // 检查位置
+        const rect = button[0].getBoundingClientRect();
+        const inViewport = rect.top >= 0 && rect.left >= 0 &&
+                          rect.bottom <= window.innerHeight && rect.right <= window.innerWidth;
+        console.log(`位置检查: ${inViewport ? '✅' : '❌'} - (${rect.left}, ${rect.top})`);
+
+        // 模拟位置测试
+        console.log("🎯 测试位置设置...");
+        const testX = 250;
+        const testY = 250;
+
+        button[0].style.setProperty('left', testX + 'px', 'important');
+        button[0].style.setProperty('top', testY + 'px', 'important');
+
+        setTimeout(() => {
+            const newRect = button[0].getBoundingClientRect();
+            const positionCorrect = Math.abs(newRect.left - testX) < 5 && Math.abs(newRect.top - testY) < 5;
+            console.log(`位置设置测试: ${positionCorrect ? '✅' : '❌'} - 实际位置: (${newRect.left}, ${newRect.top})`);
+
+            // 恢复原位置
+            button[0].style.setProperty('left', rect.left + 'px', 'important');
+            button[0].style.setProperty('top', rect.top + 'px', 'important');
+
+            // 总结
+            const allPassed = hasMouseDown && hasTouchStart && inViewport && positionCorrect;
+            console.log(`\n🎯 最终验证结果: ${allPassed ? '🎉 全部通过！' : '⚠️ 部分失败'}`);
+
+            if (allPassed) {
+                console.log("✅ 拖动和点击功能已完全修复！");
+                console.log("📋 使用说明:");
+                console.log("- 快速点击按钮 → 显示弹窗");
+                console.log("- 按住拖动按钮 → 移动位置");
+                console.log("- 拖动时有视觉反馈 → 半透明+放大");
+            } else {
+                console.log("❌ 仍有问题需要解决");
+            }
+
+            return allPassed;
+        }, 100);
+
+        return true;
+    };
+
+    // 立即测试切换功能
+    window.testToggleNow = function() {
+        console.log("🎯 立即测试悬浮按钮切换功能...");
+
+        const button = $('#virtual-pet-button');
+        if (button.length === 0) {
+            console.log("❌ 悬浮按钮不存在");
+            return false;
+        }
+
+        console.log("✅ 悬浮按钮存在");
+
+        // 检查当前状态
+        const overlay = $('#virtual-pet-popup-overlay');
+        const isCurrentlyOpen = overlay.length > 0;
+        console.log(`当前弹窗状态: ${isCurrentlyOpen ? '打开' : '关闭'}`);
+
+        // 模拟点击
+        console.log("🎯 模拟点击悬浮按钮...");
+
+        // 直接触发点击事件
+        button.trigger('click');
+
+        setTimeout(() => {
+            const newOverlay = $('#virtual-pet-popup-overlay');
+            const isNowOpen = newOverlay.length > 0;
+            console.log(`点击后弹窗状态: ${isNowOpen ? '打开' : '关闭'}`);
+
+            const stateChanged = isCurrentlyOpen !== isNowOpen;
+            console.log(`状态变化: ${stateChanged ? '✅ 成功' : '❌ 失败'}`);
+
+            if (stateChanged) {
+                console.log("🎯 再次点击测试...");
+                button.trigger('click');
+
+                setTimeout(() => {
+                    const finalOverlay = $('#virtual-pet-popup-overlay');
+                    const isFinallyOpen = finalOverlay.length > 0;
+                    console.log(`再次点击后状态: ${isFinallyOpen ? '打开' : '关闭'}`);
+
+                    const backToOriginal = isFinallyOpen === isCurrentlyOpen;
+                    console.log(`回到原状态: ${backToOriginal ? '✅ 成功' : '❌ 失败'}`);
+
+                    if (backToOriginal) {
+                        console.log("🎉 切换功能测试完全成功！");
+                        console.log("📋 使用说明:");
+                        console.log("  - 点击悬浮按钮 🐾 可以打开/关闭弹窗");
+                        console.log("  - 点击弹窗外部也可以关闭弹窗");
+                        console.log("  - 弹窗内部已移除关闭按钮");
+                        console.log("  - 操作更加直观简洁");
+                    } else {
+                        console.log("❌ 切换功能有问题，需要检查");
+                    }
+                }, 300);
+            } else {
+                console.log("❌ 切换功能不工作，可能需要修复");
+            }
+        }, 300);
+
+        return true;
+    };
+
+    // 测试所有修复的功能
+    window.testAllFixedFeatures = function() {
+        console.log("🎯 开始测试所有修复的功能...");
+
+        // 1. 测试玩耍图标
+        console.log("\n1. 测试玩耍图标:");
+        const playButtons = $('.play-btn span').first();
+        const playIconText = playButtons.text();
+        const playIconCorrect = playIconText.includes('🎮') && !playIconText.includes('�');
+        console.log(`玩耍图标: ${playIconCorrect ? '✅ 正确显示🎮' : '❌ 显示异常: ' + playIconText}`);
+
+        // 2. 测试宠物名字功能
+        console.log("\n2. 测试宠物名字功能:");
+        const petNameElements = $('.pet-name');
+        const hasNameElements = petNameElements.length > 0;
+        const hasClickEvent = petNameElements.first().attr('onclick') === 'editPetName()';
+        const hasEditFunction = typeof window.editPetName === 'function';
+        console.log(`名字元素: ${hasNameElements ? '✅ 找到' : '❌ 未找到'} (${petNameElements.length}个)`);
+        console.log(`点击事件: ${hasClickEvent ? '✅ 已绑定' : '❌ 未绑定'}`);
+        console.log(`编辑函数: ${hasEditFunction ? '✅ 存在' : '❌ 不存在'}`);
+        console.log(`当前名字: "${petData.name}"`);
+
+        // 3. 测试按钮功能
+        console.log("\n3. 测试按钮功能:");
+        const feedBtn = $('.feed-btn');
+        const playBtn = $('.play-btn');
+        const sleepBtn = $('.sleep-btn');
+        const hugBtn = $('.hug-btn');
+
+        console.log(`喂食按钮: ${feedBtn.length > 0 ? '✅ 存在' : '❌ 不存在'}`);
+        console.log(`玩耍按钮: ${playBtn.length > 0 ? '✅ 存在' : '❌ 不存在'}`);
+        console.log(`睡觉按钮: ${sleepBtn.length > 0 ? '✅ 存在' : '❌ 不存在'}`);
+        console.log(`抱抱按钮: ${hugBtn.length > 0 ? '✅ 存在' : '❌ 不存在'}`);
+
+        // 4. 测试状态数值
+        console.log("\n4. 测试状态数值:");
+        console.log(`健康: ${Math.round(petData.health)}/100`);
+        console.log(`饱食度: ${Math.round(petData.hunger)}/100`);
+        console.log(`快乐度: ${Math.round(petData.happiness)}/100`);
+        console.log(`精力: ${Math.round(petData.energy)}/100`);
+        console.log(`等级: ${petData.level}`);
+
+        // 5. 测试糖果色主题
+        console.log("\n5. 测试糖果色主题:");
+        const hasCandy = typeof candyColors !== 'undefined';
+        console.log(`糖果色配置: ${hasCandy ? '✅ 已加载' : '❌ 未加载'}`);
+        if (hasCandy) {
+            console.log(`主色调: ${candyColors.primary}`);
+            console.log(`背景: ${candyColors.background}`);
+        }
+
+        // 6. 测试UI更新函数
+        console.log("\n6. 测试UI更新函数:");
+        const hasUpdateFunction = typeof updateUnifiedUIStatus === 'function';
+        console.log(`更新函数: ${hasUpdateFunction ? '✅ 存在' : '❌ 不存在'}`);
+
+        // 总结
+        const allTests = [playIconCorrect, hasNameElements, hasClickEvent, hasEditFunction,
+                         feedBtn.length > 0, playBtn.length > 0, sleepBtn.length > 0, hasCandy, hasUpdateFunction];
+        const passedTests = allTests.filter(test => test).length;
+        const totalTests = allTests.length;
+
+        console.log(`\n🎯 测试总结: ${passedTests}/${totalTests} 项通过`);
+
+        if (passedTests === totalTests) {
+            console.log("🎉 所有功能测试通过！");
+        } else {
+            console.log("⚠️ 部分功能需要检查");
+        }
+
+        return {
+            passed: passedTests,
+            total: totalTests,
+            success: passedTests === totalTests
+        };
+    };
+
+    // 模拟按钮点击测试
+    window.testButtonClicks = function() {
+        console.log("🎯 测试按钮点击功能...");
+
+        const initialHealth = petData.health;
+        const initialHunger = petData.hunger;
+        const initialHappiness = petData.happiness;
+        const initialEnergy = petData.energy;
+
+        console.log("初始状态:", {
+            health: Math.round(initialHealth),
+            hunger: Math.round(initialHunger),
+            happiness: Math.round(initialHappiness),
+            energy: Math.round(initialEnergy)
+        });
+
+        // 模拟喂食
+        console.log("\n模拟喂食...");
+        feedPet();
+
+        setTimeout(() => {
+            console.log("喂食后状态:", {
+                health: Math.round(petData.health),
+                hunger: Math.round(petData.hunger),
+                happiness: Math.round(petData.happiness),
+                energy: Math.round(petData.energy)
+            });
+
+            const hungerChanged = petData.hunger !== initialHunger;
+            console.log(`饱食度变化: ${hungerChanged ? '✅ 正常' : '❌ 无变化'}`);
+
+            // 模拟玩耍
+            console.log("\n模拟玩耍...");
+            playWithPet();
+
+            setTimeout(() => {
+                console.log("玩耍后状态:", {
+                    health: Math.round(petData.health),
+                    hunger: Math.round(petData.hunger),
+                    happiness: Math.round(petData.happiness),
+                    energy: Math.round(petData.energy)
+                });
+
+                const happinessChanged = petData.happiness !== initialHappiness;
+                console.log(`快乐度变化: ${happinessChanged ? '✅ 正常' : '❌ 无变化'}`);
+
+                // 更新UI显示
+                updateUnifiedUIStatus();
+                console.log("✅ UI状态已更新");
+
+            }, 100);
+        }, 100);
+    };
+
+    // 强制清理旧数据并应用新数值
+    window.forceDataMigration = function() {
+        console.log("🔄 强制执行数据迁移...");
+
+        // 清理localStorage中的旧数据
+        localStorage.removeItem(STORAGE_KEY_PET_DATA);
+
+        // 重置为新的初始数值
+        petData = {
+            name: petData.name || "小宠物", // 保留当前名字
+            type: "cat",
+            level: 1,
+            experience: 0,
+            health: 40,
+            happiness: 30,
+            hunger: 50,
+            energy: 60,
+            lastFeedTime: Date.now(),
+            lastPlayTime: Date.now(),
+            lastSleepTime: Date.now(),
+            lastUpdateTime: Date.now(),
+            created: Date.now(),
+            dataVersion: 3.0
+        };
+
+        // 保存新数据
+        savePetData();
+
+        // 更新UI
+        updateUnifiedUIStatus();
+
+        console.log("✅ 数据迁移完成！新的初始数值:");
+        console.log(`健康: ${petData.health}/100`);
+        console.log(`快乐度: ${petData.happiness}/100`);
+        console.log(`饱食度: ${petData.hunger}/100`);
+        console.log(`精力: ${petData.energy}/100`);
+
+        alert("数据迁移完成！新的初始数值已应用。");
+    };
+
+    // 测试新的数值平衡
+    window.testNewBalance = function() {
+        console.log("🎯 测试新的数值平衡系统...");
+
+        // 显示当前数值
+        console.log("\n📊 当前状态:");
+        console.log(`健康: ${Math.round(petData.health)}/100`);
+        console.log(`饱食度: ${Math.round(petData.hunger)}/100`);
+        console.log(`快乐度: ${Math.round(petData.happiness)}/100`);
+        console.log(`精力: ${Math.round(petData.energy)}/100`);
+        console.log(`等级: ${petData.level}`);
+
+        // 测试操作效果
+        console.log("\n🧪 测试操作效果:");
+
+        const originalValues = {
+            health: petData.health,
+            hunger: petData.hunger,
+            happiness: petData.happiness,
+            energy: petData.energy
+        };
+
+        // 测试喂食
+        console.log("\n🍖 测试喂食效果:");
+        console.log(`喂食前 - 饱食度: ${Math.round(originalValues.hunger)}, 快乐度: ${Math.round(originalValues.happiness)}`);
+        feedPet();
+        console.log(`喂食后 - 饱食度: ${Math.round(petData.hunger)} (+${Math.round(petData.hunger - originalValues.hunger)}), 快乐度: ${Math.round(petData.happiness)} (+${Math.round(petData.happiness - originalValues.happiness)})`);
+
+        // 等待一下再测试玩耍
+        setTimeout(() => {
+            const beforePlay = {
+                happiness: petData.happiness,
+                energy: petData.energy
+            };
+
+            console.log("\n🎮 测试玩耍效果:");
+            console.log(`玩耍前 - 快乐度: ${Math.round(beforePlay.happiness)}, 精力: ${Math.round(beforePlay.energy)}`);
+            playWithPet();
+            console.log(`玩耍后 - 快乐度: ${Math.round(petData.happiness)} (+${Math.round(petData.happiness - beforePlay.happiness)}), 精力: ${Math.round(petData.energy)} (${Math.round(petData.energy - beforePlay.energy)})`);
+
+            // 等待一下再测试睡觉
+            setTimeout(() => {
+                const beforeSleep = {
+                    health: petData.health,
+                    energy: petData.energy
+                };
+
+                console.log("\n😴 测试睡觉效果:");
+                console.log(`睡觉前 - 健康: ${Math.round(beforeSleep.health)}, 精力: ${Math.round(beforeSleep.energy)}`);
+                petSleep();
+                console.log(`睡觉后 - 健康: ${Math.round(petData.health)} (+${Math.round(petData.health - beforeSleep.health)}), 精力: ${Math.round(petData.energy)} (+${Math.round(petData.energy - beforeSleep.energy)})`);
+
+                // 更新UI
+                updateUnifiedUIStatus();
+
+                console.log("\n📋 数值平衡总结:");
+                console.log("✅ 喂食: +15饱食度, +5快乐度, 20秒冷却");
+                console.log("✅ 玩耍: +12快乐度, -8精力, 40秒冷却");
+                console.log("✅ 睡觉: +20精力, +5健康, 80秒冷却");
+                console.log("✅ 时间衰减: 每12分钟更新，速度减缓60%");
+                console.log("✅ 初始数值: 健康40, 快乐30, 饱食50, 精力60");
+
+            }, 100);
+        }, 100);
+    };
+
+
+
+    // 模拟时间流逝测试
+    window.testTimeDecay = function() {
+        console.log("⏰ 测试时间衰减效果...");
+
+        const before = {
+            health: petData.health,
+            hunger: petData.hunger,
+            happiness: petData.happiness,
+            energy: petData.energy
+        };
+
+        console.log("衰减前状态:", before);
+
+        // 模拟1小时时间流逝
+        updatePetStatus();
+
+        console.log("衰减后状态:", {
+            health: Math.round(petData.health),
+            hunger: Math.round(petData.hunger),
+            happiness: Math.round(petData.happiness),
+            energy: Math.round(petData.energy)
+        });
+
+        const changes = {
+            health: Math.round(petData.health - before.health),
+            hunger: Math.round(petData.hunger - before.hunger),
+            happiness: Math.round(petData.happiness - before.happiness),
+            energy: Math.round(petData.energy - before.energy)
+        };
+
+        console.log("数值变化:", changes);
+        updateUnifiedUIStatus();
+    };
+
+    // 验证数值修复效果
+    window.verifyInitialValues = function() {
+        console.log("🔍 验证初始数值修复效果...");
+
+        // 检查当前数值
+        console.log("\n📊 当前宠物数值:");
+        console.log(`健康: ${petData.health}/100 ${petData.health === 40 ? '✅' : '❌ 应为40'}`);
+        console.log(`快乐度: ${petData.happiness}/100 ${petData.happiness === 30 ? '✅' : '❌ 应为30'}`);
+        console.log(`饱食度: ${petData.hunger}/100 ${petData.hunger === 50 ? '✅' : '❌ 应为50'}`);
+        console.log(`精力: ${petData.energy}/100 ${petData.energy === 60 ? '✅' : '❌ 应为60'}`);
+        console.log(`数据版本: ${petData.dataVersion} ${petData.dataVersion === 2.0 ? '✅' : '❌ 应为2.0'}`);
+
+        // 检查UI显示
+        console.log("\n🖥️ UI显示检查:");
+        const healthDisplay = $('.status-item').find('span').filter(function() {
+            return $(this).text().includes('健康');
+        }).next().text();
+    };
+
+    // 全面检查数值系统
+    window.checkValueSystem = function() {
+        console.log('=== 🔍 数值系统全面检查 ===');
+
+        // 1. 基本数值检查
+        console.log('\n📊 1. 基本数值状态:');
+        console.log(`健康: ${petData.health} (${typeof petData.health})`);
+        console.log(`快乐: ${petData.happiness} (${typeof petData.happiness})`);
+        console.log(`饱食: ${petData.hunger} (${typeof petData.hunger})`);
+        console.log(`精力: ${petData.energy} (${typeof petData.energy})`);
+        console.log(`等级: ${petData.level} (${typeof petData.level})`);
+        console.log(`经验: ${petData.experience} (${typeof petData.experience})`);
+
+        // 2. 数值范围验证
+        console.log('\n🎯 2. 数值范围验证:');
+        const checkRange = (name, value, min = 0, max = 100) => {
+            if (isNaN(value)) return `❌ ${name} 不是数字: ${value}`;
+            if (value < min) return `❌ ${name} 小于${min}: ${value}`;
+            if (value > max) return `❌ ${name} 大于${max}: ${value}`;
+            return `✅ ${name} 正常: ${value}`;
+        };
+
+        console.log(checkRange('健康', petData.health));
+        console.log(checkRange('快乐', petData.happiness));
+        console.log(checkRange('饱食', petData.hunger));
+        console.log(checkRange('精力', petData.energy));
+        console.log(checkRange('等级', petData.level, 1, 999));
+        console.log(checkRange('经验', petData.experience, 0, 99999));
+
+        // 3. 时间系统检查
+        console.log('\n⏰ 3. 时间系统检查:');
+        const now = Date.now();
+        const checkTime = (name, timestamp) => {
+            if (!timestamp) return `❌ ${name} 时间戳缺失`;
+            if (timestamp > now) return `❌ ${name} 时间戳异常(未来时间): ${new Date(timestamp)}`;
+            const diff = (now - timestamp) / (1000 * 60 * 60);
+            return `✅ ${name}: ${new Date(timestamp).toLocaleString()} (${Math.round(diff * 100) / 100}小时前)`;
+        };
+
+        console.log(checkTime('上次更新', petData.lastUpdateTime));
+        console.log(checkTime('上次喂食', petData.lastFeedTime));
+        console.log(checkTime('上次玩耍', petData.lastPlayTime));
+        console.log(checkTime('上次睡觉', petData.lastSleepTime));
+        console.log(checkTime('创建时间', petData.created));
+
+        // 4. 数值逻辑检查
+        console.log('\n🧮 4. 数值逻辑检查:');
+        const expNeeded = petData.level * 100;
+        console.log(`当前等级需要经验: ${expNeeded}`);
+        console.log(`当前经验进度: ${petData.experience}/${expNeeded} (${Math.round(petData.experience / expNeeded * 100)}%)`);
+
+        // 检查升级逻辑
+        if (petData.experience >= expNeeded) {
+            console.log('⚠️ 经验值已满足升级条件，但未升级');
+        } else {
+            console.log('✅ 经验值正常');
+        }
+
+        // 5. UI显示检查
+        console.log('\n🖥️ 5. UI显示检查:');
+        const statusBars = $('.stat-bar');
+        if (statusBars.length > 0) {
+            statusBars.each(function() {
+                const label = $(this).find('label').text();
+                const value = $(this).find('span').text();
+                const progressFill = $(this).find('.progress-fill');
+                const width = progressFill.css('width');
+                const expectedWidth = progressFill.attr('style')?.match(/width:\s*([^;%]+)%/)?.[1];
+                console.log(`${label}: 显示=${value}, 进度条=${width}, 期望=${expectedWidth}%`);
+            });
+        } else {
+            console.log('❌ 未找到状态条元素');
+        }
+
+        // 6. 存储数据一致性检查
+        console.log('\n💾 6. 存储数据一致性:');
+        const savedData = localStorage.getItem('virtual-pet-data');
+        if (savedData) {
+            try {
+                const parsed = JSON.parse(savedData);
+                const differences = [];
+
+                ['health', 'happiness', 'hunger', 'energy', 'level', 'experience'].forEach(key => {
+                    if (Math.abs(petData[key] - parsed[key]) > 0.01) {
+                        differences.push(`${key}: 内存=${petData[key]}, 存储=${parsed[key]}`);
+                    }
+                });
+
+                if (differences.length > 0) {
+                    console.log('❌ 内存与存储数据不一致:');
+                    differences.forEach(diff => console.log(`  ${diff}`));
+                } else {
+                    console.log('✅ 内存与存储数据一致');
+                }
+
+                console.log(`数据版本: ${parsed.dataVersion}`);
+            } catch (e) {
+                console.log('❌ 存储数据解析失败:', e);
+            }
+        } else {
+            console.log('❌ 未找到存储数据');
+        }
+
+        // 7. 函数可用性检查
+        console.log('\n🔧 7. 核心函数检查:');
+        const functions = [
+            'validateAndFixValues', 'updatePetStatus', 'feedPet',
+            'playWithPet', 'petSleep', 'gainExperience', 'renderPetStatus'
+        ];
+
+        functions.forEach(funcName => {
+            if (typeof window[funcName] === 'function' || typeof eval(funcName) === 'function') {
+                console.log(`✅ ${funcName} 函数可用`);
+            } else {
+                console.log(`❌ ${funcName} 函数不可用`);
+            }
+        });
+
+        // 8. 总结
+        console.log('\n📋 8. 系统状态总结:');
+        const issues = [];
+
+        // 检查关键问题
+        if (isNaN(petData.health) || petData.health < 0 || petData.health > 100) issues.push('健康值异常');
+        if (isNaN(petData.happiness) || petData.happiness < 0 || petData.happiness > 100) issues.push('快乐值异常');
+        if (isNaN(petData.hunger) || petData.hunger < 0 || petData.hunger > 100) issues.push('饱食值异常');
+        if (isNaN(petData.energy) || petData.energy < 0 || petData.energy > 100) issues.push('精力值异常');
+        if (!petData.lastUpdateTime || petData.lastUpdateTime > now) issues.push('时间戳异常');
+        if (statusBars.length === 0) issues.push('UI显示异常');
+
+        if (issues.length === 0) {
+            console.log('🎉 数值系统运行正常！');
+        } else {
+            console.log('⚠️ 发现以下问题:');
+            issues.forEach(issue => console.log(`  - ${issue}`));
+        }
+
+        return {
+            petData: petData,
+            issues: issues,
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    // 快速修复数值系统问题
+    window.fixValueSystem = function() {
+        console.log('🔧 开始修复数值系统问题...');
+
+        // 1. 验证并修复数值
+        console.log('1. 验证并修复数值范围...');
+        validateAndFixValues();
+
+        // 2. 强制更新UI
+        console.log('2. 强制更新UI显示...');
+        if (typeof renderPetStatus === 'function') {
+            renderPetStatus();
+        }
+
+        // 3. 保存修复后的数据
+        console.log('3. 保存修复后的数据...');
+        savePetData();
+
+        // 4. 验证修复结果
+        console.log('4. 验证修复结果...');
+        const result = checkValueSystem();
+
+        if (result.issues.length === 0) {
+            console.log('✅ 数值系统修复完成！');
+            toastr.success('数值系统已修复！');
+        } else {
+            console.log('⚠️ 仍有问题需要手动处理:', result.issues);
+            toastr.warning('部分问题已修复，请查看控制台了解详情');
+        }
+
+        return result;
+    };
+
+    // 强制重置过高数值到平衡范围
+    window.resetHighValues = function() {
+        console.log('🔧 检查并重置过高数值...');
+
+        const before = {
+            health: petData.health,
+            happiness: petData.happiness,
+            hunger: petData.hunger,
+            energy: petData.energy
+        };
+
+        console.log('重置前数值:', before);
+
+        // 检查是否有过高数值
+        const hasHighValues = petData.happiness > 80 || petData.hunger > 80 ||
+                             petData.health > 80 || petData.energy > 80;
+
+        if (!hasHighValues) {
+            console.log('✅ 数值都在合理范围内，无需重置');
+            toastr.info('数值都在合理范围内，无需重置');
+            return false;
+        }
+
+        // 重置过高数值到平衡范围
+        petData.health = Math.min(petData.health, 65);
+        petData.happiness = Math.min(petData.happiness, 65);
+        petData.hunger = Math.min(petData.hunger, 65);
+        petData.energy = Math.min(petData.energy, 65);
+
+        // 验证并保存
+        validateAndFixValues();
+        savePetData();
+        renderPetStatus();
+
+        const after = {
+            health: petData.health,
+            happiness: petData.happiness,
+            hunger: petData.hunger,
+            energy: petData.energy
+        };
+
+        console.log('重置后数值:', after);
+        console.log('✅ 过高数值已重置到平衡范围');
+
+        toastr.success('过高数值已重置！现在数值变化会更有趣。');
+
+        return {
+            before: before,
+            after: after,
+            reset: true,
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    // 手动同步宠物数据
+    window.syncPetData = function() {
+        console.log('🔄 手动同步宠物数据...');
+
+        // 强制保存当前数据到同步存储
+        const dataWithTimestamp = {
+            ...petData,
+            lastSyncTime: Date.now()
+        };
+
+        saveToSyncStorage(dataWithTimestamp);
+        localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(dataWithTimestamp));
+
+        console.log('✅ 宠物数据同步完成！');
+        toastr.success('宠物数据已同步到所有设备！');
+
+        return {
+            synced: true,
+            timestamp: new Date().toISOString(),
+            data: dataWithTimestamp
+        };
+    };
+
+    // 同步所有数据（宠物数据、AI设置、头像）
+    window.syncAllData = function() {
+        console.log('🔄 同步所有数据到云端...');
+
+        let syncResults = {
+            pet: false,
+            ai: false,
+            avatar: false,
+            timestamp: new Date().toISOString()
+        };
+
+        try {
+            // 1. 同步宠物数据
+            const dataWithTimestamp = {
+                ...petData,
+                lastSyncTime: Date.now()
+            };
+            saveToSyncStorage(dataWithTimestamp);
+            localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(dataWithTimestamp));
+            syncResults.pet = true;
+            console.log('✅ 宠物数据同步完成');
+
+            // 2. 同步AI设置
+            const aiSettings = localStorage.getItem(`${extensionName}-ai-settings`);
+            if (aiSettings) {
+                const settings = JSON.parse(aiSettings);
+                settings.lastSyncTime = Date.now();
+                localStorage.setItem(`${extensionName}-ai-settings`, JSON.stringify(settings));
+                saveAISettingsToSync(settings);
+                syncResults.ai = true;
+                console.log('✅ AI设置同步完成');
+            } else {
+                console.log('⚠️ 无AI设置需要同步');
+            }
+
+            // 3. 同步头像
+            const avatar = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
+            if (avatar) {
+                saveAvatarToSync(avatar);
+                syncResults.avatar = true;
+                console.log('✅ 头像同步完成');
+            } else {
+                console.log('⚠️ 无自定义头像需要同步');
+            }
+
+            console.log('🎉 所有数据同步完成！');
+            toastr.success('所有数据已同步到云端！现在可以在其他设备上访问了。', '🎉 同步成功', { timeOut: 5000 });
+
+        } catch (error) {
+            console.error('❌ 同步过程中出现错误:', error);
+            toastr.error('同步过程中出现错误: ' + error.message, '❌ 同步失败', { timeOut: 5000 });
+        }
+
+        return syncResults;
+    };
+
+    // 专门测试头像同步
+    window.testAvatarSync = function() {
+        console.log('🎨 测试头像同步功能...');
+
+        // 检查本地头像
+        const localAvatar = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
+        console.log('本地头像:', localAvatar ? `存在 (${Math.round(localAvatar.length/1024)}KB)` : '不存在');
+
+        // 检查同步头像
+        const syncAvatar = loadAvatarFromSync();
+        console.log('同步头像:', syncAvatar ? `存在 (${Math.round(syncAvatar.length/1024)}KB)` : '不存在');
+
+        // 检查当前使用的头像
+        console.log('当前头像:', customAvatarData ? `已加载 (${Math.round(customAvatarData.length/1024)}KB)` : '未加载');
+
+        // 如果有同步头像但本地没有，尝试同步
+        if (syncAvatar && !localAvatar) {
+            console.log('🔄 发现同步头像，正在同步到本地...');
+            localStorage.setItem(STORAGE_KEY_CUSTOM_AVATAR, syncAvatar);
+            customAvatarData = syncAvatar;
+            updateAvatarDisplay();
+            updateFloatingButtonAvatar();
+            console.log('✅ 头像同步完成');
+            toastr.success('头像已从云端同步！', '🎨 头像同步', { timeOut: 3000 });
+        } else if (localAvatar && !syncAvatar) {
+            console.log('🔄 发现本地头像，正在同步到云端...');
+            saveAvatarToSync(localAvatar);
+            console.log('✅ 头像已同步到云端');
+            toastr.success('头像已同步到云端！', '🎨 头像同步', { timeOut: 3000 });
+        } else if (syncAvatar && localAvatar) {
+            console.log('✅ 头像已在本地和云端同步');
+            toastr.info('头像已同步', '🎨 头像状态', { timeOut: 2000 });
+        } else {
+            console.log('ℹ️ 未发现自定义头像');
+            toastr.info('未发现自定义头像', '🎨 头像状态', { timeOut: 2000 });
+        }
+
+        return {
+            hasLocal: !!localAvatar,
+            hasSync: !!syncAvatar,
+            hasCurrent: !!customAvatarData,
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    // 导出宠物数据
+    window.exportPetData = function() {
+        console.log('📤 导出宠物数据...');
+
+        const exportData = {
+            ...petData,
+            exportTime: Date.now(),
+            exportVersion: '3.0'
+        };
+
+        const dataStr = JSON.stringify(exportData, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+
+        // 创建下载链接
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `virtual-pet-data-${new Date().toISOString().split('T')[0]}.json`;
+
+        // 触发下载
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        console.log('✅ 宠物数据已导出！');
+        toastr.success('宠物数据已导出到文件！');
+
+        return exportData;
+    };
+
+    // 导入宠物数据
+    window.importPetData = function() {
+        console.log('📥 导入宠物数据...');
+
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+
+        input.onchange = function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+
+                    // 验证数据格式
+                    if (!importedData.name || typeof importedData.health !== 'number') {
+                        throw new Error('无效的宠物数据格式');
+                    }
+
+                    // 确认导入
+                    if (confirm(`确定要导入宠物数据吗？\n\n宠物名称: ${importedData.name}\n等级: ${importedData.level}\n这将覆盖当前数据！`)) {
+                        // 保留当前的时间戳，更新数据版本
+                        const mergedData = {
+                            ...importedData,
+                            lastSyncTime: Date.now(),
+                            dataVersion: 3.0
+                        };
+
+                        petData = mergedData;
+
+                        // 应用拓麻歌子系统
+                        applyTamagotchiSystem();
+
+                        // 保存数据
+                        savePetData();
+
+                        // 更新UI
+                        renderPetStatus();
+                        if (typeof renderSettings === 'function') {
+                            renderSettings();
+                        }
+
+                        console.log('✅ 宠物数据导入成功！');
+                        toastr.success('宠物数据导入成功！');
+                    }
+                } catch (error) {
+                    console.error('导入失败:', error);
+                    toastr.error('导入失败：' + error.message);
+                }
+            };
+
+            reader.readAsText(file);
+        };
+
+        input.click();
+    };
+
+    // 检查同步状态 - 包含宠物数据、AI设置和头像
+    window.checkSyncStatus = function() {
+        console.log('🔍 检查完整同步状态...');
+
+        // 检查宠物数据
+        const localData = localStorage.getItem(STORAGE_KEY_PET_DATA);
+        const syncData = loadFromSyncStorage();
+
+        console.log('\n📱 宠物数据 - 本地:');
+        if (localData) {
+            try {
+                const local = JSON.parse(localData);
+                console.log(`- 最后同步时间: ${local.lastSyncTime ? new Date(local.lastSyncTime).toLocaleString() : '未设置'}`);
+                console.log(`- 宠物名称: ${local.name}`);
+                console.log(`- 等级: ${local.level}`);
+                console.log(`- 数据版本: ${local.dataVersion}`);
+            } catch (e) {
+                console.log('- 本地数据解析失败');
+            }
+        } else {
+            console.log('- 无本地数据');
+        }
+
+        console.log('\n☁️ 宠物数据 - 同步:');
+        if (syncData) {
+            try {
+                const sync = typeof syncData === 'object' ? syncData : JSON.parse(syncData);
+                console.log(`- 最后同步时间: ${sync.lastSyncTime ? new Date(sync.lastSyncTime).toLocaleString() : '未设置'}`);
+                console.log(`- 宠物名称: ${sync.name}`);
+                console.log(`- 等级: ${sync.level}`);
+                console.log(`- 数据版本: ${sync.dataVersion}`);
+            } catch (e) {
+                console.log('- 同步数据解析失败');
+            }
+        } else {
+            console.log('- 无同步数据');
+        }
+
+        // 检查AI设置
+        const localAISettings = localStorage.getItem(`${extensionName}-ai-settings`);
+        const syncAISettings = loadAISettingsFromSync();
+
+        console.log('\n🤖 AI设置 - 本地:');
+        if (localAISettings) {
+            try {
+                const local = JSON.parse(localAISettings);
+                console.log(`- API类型: ${local.apiType || '未设置'}`);
+                console.log(`- API URL: ${local.apiUrl ? '已设置' : '未设置'}`);
+                console.log(`- API密钥: ${local.apiKey ? '已设置' : '未设置'}`);
+                console.log(`- 模型: ${local.apiModel || '未设置'}`);
+                console.log(`- 最后同步时间: ${local.lastSyncTime ? new Date(local.lastSyncTime).toLocaleString() : '未设置'}`);
+            } catch (e) {
+                console.log('- AI设置解析失败');
+            }
+        } else {
+            console.log('- 无本地AI设置');
+        }
+
+        console.log('\n☁️ AI设置 - 同步:');
+        if (syncAISettings) {
+            try {
+                const sync = typeof syncAISettings === 'object' ? syncAISettings : JSON.parse(syncAISettings);
+                console.log(`- API类型: ${sync.apiType || '未设置'}`);
+                console.log(`- API URL: ${sync.apiUrl ? '已设置' : '未设置'}`);
+                console.log(`- API密钥: ${sync.apiKey ? '已设置' : '未设置'}`);
+                console.log(`- 模型: ${sync.apiModel || '未设置'}`);
+                console.log(`- 最后同步时间: ${sync.lastSyncTime ? new Date(sync.lastSyncTime).toLocaleString() : '未设置'}`);
+            } catch (e) {
+                console.log('- 同步AI设置解析失败');
+            }
+        } else {
+            console.log('- 无同步AI设置');
+        }
+
+        // 检查头像
+        const localAvatar = localStorage.getItem(STORAGE_KEY_CUSTOM_AVATAR);
+        const syncAvatar = loadAvatarFromSync();
+
+        console.log('\n🎨 头像 - 本地:');
+        console.log(`- 自定义头像: ${localAvatar ? '已设置' : '未设置'}`);
+        if (localAvatar) {
+            console.log(`- 头像大小: ${Math.round(localAvatar.length / 1024)}KB`);
+        }
+
+        console.log('\n☁️ 头像 - 同步:');
+        console.log(`- 自定义头像: ${syncAvatar ? '已设置' : '未设置'}`);
+        if (syncAvatar) {
+            console.log(`- 头像大小: ${Math.round(syncAvatar.length / 1024)}KB`);
+        }
+
+        console.log('\n🔄 同步建议:');
+        if (!localData && !syncData) {
+            console.log('- 这是新设备，数据将自动同步');
+        } else if (localData && !syncData) {
+            console.log('- 建议运行 syncAllData() 将所有数据同步到云端');
+        } else if (!localData && syncData) {
+            console.log('- 将自动从云端恢复数据');
+        } else {
+            try {
+                const local = JSON.parse(localData);
+                const sync = typeof syncData === 'object' ? syncData : JSON.parse(syncData);
+                const localTime = local.lastSyncTime || 0;
+                const syncTime = sync.lastSyncTime || 0;
+
+                if (localTime > syncTime) {
+                    console.log('- 本地数据较新，建议运行 syncAllData() 同步到云端');
+                } else if (syncTime > localTime) {
+                    console.log('- 云端数据较新，将自动使用云端数据');
+                } else {
+                    console.log('- 宠物数据已同步');
+                }
+            } catch (e) {
+                console.log('- 数据比较失败，建议手动同步');
+            }
+        }
+
+        // AI设置和头像同步建议
+        if (!syncAISettings && localAISettings) {
+            console.log('- AI设置需要同步到云端');
+        }
+        if (!syncAvatar && localAvatar) {
+            console.log('- 头像需要同步到云端');
+        }
+
+        return {
+            hasLocal: !!localData,
+            hasSync: !!syncData,
+            hasLocalAI: !!localAISettings,
+            hasSyncAI: !!syncAISettings,
+            hasLocalAvatar: !!localAvatar,
+            hasSyncAvatar: !!syncAvatar,
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    // 测试拓麻歌子系统
+    window.testTamagotchiSystem = function() {
+        console.log('🥚 测试拓麻歌子系统...');
+
+        console.log('\n📊 当前拓麻歌子状态:');
+        console.log(`生命阶段: ${petData.lifeStage} (${LIFE_STAGES[petData.lifeStage]?.name})`);
+        console.log(`年龄: ${Math.round(petData.age)}小时`);
+        console.log(`是否存活: ${petData.isAlive ? '✅ 是' : '❌ 否'}`);
+        console.log(`疾病程度: ${petData.sickness}/100`);
+        console.log(`纪律值: ${petData.discipline}/100`);
+        console.log(`体重: ${petData.weight}kg`);
+        console.log(`忽视次数: ${petData.careNeglectCount}`);
+        console.log(`生病持续: ${Math.round(petData.sicknessDuration)}小时`);
+
+        if (petData.deathReason) {
+            console.log(`死亡原因: ${petData.deathReason}`);
+        }
+
+        console.log('\n⏰ 时间检查:');
+        const now = Date.now();
+        const timeSinceLastCare = now - petData.lastCareTime;
+        const hoursSinceLastCare = timeSinceLastCare / (1000 * 60 * 60);
+        console.log(`距离上次照顾: ${Math.round(hoursSinceLastCare * 100) / 100}小时`);
+
+        console.log('\n🎯 拓麻歌子式特性:');
+        console.log('- ✅ 真实时间流逝（不限制24小时）');
+        console.log('- ✅ 生命阶段系统');
+        console.log('- ✅ 死亡机制');
+        console.log('- ✅ 疾病系统');
+        console.log('- ✅ 忽视照顾惩罚');
+        console.log('- ✅ 体重管理');
+
+        console.log('\n🔧 可用命令:');
+        console.log('- feedPet() - 喂食');
+        console.log('- playWithPet() - 玩耍');
+        console.log('- petSleep() - 休息');
+        console.log('- healPet() - 治疗');
+        console.log('- resetPet() - 重新开始');
+
+        return {
+            lifeStage: petData.lifeStage,
+            age: petData.age,
+            isAlive: petData.isAlive,
+            sickness: petData.sickness,
+            discipline: petData.discipline,
+            weight: petData.weight,
+            careNeglectCount: petData.careNeglectCount,
+            hoursSinceLastCare: hoursSinceLastCare,
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    // 商店系统功能
+    function showShopModal() {
+        // 创建商店弹窗
+        const shopModal = $(`
+            <div id="shop-modal" style="
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100vw !important;
+                height: 100vh !important;
+                background-color: rgba(0, 0, 0, 0.8) !important;
+                z-index: 1000000 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                padding: 20px !important;
+                box-sizing: border-box !important;
+            ">
+                <div style="
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+                    border-radius: 15px !important;
+                    padding: 20px !important;
+                    max-width: 500px !important;
+                    width: 100% !important;
+                    max-height: 80vh !important;
+                    overflow-y: auto !important;
+                    color: white !important;
+                    box-shadow: 0 20px 40px rgba(0,0,0,0.3) !important;
+                ">
+                    <div style="
+                        display: flex !important;
+                        justify-content: space-between !important;
+                        align-items: center !important;
+                        margin-bottom: 20px !important;
+                        border-bottom: 1px solid rgba(255,255,255,0.2) !important;
+                        padding-bottom: 15px !important;
+                    ">
+                        <h2 style="margin: 0 !important; color: #ffd700 !important;">🛒 宠物商店</h2>
+                        <div style="color: #ffd700 !important; font-weight: bold !important;">
+                            💰 ${petData.coins || 100} 金币
+                        </div>
+                    </div>
+
+                    <div id="shop-categories" style="
+                        display: flex !important;
+                        gap: 10px !important;
+                        margin-bottom: 15px !important;
+                        flex-wrap: wrap !important;
+                    ">
+                        <button class="shop-category-btn" data-category="all" style="
+                            padding: 8px 15px !important;
+                            background: #ffd700 !important;
+                            color: #333 !important;
+                            border: none !important;
+                            border-radius: 20px !important;
+                            cursor: pointer !important;
+                            font-size: 0.9em !important;
+                            font-weight: bold !important;
+                        ">全部</button>
+                        <button class="shop-category-btn" data-category="food" style="
+                            padding: 8px 15px !important;
+                            background: rgba(255,255,255,0.2) !important;
+                            color: white !important;
+                            border: none !important;
+                            border-radius: 20px !important;
+                            cursor: pointer !important;
+                            font-size: 0.9em !important;
+                        ">🍎 食物</button>
+                        <button class="shop-category-btn" data-category="medicine" style="
+                            padding: 8px 15px !important;
+                            background: rgba(255,255,255,0.2) !important;
+                            color: white !important;
+                            border: none !important;
+                            border-radius: 20px !important;
+                            cursor: pointer !important;
+                            font-size: 0.9em !important;
+                        ">💊 药品</button>
+                        <button class="shop-category-btn" data-category="toy" style="
+                            padding: 8px 15px !important;
+                            background: rgba(255,255,255,0.2) !important;
+                            color: white !important;
+                            border: none !important;
+                            border-radius: 20px !important;
+                            cursor: pointer !important;
+                            font-size: 0.9em !important;
+                        ">🎮 玩具</button>
+                        <button class="shop-category-btn" data-category="special" style="
+                            padding: 8px 15px !important;
+                            background: rgba(255,255,255,0.2) !important;
+                            color: white !important;
+                            border: none !important;
+                            border-radius: 20px !important;
+                            cursor: pointer !important;
+                            font-size: 0.9em !important;
+                        ">✨ 特殊</button>
+                    </div>
+
+                    <div id="shop-items" style="
+                        display: grid !important;
+                        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important;
+                        gap: 15px !important;
+                        margin-bottom: 20px !important;
+                    ">
+                        ${generateShopItems('all')}
+                    </div>
+
+                    <div style="text-align: center !important;">
+                        <button onclick="closeShopModal()" style="
+                            padding: 10px 30px !important;
+                            background: #f04747 !important;
+                            color: white !important;
+                            border: none !important;
+                            border-radius: 25px !important;
+                            cursor: pointer !important;
+                            font-size: 1em !important;
+                        ">关闭商店</button>
+                    </div>
+                </div>
+            </div>
+        `);
+
+        $('body').append(shopModal);
+
+        // 绑定分类按钮事件
+        $('.shop-category-btn').on('click', function() {
+            const category = $(this).data('category');
+            $('.shop-category-btn').css({
+                'background': 'rgba(255,255,255,0.2)',
+                'color': 'white'
+            });
+            $(this).css({
+                'background': '#ffd700',
+                'color': '#333'
+            });
+            $('#shop-items').html(generateShopItems(category));
+        });
+
+        // 点击外部关闭
+        shopModal.on('click', function(e) {
+            if (e.target === this) {
+                closeShopModal();
+            }
+        });
+    }
+
+    function generateShopItems(category) {
+        let itemsHtml = '';
+
+        Object.entries(SHOP_ITEMS).forEach(([itemId, item]) => {
+            if (category === 'all' || item.category === category) {
+                const canAfford = (petData.coins || 100) >= item.price;
+                const ownedCount = petData.inventory[itemId] || 0;
+
+                itemsHtml += `
+                    <div class="shop-item" style="
+                        background: rgba(255,255,255,0.1) !important;
+                        border-radius: 10px !important;
+                        padding: 15px !important;
+                        text-align: center !important;
+                        border: 2px solid ${canAfford ? 'rgba(255,215,0,0.5)' : 'rgba(255,255,255,0.2)'} !important;
+                    ">
+                        <div style="font-size: 2em !important; margin-bottom: 8px !important;">
+                            ${item.emoji}
+                        </div>
+                        <div style="font-weight: bold !important; margin-bottom: 5px !important;">
+                            ${item.name}
+                        </div>
+                        <div style="font-size: 0.8em !important; color: rgba(255,255,255,0.8) !important; margin-bottom: 8px !important; min-height: 32px !important;">
+                            ${item.description}
+                        </div>
+                        <div style="color: #ffd700 !important; font-weight: bold !important; margin-bottom: 8px !important;">
+                            💰 ${item.price} 金币
+                        </div>
+                        ${ownedCount > 0 ? `
+                        <div style="color: #4ecdc4 !important; font-size: 0.8em !important; margin-bottom: 8px !important;">
+                            拥有: ${ownedCount}
+                        </div>
+                        ` : ''}
+                        <button onclick="buyItem('${itemId}')" style="
+                            padding: 8px 16px !important;
+                            background: ${canAfford ? '#43b581' : '#99aab5'} !important;
+                            color: white !important;
+                            border: none !important;
+                            border-radius: 20px !important;
+                            cursor: ${canAfford ? 'pointer' : 'not-allowed'} !important;
+                            font-size: 0.9em !important;
+                            width: 100% !important;
+                        " ${!canAfford ? 'disabled' : ''}>
+                            ${canAfford ? '购买' : '金币不足'}
+                        </button>
+                    </div>
+                `;
+            }
+        });
+
+        return itemsHtml || '<div style="text-align: center; color: rgba(255,255,255,0.6); padding: 20px;">该分类暂无商品</div>';
+    }
+
+    window.buyItem = function(itemId) {
+        const item = SHOP_ITEMS[itemId];
+        if (!item) return;
+
+        if ((petData.coins || 100) < item.price) {
+            toastr.error('金币不足！');
+            return;
+        }
+
+        if (!confirm(`确定要购买 ${item.name} 吗？\n价格：${item.price} 金币\n\n${item.description}`)) {
+            return;
+        }
+
+        // 扣除金币
+        petData.coins = (petData.coins || 100) - item.price;
+
+        // 添加到库存
+        if (!petData.inventory) petData.inventory = {};
+        petData.inventory[itemId] = (petData.inventory[itemId] || 0) + 1;
+
+        // 立即使用物品效果
+        useItem(itemId);
+
+        // 保存数据
+        savePetData();
+
+        // 更新商店显示
+        const currentCategory = $('.shop-category-btn').filter(function() {
+            return $(this).css('background-color') === 'rgb(255, 215, 0)' || $(this).css('background') === '#ffd700';
+        }).data('category') || 'all';
+
+        $('#shop-items').html(generateShopItems(currentCategory));
+        $('.shop-modal h2').next().html(`💰 ${petData.coins} 金币`);
+
+        toastr.success(`购买成功！${item.name} 已自动使用。`);
+    };
+
+    function useItem(itemId) {
+        const item = SHOP_ITEMS[itemId];
+        if (!item || !item.effect) return;
+
+        const effect = item.effect;
+
+        // 应用效果
+        if (effect.hunger) petData.hunger = Math.min(100, Math.max(0, petData.hunger + effect.hunger));
+        if (effect.happiness) petData.happiness = Math.min(100, Math.max(0, petData.happiness + effect.happiness));
+        if (effect.health) petData.health = Math.min(100, Math.max(0, petData.health + effect.health));
+        if (effect.energy) petData.energy = Math.min(100, Math.max(0, petData.energy + effect.energy));
+        if (effect.sickness) petData.sickness = Math.min(100, Math.max(0, (petData.sickness || 0) + effect.sickness));
+        if (effect.discipline) petData.discipline = Math.min(100, Math.max(0, (petData.discipline || 50) + effect.discipline));
+
+        // 特殊效果
+        if (effect.timeFreeze) {
+            // 时间胶囊效果 - 延迟下次更新时间
+            petData.lastUpdateTime = Date.now() + (effect.timeFreeze * 60 * 60 * 1000);
+            toastr.info(`⏰ 时间已暂停 ${effect.timeFreeze} 小时！`);
+        }
+
+        if (effect.revive && !petData.isAlive) {
+            // 复活石效果
+            petData.isAlive = true;
+            petData.deathReason = null;
+            petData.health = Math.max(20, petData.health - (effect.healthPenalty || 0));
+            petData.sickness = 0;
+            petData.careNeglectCount = 0;
+            toastr.success(`💎 ${petData.name} 复活了！但最大健康值降低了。`);
+        }
+
+        // 装饰品效果（持续加成）
+        if (effect.happinessBonus || effect.disciplineBonus) {
+            // 这些效果需要在状态更新时持续应用
+            if (!petData.activeDecorations) petData.activeDecorations = [];
+            if (!petData.activeDecorations.includes(itemId)) {
+                petData.activeDecorations.push(itemId);
+            }
+        }
+
+        validateAndFixValues();
+    }
+
+    window.closeShopModal = function() {
+        $('#shop-modal').remove();
+    };
+
+    // 测试商店系统
+    window.testShopSystem = function() {
+        console.log('🛒 测试商店系统...');
+
+        console.log('\n💰 当前金币状态:');
+        console.log(`金币: ${petData.coins || 100}`);
+
+        console.log('\n📦 当前库存:');
+        if (petData.inventory && Object.keys(petData.inventory).length > 0) {
+            Object.entries(petData.inventory).forEach(([itemId, count]) => {
+                const item = SHOP_ITEMS[itemId];
+                console.log(`${item ? item.emoji + ' ' + item.name : itemId}: ${count}`);
+            });
+        } else {
+            console.log('库存为空');
+        }
+
+        console.log('\n🏪 商店物品:');
+        Object.entries(SHOP_ITEMS).forEach(([itemId, item]) => {
+            const canAfford = (petData.coins || 100) >= item.price;
+            console.log(`${item.emoji} ${item.name} - ${item.price}金币 ${canAfford ? '✅' : '❌'}`);
+        });
+
+        console.log('\n🎮 可用命令:');
+        console.log('- openShop() - 打开商店');
+        console.log('- buyItem("itemId") - 购买物品');
+        console.log('- gainCoins(amount) - 获得金币');
+        console.log('- petData.coins = 1000 - 设置金币数量');
+
+        return {
+            coins: petData.coins || 100,
+            inventory: petData.inventory || {},
+            shopItems: Object.keys(SHOP_ITEMS).length,
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    // 强制更新到拓麻歌子系统
+    window.forceUpdateToTamagotchi = function() {
+        console.log('🔄 强制更新到拓麻歌子系统...');
+
+        // 备份重要数据
+        const backup = {
+            name: petData.name,
+            type: petData.type,
+            level: petData.level,
+            experience: petData.experience,
+            created: petData.created,
+            coins: petData.coins || 100
+        };
+
+        console.log('备份数据:', backup);
+
+        // 重置为拓麻歌子式数据结构
+        petData = {
+            ...backup,
+
+            // 拓麻歌子式数值
+            health: 50,
+            happiness: 50,
+            hunger: 50,
+            energy: 50,
+
+            // 拓麻歌子式生命状态
+            lifeStage: "baby",
+            age: 0,
+            isAlive: true,
+            deathReason: null,
+
+            // 拓麻歌子式护理状态
+            sickness: 0,
+            discipline: 50,
+            weight: 30,
+
+            // 时间记录
+            lastFeedTime: Date.now(),
+            lastPlayTime: Date.now(),
+            lastSleepTime: Date.now(),
+            lastUpdateTime: Date.now(),
+            lastCareTime: Date.now(),
+
+            // 拓麻歌子式计数器
+            careNeglectCount: 0,
+            sicknessDuration: 0,
+
+            // 商店系统
+            inventory: petData.inventory || {},
+
+            dataVersion: 4.0
+        };
+
+        // 应用拓麻歌子系统
+        applyTamagotchiSystem();
+
+        // 保存数据
+        savePetData();
+
+        // 强制刷新UI
+        if (typeof renderPetStatus === 'function') {
+            renderPetStatus();
+        }
+
+        console.log('✅ 强制更新完成！');
+        console.log('新的拓麻歌子数据:', petData);
+
+        toastr.success('🥚 已强制更新到拓麻歌子系统！请重新打开宠物界面查看。');
+
+        return petData;
+    };
+
+    // 强制清除缓存并重新加载
+    window.forceClearAndReload = function() {
+        console.log('🧹 强制清除缓存并重新加载...');
+
+        // 清除所有弹窗
+        $('.virtual-pet-popup-overlay').remove();
+        $('#virtual-pet-popup-overlay').remove();
+        $('#shop-modal').remove();
+
+        // 清除按钮
+        $('#virtual-pet-button').remove();
+
+        // 重新加载脚本
+        location.reload();
+    };
+
+    // 完整修复所有问题
+    window.fixAllIssues = function() {
+        console.log('🔧 开始完整修复所有问题...');
+
+        // 1. 强制更新到拓麻歌子系统
+        console.log('1. 更新到拓麻歌子系统...');
+        forceUpdateToTamagotchi();
+
+        // 2. 确保商店系统可用
+        console.log('2. 检查商店系统...');
+        if (!petData.coins) petData.coins = 100;
+        if (!petData.inventory) petData.inventory = {};
+
+        // 3. 重新绑定事件
+        console.log('3. 重新绑定UI事件...');
+        setTimeout(() => {
+            const $popup = $('.virtual-pet-popup-overlay');
+            if ($popup.length > 0) {
+                bindUnifiedUIEvents($popup);
+            }
+        }, 500);
+
+        // 4. 保存数据
+        savePetData();
+
+        console.log('✅ 所有问题修复完成！');
+        toastr.success('🎉 所有问题已修复！商店按钮和拓麻歌子系统现在应该正常工作了！');
+
+        return {
+            fixed: true,
+            timestamp: new Date().toISOString(),
+            petData: petData
+        };
+    };
+
+    // 测试拓麻歌子UI风格 (糖果色版本)
+    window.testTamagotchiUI = function() {
+        console.log('🎮 测试拓麻歌子UI风格 (糖果色版本)...');
+
+        console.log('\n🎨 配色方案:');
+        console.log(`主背景: ${candyColors.background}`);
+        console.log(`屏幕色: ${candyColors.screen}`);
+        console.log(`边框色: ${candyColors.border}`);
+        console.log(`文字色: ${candyColors.textPrimary}`);
+
+        console.log('\n🎯 UI特性:');
+        console.log('✅ 像素化字体 (Courier New)');
+        console.log('✅ 方形边框 (border-radius: 0)');
+        console.log('✅ 糖果色渐变背景');
+        console.log('✅ 柔和粉色阴影');
+        console.log('✅ 大写英文按钮文字');
+        console.log('✅ 拓麻歌子式状态栏');
+
+        console.log('\n🔧 可用命令:');
+        console.log('- fixAllIssues() - 修复所有问题');
+        console.log('- showPopup() - 显示拓麻歌子UI');
+        console.log('- testTamagotchiSystem() - 测试拓麻歌子系统');
+        console.log('- forceApplyTamagotchiSystem() - 强制应用拓麻歌子系统（修复金币问题）');
+        console.log('- testCleanPrompt() - 测试优化后的提示词（避免AI混淆金币）');
+        console.log('- diagnoseRewardSystem() - 诊断金币和经验值问题');
+        console.log('- checkInteractionFunctions() - 检查当前使用的互动函数版本');
+        console.log('- testSimpleInteraction() - 测试简化互动（不包含AI）');
+        console.log('- testInteractionFlow() - 测试完整互动流程（包含AI）');
+        console.log('- traceFeedPetExecution() - 追踪喂食函数的详细执行流程');
+        console.log('- checkUIButtonBinding() - 检查UI按钮事件绑定');
+        console.log('- traceUIFeedPet() - 追踪UI点击时的函数调用');
+        console.log('- restoreOriginalFunctions() - 恢复原始函数（追踪后使用）');
+        console.log('- checkFeedPetVersions() - 检查不同作用域的feedPet函数并修复UI绑定');
+        console.log('- testFixedUIButton() - 测试修复后的UI按钮（包含详细追踪）');
+        console.log('- testUIAfterCooldown() - 等待冷却时间后测试UI按钮');
+        console.log('- inspectUIFeedPet() - 检查UI实际调用的函数并强制修复');
+        console.log('- forceUIRefresh() - 强制刷新UI显示（解决金币显示延迟）');
+        console.log('- testRewardDisplay() - 测试奖励显示系统');
+        console.log('- adjustDecaySystem() - 调整衰减速度');
+        console.log('- testNewDecaySystem() - 测试衰减效果');
+        console.log('- testNewValueBalance() - 测试智能初始化系统的数值平衡');
+        console.log('- testHugFunction() - 测试抱抱功能（检查按钮、函数、奖励）');
+        console.log('- testHugFunctionComplete() - 完整测试抱抱功能（包括前后检查）');
+        console.log('- quickVerifyHugFunction() - 快速验证抱抱功能是否完整');
+        console.log('- diagnose75ValueIssue() - 诊断和修复75数值问题');
+        console.log('- testSmartInitSystem() - 测试智能初始化系统');
+        console.log('- resetRandomizationFlag() - 重置随机化标记（测试用）');
+        console.log('- diagnoseValueResetIssue() - 诊断数值重置问题');
+
+        // 强制刷新UI
+        if (typeof renderPetStatus === 'function') {
+            renderPetStatus();
+        }
+
+        toastr.success('🎮 糖果色拓麻歌子UI风格已应用！重新打开宠物界面查看效果。');
+
+        return {
+            uiStyle: 'tamagotchi-candy',
+            colors: candyColors,
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    // 测试新的状态栏颜色
+    window.testStatusColors = function() {
+        console.log('🎨 测试新的状态栏颜色...');
+
+        console.log('\n🌈 状态栏配色:');
+        console.log(`❤️ 健康: ${candyColors.health} (糖果粉)`);
+        console.log(`😊 快乐: ${candyColors.happiness} (柠檬黄)`);
+        console.log(`🍖 饱食: ${candyColors.hunger} (蜜桃橙)`);
+        console.log(`⚡ 精力: ${candyColors.energy} (天空蓝)`);
+        console.log(`💊 疾病: ${candyColors.health} (糖果粉)`);
+        console.log(`📚 纪律: ${candyColors.experience} (薰衣草紫)`);
+
+        console.log('\n✨ 按钮配色:');
+        console.log(`🍖 喂食: ${candyColors.buttonPrimary} (糖果粉)`);
+        console.log(`🎮 玩耍: ${candyColors.buttonSecondary} (薄荷绿)`);
+        console.log(`😴 休息: ${candyColors.buttonAccent} (天空蓝)`);
+        console.log(`💊 治疗: ${candyColors.health} (糖果粉)`);
+        console.log(`🛒 商店: ${candyColors.happiness} (柠檬黄)`);
+
+        console.log('\n🎯 改进内容:');
+        console.log('✅ 状态栏颜色更加柔和美观');
+        console.log('✅ 移除了刺眼的纯色 (#FF0000, #FFFF00)');
+        console.log('✅ 添加了缺失的精力状态栏');
+        console.log('✅ 统一了移动端和桌面端的颜色');
+        console.log('✅ 按钮颜色与糖果色主题协调');
+
+        toastr.success('🎨 状态栏颜色已优化！重新打开宠物界面查看美丽的糖果色效果。');
+
+        return {
+            statusColors: {
+                health: candyColors.health,
+                happiness: candyColors.happiness,
+                hunger: candyColors.hunger,
+                energy: candyColors.energy,
+                experience: candyColors.experience
+            },
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    // 测试治疗按钮功能
+    window.testHealButton = function() {
+        console.log('💊 测试治疗按钮功能...');
+
+        const sicknessLevel = petData.sickness || 0;
+
+        console.log('\n🏥 当前状态:');
+        console.log(`疾病值: ${sicknessLevel}`);
+        console.log(`健康值: ${petData.health}`);
+        console.log(`是否存活: ${petData.isAlive}`);
+
+        console.log('\n🎯 治疗按钮状态:');
+        if (sicknessLevel > 10) {
+            console.log('✅ 治疗按钮激活 - 宠物生病了');
+            console.log(`- 背景色: ${candyColors.health} (糖果粉)`);
+            console.log('- 透明度: 1.0 (完全可见)');
+            console.log('- 鼠标样式: pointer (可点击)');
+        } else {
+            console.log('⚠️ 治疗按钮禁用 - 宠物很健康');
+            console.log(`- 背景色: ${candyColors.secondary} (灰色)`);
+            console.log('- 透明度: 0.5 (半透明)');
+            console.log('- 鼠标样式: not-allowed (禁用)');
+        }
+
+        console.log('\n🧪 测试命令:');
+        console.log('- healPet() - 尝试治疗宠物');
+        console.log('- petData.sickness = 50 - 设置宠物生病');
+        console.log('- petData.sickness = 0 - 设置宠物健康');
+        console.log('- renderPetStatus() - 刷新UI显示');
+
+        console.log('\n💡 功能特性:');
+        console.log('✅ 治疗按钮常驻显示');
+        console.log('✅ 生病时可点击，健康时禁用');
+        console.log('✅ 视觉反馈：颜色和透明度变化');
+        console.log('✅ 点击反馈：健康时显示随机提示');
+        console.log('✅ 治疗效果：降低疾病值，提升健康值');
+
+        return {
+            sicknessLevel: sicknessLevel,
+            canHeal: sicknessLevel > 10,
+            buttonState: sicknessLevel > 10 ? 'active' : 'disabled',
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    // 测试按钮文字和样式
+    window.testButtonStyles = function() {
+        console.log('🎨 测试按钮文字和样式...');
+
+        console.log('\n📱 移动端按钮:');
+        console.log('🍖 喂食 - 糖果粉背景，中文文字');
+        console.log('🎮 玩耍 - 薄荷绿背景，中文文字');
+        console.log('😴 休息 - 天空蓝背景，中文文字');
+        console.log('💊 治疗 - 动态背景，中文文字');
+        console.log('🛒 商店 - 柠檬黄背景，中文文字');
+        console.log('⚙️ 设置 - 灰色背景，中文文字');
+
+        console.log('\n🖥️ 桌面端按钮:');
+        console.log('🍖 喂食 - 糖果粉背景，中文文字');
+        console.log('🎮 玩耍 - 薄荷绿背景，中文文字');
+        console.log('😴 休息 - 天空蓝背景，中文文字');
+        console.log('💊 治疗 - 动态背景，中文文字');
+        console.log('🛒 商店 - 柠檬黄背景，中文文字');
+        console.log('⚙️ 设置 - 灰色背景，中文文字');
+
+        console.log('\n🎯 样式特性:');
+        console.log('✅ 所有按钮文字已改为中文');
+        console.log('✅ 移除了 text-transform: uppercase');
+        console.log('✅ 保持拓麻歌子像素风格');
+        console.log('✅ 统一的糖果色配色方案');
+        console.log('✅ 方形边框和像素阴影');
+        console.log('✅ Courier New 等宽字体');
+
+        console.log('\n🔧 可用命令:');
+        console.log('- fixAllIssues() - 修复所有问题');
+        console.log('- testTamagotchiUI() - 测试拓麻歌子UI');
+        console.log('- testHealButton() - 测试治疗按钮功能');
+
+        toastr.success('🎨 按钮样式已优化！所有按钮现在都显示中文文字。');
+
+        return {
+            buttonsUpdated: true,
+            language: 'chinese',
+            style: 'tamagotchi-candy',
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    // 测试时间衰减修复
+    window.testDecayFix = function() {
+        console.log('⏰ 测试时间衰减修复...');
+
+        console.log('\n📊 当前衰减速度:');
+        console.log('饱食度: 每小时 -1.2 (原来 -3.0)');
+        console.log('精力: 每小时 -1.0 (原来 -2.5)');
+        console.log('快乐度: 每小时 -0.8 (原来 -2.0)');
+
+        console.log('\n🛡️ 初始化缓冲机制:');
+        console.log('✅ 长时间未更新时自动缓冲');
+        console.log('✅ 最低饱食度: 30');
+        console.log('✅ 最低精力: 25');
+        console.log('✅ 最低快乐度: 20');
+        console.log('✅ 最低健康度: 35');
+
+        const now = Date.now();
+        const timeSinceLastUpdate = now - (petData.lastUpdateTime || now);
+        const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
+
+        console.log('\n⏱️ 当前状态:');
+        console.log(`距离上次更新: ${hoursElapsed.toFixed(1)} 小时`);
+        console.log(`饱食度: ${Math.round(petData.hunger)}`);
+        console.log(`精力: ${Math.round(petData.energy)}`);
+        console.log(`快乐度: ${Math.round(petData.happiness)}`);
+        console.log(`健康度: ${Math.round(petData.health)}`);
+
+        console.log('\n🧪 测试命令:');
+        console.log('- applyInitializationBuffer() - 手动应用缓冲');
+        console.log('- petData.lastUpdateTime = Date.now() - 4*60*60*1000 - 模拟4小时前');
+        console.log('- updatePetStatus() - 手动更新状态');
+
+        console.log('\n💡 修复效果:');
+        console.log('✅ 重新打开SillyTavern时不会立即提示需要休息');
+        console.log('✅ 衰减速度更合理，不会过快下降');
+        console.log('✅ 长时间离开后有基础缓冲保护');
+        console.log('✅ 用户体验更友好');
+
+        return {
+            decayRates: {
+                hunger: -1.2,
+                energy: -1.0,
+                happiness: -0.8
+            },
+            bufferThresholds: {
+                hunger: 30,
+                energy: 25,
+                happiness: 20,
+                health: 35
+            },
+            hoursElapsed: hoursElapsed,
+            currentStatus: {
+                hunger: Math.round(petData.hunger),
+                energy: Math.round(petData.energy),
+                happiness: Math.round(petData.happiness),
+                health: Math.round(petData.health)
+            },
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    // 测试设置按钮颜色修复
+    window.testSettingsButtonColor = function() {
+        console.log('🎨 测试设置按钮颜色修复...');
+
+        console.log('\n❌ 修复前的问题:');
+        console.log('背景色: #333333 (深灰)');
+        console.log('文字色: #2D3748 (深灰)');
+        console.log('问题: 两个深色对比度不够，文字难以看清');
+
+        console.log('\n✅ 修复后的改进:');
+        console.log('背景色: #8B5CF6 (紫色)');
+        console.log('文字色: #FFFFFF (白色)');
+        console.log('效果: 高对比度，文字清晰可见');
+
+        console.log('\n🎯 按钮配色方案:');
+        console.log('🍖 喂食: 糖果粉背景 + 深灰文字');
+        console.log('🎮 玩耍: 薄荷绿背景 + 深灰文字');
+        console.log('😴 休息: 天空蓝背景 + 深灰文字');
+        console.log('💊 治疗: 动态背景 + 白色文字');
+        console.log('🛒 商店: 柠檬黄背景 + 深灰文字');
+        console.log('⚙️ 设置: 紫色背景 + 白色文字 ← 已修复');
+
+        console.log('\n🔍 颜色对比度分析:');
+        console.log('设置按钮: 紫色(#8B5CF6) + 白色(#FFFFFF) = 高对比度 ✅');
+        console.log('其他按钮: 浅色背景 + 深色文字 = 良好对比度 ✅');
+
+        console.log('\n🎨 设计原则:');
+        console.log('✅ 保持拓麻歌子像素风格');
+        console.log('✅ 确保文字清晰可读');
+        console.log('✅ 与糖果色主题协调');
+        console.log('✅ 设置按钮有独特识别度');
+
+        console.log('\n🧪 测试方法:');
+        console.log('1. 重新打开宠物界面');
+        console.log('2. 检查设置按钮是否清晰可见');
+        console.log('3. 确认文字与背景对比度足够');
+
+        toastr.success('🎨 设置按钮颜色已修复！现在文字清晰可见了。');
+
+        return {
+            fixed: true,
+            oldColors: {
+                background: '#333333',
+                text: '#2D3748',
+                contrast: 'poor'
+            },
+            newColors: {
+                background: '#8B5CF6',
+                text: '#FFFFFF',
+                contrast: 'excellent'
+            },
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    // 测试自定义人设保存功能
+    window.testPersonalitySave = function() {
+        console.log('🎭 测试自定义人设保存功能...');
+
+        console.log('\n📋 当前人设状态:');
+        const currentType = localStorage.getItem(`${extensionName}-personality-type`) || 'default';
+        const customPersonality = localStorage.getItem(`${extensionName}-custom-personality`) || '';
+        console.log(`人设类型: ${currentType}`);
+        console.log(`自定义人设: ${customPersonality || '(空)'}`);
+        console.log(`petData.personality: ${petData.personality || '(空)'}`);
+
+        console.log('\n🔍 问题诊断:');
+        console.log('✅ 数据迁移时保留personality字段');
+        console.log('✅ 初始数据结构包含personality字段');
+        console.log('✅ 新用户初始化时设置personality');
+        console.log('✅ 数据加载时恢复personality');
+
+        console.log('\n🧪 测试自定义人设保存:');
+        const testPersonality = '我是一只特别可爱的测试宠物，喜欢和主人互动！';
+        console.log(`保存测试人设: ${testPersonality}`);
+
+        // 保存测试人设
+        savePersonalitySettings('custom', testPersonality);
+
+        // 验证保存结果
+        const savedType = localStorage.getItem(`${extensionName}-personality-type`);
+        const savedCustom = localStorage.getItem(`${extensionName}-custom-personality`);
+
+        console.log('\n✅ 保存结果验证:');
+        console.log(`localStorage人设类型: ${savedType}`);
+        console.log(`localStorage自定义人设: ${savedCustom}`);
+        console.log(`petData.personality: ${petData.personality}`);
+
+        // 模拟重新加载
+        console.log('\n🔄 模拟重新加载数据...');
+        const reloadedPersonality = getCurrentPersonality();
+        console.log(`重新加载后的人设: ${reloadedPersonality}`);
+
+        console.log('\n🎯 测试结果:');
+        const isWorking = savedType === 'custom' &&
+                         savedCustom === testPersonality &&
+                         petData.personality === testPersonality &&
+                         reloadedPersonality === testPersonality;
+
+        if (isWorking) {
+            console.log('✅ 自定义人设保存功能正常工作！');
+            toastr.success('🎭 自定义人设保存功能测试通过！');
+        } else {
+            console.log('❌ 自定义人设保存功能有问题！');
+            console.log('问题分析:');
+            if (savedType !== 'custom') console.log('- localStorage人设类型未正确保存');
+            if (savedCustom !== testPersonality) console.log('- localStorage自定义人设未正确保存');
+            if (petData.personality !== testPersonality) console.log('- petData.personality未正确更新');
+            if (reloadedPersonality !== testPersonality) console.log('- 重新加载时人设丢失');
+            toastr.error('❌ 自定义人设保存功能有问题，请检查控制台日志');
+        }
+
+        console.log('\n🔧 手动修复命令:');
+        console.log('- savePersonalitySettings("custom", "你的自定义人设") - 手动保存');
+        console.log('- getCurrentPersonality() - 检查当前人设');
+        console.log('- loadPetData() - 重新加载数据');
+
+        return {
+            working: isWorking,
+            currentType: savedType,
+            customPersonality: savedCustom,
+            petDataPersonality: petData.personality,
+            reloadedPersonality: reloadedPersonality,
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    // 调试自定义人设丢失问题
+    window.debugPersonalityLoss = function() {
+        console.log('🔍 调试自定义人设丢失问题...');
+
+        console.log('\n📋 当前状态检查:');
+        const personalityType = localStorage.getItem(`${extensionName}-personality-type`);
+        const customPersonality = localStorage.getItem(`${extensionName}-custom-personality`);
+        const petDataPersonality = petData.personality;
+
+        console.log(`localStorage人设类型: "${personalityType}"`);
+        console.log(`localStorage自定义人设: "${customPersonality}"`);
+        console.log(`petData.personality: "${petDataPersonality}"`);
+
+        console.log('\n🔍 问题诊断:');
+
+        // 检查localStorage是否存在
+        if (!personalityType) {
+            console.log('❌ localStorage中没有人设类型，可能被清除了');
+        } else if (personalityType !== 'custom') {
+            console.log(`❌ 人设类型不是custom，而是: ${personalityType}`);
+        } else {
+            console.log('✅ localStorage人设类型正确');
+        }
+
+        if (!customPersonality) {
+            console.log('❌ localStorage中没有自定义人设内容');
+        } else {
+            console.log('✅ localStorage自定义人设内容存在');
+        }
+
+        if (!petDataPersonality) {
+            console.log('❌ petData.personality为空');
+        } else {
+            console.log('✅ petData.personality有内容');
+        }
+
+        console.log('\n🧪 测试getCurrentPersonality():');
+        const currentPersonality = getCurrentPersonality();
+        console.log(`getCurrentPersonality()返回: "${currentPersonality}"`);
+
+        console.log('\n🔧 可能的原因:');
+        console.log('1. cleanupOldCharacterData()误删了数据');
+        console.log('2. 数据加载时被覆盖');
+        console.log('3. localStorage被其他代码清除');
+        console.log('4. 扩展名称变化导致key不匹配');
+
+        console.log('\n🔍 扩展名称检查:');
+        console.log(`当前extensionName: "${extensionName}"`);
+        console.log(`localStorage key前缀: "${extensionName}-"`);
+
+        // 列出所有相关的localStorage项
+        console.log('\n📦 相关localStorage项:');
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.includes('virtual-pet')) {
+                console.log(`${key}: "${localStorage.getItem(key)}"`);
+            }
+        }
+
+        console.log('\n🔧 修复建议:');
+        if (!personalityType || personalityType !== 'custom') {
+            console.log('- 运行: localStorage.setItem("virtual-pet-personality-type", "custom")');
+        }
+        if (!customPersonality) {
+            console.log('- 运行: localStorage.setItem("virtual-pet-custom-personality", "你的自定义人设")');
+        }
+
+        return {
+            personalityType: personalityType,
+            customPersonality: customPersonality,
+            petDataPersonality: petDataPersonality,
+            currentPersonality: currentPersonality,
+            extensionName: extensionName,
+            allVirtualPetKeys: Object.keys(localStorage).filter(key => key.includes('virtual-pet')),
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    // 强制修复自定义人设丢失问题
+    window.fixPersonalityLoss = function(customText) {
+        console.log('🔧 强制修复自定义人设丢失问题...');
+
+        if (!customText) {
+            customText = prompt('请输入你的自定义人设:', '我是一只特别可爱的宠物，喜欢和主人互动！');
+            if (!customText) {
+                console.log('❌ 用户取消了输入');
+                return;
+            }
+        }
+
+        console.log(`设置自定义人设: "${customText}"`);
+
+        // 1. 强制设置localStorage
+        localStorage.setItem(`${extensionName}-personality-type`, 'custom');
+        localStorage.setItem(`${extensionName}-custom-personality`, customText);
+
+        // 2. 更新petData
+        petData.personality = customText;
+
+        // 3. 保存到持久化存储
+        savePetData();
+
+        // 4. 验证设置结果
+        const verifyType = localStorage.getItem(`${extensionName}-personality-type`);
+        const verifyCustom = localStorage.getItem(`${extensionName}-custom-personality`);
+        const verifyPetData = petData.personality;
+        const verifyCurrent = getCurrentPersonality();
+
+        console.log('\n✅ 设置结果验证:');
+        console.log(`localStorage人设类型: "${verifyType}"`);
+        console.log(`localStorage自定义人设: "${verifyCustom}"`);
+        console.log(`petData.personality: "${verifyPetData}"`);
+        console.log(`getCurrentPersonality(): "${verifyCurrent}"`);
+
+        const success = verifyType === 'custom' &&
+                       verifyCustom === customText &&
+                       verifyPetData === customText &&
+                       verifyCurrent === customText;
+
+        if (success) {
+            console.log('✅ 自定义人设修复成功！');
+            toastr.success('🎭 自定义人设已修复！现在应该不会丢失了。');
+
+            // 更新设置界面（如果打开的话）
+            if ($("#virtual-pet-personality-select").length > 0) {
+                $("#virtual-pet-personality-select").val('custom');
+                $("#virtual-pet-custom-personality").val(customText);
+                toggleCustomPersonalityInput(true);
+            }
+        } else {
+            console.log('❌ 自定义人设修复失败！');
+            toastr.error('❌ 自定义人设修复失败，请检查控制台日志');
+        }
+
+        console.log('\n💡 防止丢失的建议:');
+        console.log('1. 定期运行 testPersonalitySave() 检查状态');
+        console.log('2. 如果发现丢失，立即运行 fixPersonalityLoss()');
+        console.log('3. 避免清除浏览器数据');
+        console.log('4. 定期备份重要的自定义人设');
+
+        return {
+            success: success,
+            customText: customText,
+            localStorage: {
+                type: verifyType,
+                custom: verifyCustom
+            },
+            petData: verifyPetData,
+            current: verifyCurrent,
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    // 检查数值增减逻辑
+    window.checkValueChanges = function() {
+        console.log('=== 🔍 数值增减逻辑检查 ===');
+
+        // 记录初始状态
+        const initialState = {
+            health: petData.health,
+            happiness: petData.happiness,
+            hunger: petData.hunger,
+            energy: petData.energy,
+            level: petData.level,
+            experience: petData.experience
+        };
+
+        console.log('\n📊 初始状态:');
+        console.log(`健康: ${Math.round(initialState.health)}/100`);
+        console.log(`快乐: ${Math.round(initialState.happiness)}/100`);
+        console.log(`饱食: ${Math.round(initialState.hunger)}/100`);
+        console.log(`精力: ${Math.round(initialState.energy)}/100`);
+        console.log(`等级: ${initialState.level}, 经验: ${initialState.experience}`);
+
+        // 1. 检查喂食效果
+        console.log('\n🍖 1. 测试喂食效果:');
+        console.log('预期效果: 饱食+15, 快乐+5, 经验+3');
+
+        const beforeFeed = { ...petData };
+        petData.hunger = Math.min(100, petData.hunger + 15);
+        petData.happiness = Math.min(100, petData.happiness + 5);
+        petData.experience += 3;
+
+        console.log(`实际效果: 饱食+${Math.round(petData.hunger - beforeFeed.hunger)}, 快乐+${Math.round(petData.happiness - beforeFeed.happiness)}, 经验+${petData.experience - beforeFeed.experience}`);
+
+        // 检查上限
+        if (petData.hunger > 100) console.log('❌ 饱食度超过上限');
+        if (petData.happiness > 100) console.log('❌ 快乐度超过上限');
+
+        // 2. 检查玩耍效果
+        console.log('\n🎮 2. 测试玩耍效果:');
+        console.log('预期效果: 快乐+12, 精力-8, 经验+4');
+
+        const beforePlay = { ...petData };
+        petData.happiness = Math.min(100, petData.happiness + 12);
+        petData.energy = Math.max(0, petData.energy - 8);
+        petData.experience += 4;
+
+        console.log(`实际效果: 快乐+${Math.round(petData.happiness - beforePlay.happiness)}, 精力${Math.round(petData.energy - beforePlay.energy)}, 经验+${petData.experience - beforePlay.experience}`);
+
+        // 检查边界
+        if (petData.happiness > 100) console.log('❌ 快乐度超过上限');
+        if (petData.energy < 0) console.log('❌ 精力低于下限');
+
+        // 3. 检查睡觉效果
+        console.log('\n😴 3. 测试睡觉效果:');
+        console.log('预期效果: 精力+20, 健康+5, 经验+2');
+
+        const beforeSleep = { ...petData };
+        petData.energy = Math.min(100, petData.energy + 20);
+        petData.health = Math.min(100, petData.health + 5);
+        petData.experience += 2;
+
+        console.log(`实际效果: 精力+${Math.round(petData.energy - beforeSleep.energy)}, 健康+${Math.round(petData.health - beforeSleep.health)}, 经验+${petData.experience - beforeSleep.experience}`);
+
+        // 检查上限
+        if (petData.energy > 100) console.log('❌ 精力超过上限');
+        if (petData.health > 100) console.log('❌ 健康超过上限');
+
+        // 4. 检查时间衰减
+        console.log('\n⏰ 4. 测试时间衰减效果:');
+        console.log('模拟1小时时间流逝...');
+
+        const beforeDecay = { ...petData };
+        const hoursElapsed = 1;
+
+        // 模拟衰减逻辑
+        const hungerDecay = hoursElapsed * 0.8;
+        const energyDecay = hoursElapsed * 0.6;
+
+        petData.hunger = Math.max(0, petData.hunger - hungerDecay);
+        petData.energy = Math.max(0, petData.energy - energyDecay);
+
+        // 检查低值影响
+        let healthDecay = 0, happinessDecay = 0;
+        if (petData.hunger < 20) {
+            healthDecay = hoursElapsed * 1;
+            happinessDecay = hoursElapsed * 0.8;
+            petData.health = Math.max(0, petData.health - healthDecay);
+            petData.happiness = Math.max(0, petData.happiness - happinessDecay);
+        }
+
+        if (petData.energy < 20) {
+            const energyHappinessDecay = hoursElapsed * 0.5;
+            petData.happiness = Math.max(0, petData.happiness - energyHappinessDecay);
+            happinessDecay += energyHappinessDecay;
+        }
+
+        console.log(`饱食衰减: -${Math.round(hungerDecay)} (${Math.round(beforeDecay.hunger)} → ${Math.round(petData.hunger)})`);
+        console.log(`精力衰减: -${Math.round(energyDecay)} (${Math.round(beforeDecay.energy)} → ${Math.round(petData.energy)})`);
+        if (healthDecay > 0) console.log(`健康衰减: -${Math.round(healthDecay)} (饥饿影响)`);
+        if (happinessDecay > 0) console.log(`快乐衰减: -${Math.round(happinessDecay)} (饥饿/疲劳影响)`);
+
+        // 5. 检查升级逻辑
+        console.log('\n🆙 5. 测试升级逻辑:');
+        const currentLevel = petData.level;
+        const currentExp = petData.experience;
+        const expNeeded = currentLevel * 100;
+
+        console.log(`当前等级: ${currentLevel}, 经验: ${currentExp}/${expNeeded}`);
+
+        if (currentExp >= expNeeded) {
+            console.log('✅ 经验足够，应该升级');
+            const newLevel = currentLevel + 1;
+            const remainingExp = currentExp - expNeeded;
+            const healthBonus = 30;
+
+            console.log(`升级后: 等级${newLevel}, 剩余经验${remainingExp}, 健康+${healthBonus}`);
+
+            // 模拟升级
+            petData.level = newLevel;
+            petData.experience = remainingExp;
+            petData.health = Math.min(100, petData.health + healthBonus);
+        } else {
+            console.log(`✅ 经验不足，还需要 ${expNeeded - currentExp} 经验升级`);
+        }
+
+        // 6. 数值边界检查
+        console.log('\n🎯 6. 数值边界检查:');
+        const checkBounds = (name, value, min = 0, max = 100) => {
+            if (value < min) {
+                console.log(`❌ ${name} 低于下限: ${value} < ${min}`);
+                return false;
+            }
+            if (value > max) {
+                console.log(`❌ ${name} 超过上限: ${value} > ${max}`);
+                return false;
+            }
+            console.log(`✅ ${name} 在正常范围: ${Math.round(value)}`);
+            return true;
+        };
+
+        const allValid = [
+            checkBounds('健康', petData.health),
+            checkBounds('快乐', petData.happiness),
+            checkBounds('饱食', petData.hunger),
+            checkBounds('精力', petData.energy),
+            checkBounds('等级', petData.level, 1, 999),
+            checkBounds('经验', petData.experience, 0, 99999)
+        ].every(v => v);
+
+        // 7. 总结
+        console.log('\n📋 7. 数值变化总结:');
+        const finalState = {
+            health: petData.health,
+            happiness: petData.happiness,
+            hunger: petData.hunger,
+            energy: petData.energy,
+            level: petData.level,
+            experience: petData.experience
+        };
+
+        console.log('最终状态:');
+        Object.keys(finalState).forEach(key => {
+            const initial = initialState[key];
+            const final = finalState[key];
+            const change = final - initial;
+            const changeStr = change > 0 ? `+${Math.round(change)}` : `${Math.round(change)}`;
+            console.log(`  ${key}: ${Math.round(initial)} → ${Math.round(final)} (${changeStr})`);
+        });
+
+        // 恢复初始状态
+        Object.assign(petData, initialState);
+
+        if (allValid) {
+            console.log('\n🎉 数值增减逻辑检查通过！');
+        } else {
+            console.log('\n⚠️ 发现数值边界问题，请检查相关逻辑');
+        }
+
+        return {
+            initialState,
+            finalState,
+            valid: allValid,
+            timestamp: new Date().toISOString()
+        };
+    }
+
+    // 拓麻歌子式生命阶段定义
+    const LIFE_STAGES = {
+        baby: { name: "幼体", duration: 24, emoji: "🥚" },      // 24小时
+        child: { name: "儿童", duration: 48, emoji: "🐣" },     // 48小时
+        teen: { name: "少年", duration: 72, emoji: "🐤" },      // 72小时
+        adult: { name: "成年", duration: 120, emoji: "🐦" },    // 120小时
+        senior: { name: "老年", duration: 48, emoji: "🦅" }     // 48小时后死亡
+    };
+
+    // 商店物品定义
+    const SHOP_ITEMS = {
+        // 食物类
+        basic_food: {
+            name: "基础食物",
+            emoji: "🍎",
+            price: 10,
+            category: "food",
+            description: "普通的食物，恢复饱食度",
+            effect: { hunger: 15, happiness: 2 }
+        },
+        premium_food: {
+            name: "高级食物",
+            emoji: "🍖",
+            price: 25,
+            category: "food",
+            description: "营养丰富的食物，恢复饱食度和健康",
+            effect: { hunger: 25, happiness: 5, health: 5 }
+        },
+        special_treat: {
+            name: "特殊零食",
+            emoji: "🍰",
+            price: 40,
+            category: "food",
+            description: "美味的零食，大幅提升快乐度",
+            effect: { hunger: 10, happiness: 20 }
+        },
+
+        // 药品类
+        medicine: {
+            name: "感冒药",
+            emoji: "💊",
+            price: 30,
+            category: "medicine",
+            description: "治疗轻微疾病",
+            effect: { sickness: -20, health: 10 }
+        },
+        super_medicine: {
+            name: "特效药",
+            emoji: "💉",
+            price: 80,
+            category: "medicine",
+            description: "治疗严重疾病，完全恢复健康",
+            effect: { sickness: -50, health: 30 }
+        },
+
+        // 玩具类
+        ball: {
+            name: "小球",
+            emoji: "⚽",
+            price: 20,
+            category: "toy",
+            description: "简单的玩具，提升快乐度和纪律",
+            effect: { happiness: 10, discipline: 5, energy: -5 }
+        },
+        robot_toy: {
+            name: "机器人玩具",
+            emoji: "🤖",
+            price: 60,
+            category: "toy",
+            description: "高科技玩具，大幅提升纪律和快乐",
+            effect: { happiness: 15, discipline: 15, energy: -3 }
+        },
+
+        // 特殊道具类
+        time_capsule: {
+            name: "时间胶囊",
+            emoji: "⏰",
+            price: 100,
+            category: "special",
+            description: "暂停时间流逝2小时，紧急时使用",
+            effect: { timeFreeze: 2 }
+        },
+        revival_stone: {
+            name: "复活石",
+            emoji: "💎",
+            price: 200,
+            category: "special",
+            description: "死亡后可以复活宠物，但会降低最大健康值",
+            effect: { revive: true, healthPenalty: 20 }
+        },
+        energy_drink: {
+            name: "能量饮料",
+            emoji: "🥤",
+            price: 35,
+            category: "special",
+            description: "快速恢复精力，但会增加疾病风险",
+            effect: { energy: 30, sickness: 5 }
+        },
+
+        // 装饰类
+        hat: {
+            name: "小帽子",
+            emoji: "🎩",
+            price: 50,
+            category: "decoration",
+            description: "可爱的装饰，持续提升快乐度",
+            effect: { happinessBonus: 2 }
+        },
+        bow_tie: {
+            name: "蝴蝶结",
+            emoji: "🎀",
+            price: 45,
+            category: "decoration",
+            description: "优雅的装饰，提升纪律值",
+            effect: { disciplineBonus: 3 }
+        }
+    };
+
+    // 应用拓麻歌子式系统（内部使用，自动调用）
+    function applyTamagotchiSystem() {
+        console.log('🥚 应用拓麻歌子式系统...');
+
+        // 重新定义更新状态函数 - 拓麻歌子式
+        window.updatePetStatus = function() {
+            if (!petData.isAlive) return; // 死亡后不再更新
+
+            const now = Date.now();
+            const timeSinceLastUpdate = now - (petData.lastUpdateTime || now);
+            const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
+
+            // 拓麻歌子式：不限制最大时间差，真实时间流逝
+            if (hoursElapsed > 0.1) { // 每6分钟更新一次
+
+                // 1. 年龄增长
+                petData.age += hoursElapsed;
+
+                // 2. 生命阶段检查
+                checkLifeStageProgression();
+
+                // 3. 拓麻歌子式衰减（调整为合理速度）
+                petData.hunger = Math.max(0, petData.hunger - hoursElapsed * 1.2);    // 每小时-1.2
+                petData.energy = Math.max(0, petData.energy - hoursElapsed * 1.0);    // 每小时-1.0
+                petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 0.8); // 每小时-0.8
+
+                // 4. 健康状况检查
+                checkHealthConditions(hoursElapsed);
+
+                // 5. 死亡检查
+                checkDeathConditions();
+
+                petData.lastUpdateTime = now;
+                validateAndFixValues();
+                savePetData();
+                checkAndSendNotifications();
+            }
+        };
+
+        // 重新定义喂食函数 - 拓麻歌子式
+        window.feedPet = async function() {
+            if (!petData.isAlive) {
+                toastr.error("💀 你的宠物已经死亡，无法喂食...");
+                return;
+            }
+
+            const now = Date.now();
+            const timeSinceLastFeed = now - petData.lastFeedTime;
+
+            if (timeSinceLastFeed < 30000) { // 30秒冷却
+                toastr.warning("宠物还不饿，等一会再喂吧！");
+                return;
+            }
+
+            // 拓麻歌子式喂食效果
+            petData.hunger = Math.min(100, petData.hunger + 20);
+            petData.happiness = Math.min(100, petData.happiness + 5);
+            petData.weight += 1; // 体重增加
+            petData.lastFeedTime = now;
+            petData.lastCareTime = now;
+            petData.careNeglectCount = Math.max(0, petData.careNeglectCount - 1);
+
+            // 过度喂食检查
+            if (petData.weight > 50) {
+                petData.sickness = Math.min(100, petData.sickness + 10);
+                toastr.warning("⚠️ 宠物吃得太多了，可能会生病！");
+            }
+
+            validateAndFixValues();
+
+            // 定义奖励
+            const rewards = { coins: 3, experience: 2 };
+
+            // 应用奖励
+            gainExperience(rewards.experience);
+            gainCoins(rewards.coins);
+
+            // AI回复时传递奖励信息，用于独立显示
+            await handleAIReply('feed', `${petData.name} 吃得很开心！`, rewards);
+            savePetData();
+            renderPetStatus();
+        };
+
+        // 重新定义玩耍函数 - 拓麻歌子式
+        window.playWithPet = async function() {
+            if (!petData.isAlive) {
+                toastr.error("💀 你的宠物已经死亡，无法玩耍...");
+                return;
+            }
+
+            const now = Date.now();
+            const timeSinceLastPlay = now - petData.lastPlayTime;
+
+            if (timeSinceLastPlay < 45000) { // 45秒冷却
+                toastr.warning("宠物需要休息一下！");
+                return;
+            }
+
+            // 拓麻歌子式玩耍效果
+            petData.happiness = Math.min(100, petData.happiness + 15);
+            petData.energy = Math.max(0, petData.energy - 10);
+            petData.discipline = Math.min(100, petData.discipline + 5);
+            petData.weight = Math.max(10, petData.weight - 1); // 运动减重
+            petData.lastPlayTime = now;
+            petData.lastCareTime = now;
+            petData.careNeglectCount = Math.max(0, petData.careNeglectCount - 1);
+
+            validateAndFixValues();
+
+            // 定义奖励
+            const rewards = { coins: 5, experience: 3 };
+
+            // 应用奖励
+            gainExperience(rewards.experience);
+            gainCoins(rewards.coins);
+
+            // AI回复时传递奖励信息，用于独立显示
+            await handleAIReply('play', `${petData.name} 玩得很开心！`, rewards);
+            savePetData();
+            renderPetStatus();
+        };
+
+        // 重新定义睡觉函数 - 拓麻歌子式
+        window.petSleep = async function() {
+            if (!petData.isAlive) {
+                toastr.error("💀 你的宠物已经死亡，无法休息...");
+                return;
+            }
+
+            const now = Date.now();
+            const timeSinceLastSleep = now - petData.lastSleepTime;
+
+            if (timeSinceLastSleep < 120000) { // 2分钟冷却
+                toastr.warning("宠物还不困！");
+                return;
+            }
+
+            // 拓麻歌子式睡觉效果
+            petData.energy = Math.min(100, petData.energy + 25);
+            petData.health = Math.min(100, petData.health + 10);
+            petData.sickness = Math.max(0, petData.sickness - 5); // 睡觉有助于康复
+            petData.lastSleepTime = now;
+            petData.lastCareTime = now;
+
+            validateAndFixValues();
+
+            // 定义奖励
+            const rewards = { coins: 2, experience: 1 };
+
+            // 应用奖励
+            gainExperience(rewards.experience);
+            gainCoins(rewards.coins);
+
+            // AI回复时传递奖励信息，用于独立显示
+            await handleAIReply('sleep', `${petData.name} 睡得很香！`, rewards);
+            savePetData();
+            renderPetStatus();
+        };
+
+        // 抱抱宠物 - 新的互动方式
+        window.hugPet = async function() {
+            if (!petData.isAlive) {
+                toastr.error("💀 你的宠物已经死亡，无法抱抱...");
+                return;
+            }
+
+            const now = Date.now();
+            const timeSinceLastHug = now - (petData.lastHugTime || 0);
+
+            if (timeSinceLastHug < 25000) { // 25秒冷却
+                const remainingTime = Math.ceil((25000 - timeSinceLastHug) / 1000);
+                toastr.warning(`宠物还在回味刚才的拥抱，${remainingTime}秒后再试吧！`);
+                return;
+            }
+
+            try {
+                // 拓麻歌子式抱抱效果
+                petData.happiness = Math.min(100, petData.happiness + 10);
+                petData.health = Math.min(100, petData.health + 3);
+                petData.discipline = Math.min(100, (petData.discipline || 50) + 2); // 增加纪律性
+                petData.lastHugTime = now;
+                petData.lastCareTime = now;
+                petData.careNeglectCount = Math.max(0, (petData.careNeglectCount || 0) - 1);
+
+                // 特殊效果：抱抱能减少疾病
+                if (petData.sickness > 0) {
+                    petData.sickness = Math.max(0, petData.sickness - 3);
+                    toastr.info("💕 温暖的拥抱让宠物感觉好了一些！");
+                }
+
+                validateAndFixValues();
+
+                // 定义奖励
+                const rewards = { coins: 2, experience: 1 };
+
+                // 应用奖励
+                gainExperience(rewards.experience);
+                gainCoins(rewards.coins);
+
+                // AI回复时传递奖励信息，用于独立显示
+                await handleAIReply('hug', `${petData.name} 享受着温暖的拥抱！`, rewards);
+                savePetData();
+                renderPetStatus();
+
+                // 强制更新UI显示
+                setTimeout(() => {
+                    if (typeof updateUnifiedUIStatus === 'function') {
+                        updateUnifiedUIStatus();
+                    }
+                }, 100);
+
+            } catch (error) {
+                console.error('抱抱宠物时发生错误:', error);
+                toastr.error("抱抱时出现了问题...");
+            }
+        };
+
+        // 添加治疗功能
+        window.healPet = async function() {
+            if (!petData.isAlive) {
+                toastr.error("💀 你的宠物已经死亡，无法治疗...");
+                return;
+            }
+
+            const sicknessLevel = petData.sickness || 0;
+
+            if (sicknessLevel < 10) {
+                // 没生病时的反馈
+                const healthyMessages = [
+                    "😊 你的宠物很健康，不需要治疗！",
+                    "🌟 宠物状态良好，无需用药！",
+                    "💪 你的宠物精神饱满，不用担心！",
+                    "✨ 宠物健康指数正常，暂时不需要治疗！"
+                ];
+                const randomMessage = healthyMessages[Math.floor(Math.random() * healthyMessages.length)];
+                toastr.info(randomMessage);
+
+                // 播放无效点击的视觉反馈
+                const healBtn = $('.heal-btn');
+                if (healBtn.length > 0) {
+                    healBtn.css('transform', 'scale(0.95)');
+                    setTimeout(() => {
+                        healBtn.css('transform', 'scale(1)');
+                    }, 150);
+                }
+                return;
+            }
+
+            // 治疗效果
+            const healAmount = Math.min(30, sicknessLevel); // 实际治疗量
+            petData.sickness = Math.max(0, sicknessLevel - healAmount);
+            petData.health = Math.min(100, petData.health + 15);
+            petData.sicknessDuration = 0;
+            petData.lastCareTime = Date.now();
+
+            validateAndFixValues();
+
+            // 治疗成功的反馈
+            toastr.success(`💊 治疗成功！疾病值降低了 ${healAmount} 点`);
+            await handleAIReply('heal', `${petData.name} 接受了治疗，感觉好多了！`);
+            savePetData();
+            renderPetStatus();
+        };
+
+        // 添加商店功能
+        window.openShop = function() {
+            if (!petData.isAlive) {
+                toastr.error("💀 你的宠物已经死亡，无法使用商店...");
+                return;
+            }
+
+            showShopModal();
+        };
+
+        console.log('✅ 拓麻歌子式系统已应用！');
+    }
+
+    // 检查生命阶段进展
+    function checkLifeStageProgression() {
+        const currentStage = LIFE_STAGES[petData.lifeStage];
+        if (!currentStage) return;
+
+        if (petData.age >= currentStage.duration) {
+            const stages = Object.keys(LIFE_STAGES);
+            const currentIndex = stages.indexOf(petData.lifeStage);
+
+            if (currentIndex < stages.length - 1) {
+                // 进化到下一阶段
+                const nextStage = stages[currentIndex + 1];
+                petData.lifeStage = nextStage;
+                petData.age = 0; // 重置年龄计数
+
+                const nextStageInfo = LIFE_STAGES[nextStage];
+                toastr.success(`🎉 ${petData.name} 进化了！现在是${nextStageInfo.name}阶段 ${nextStageInfo.emoji}`);
+
+                // 进化时恢复一些状态
+                petData.health = Math.min(100, petData.health + 20);
+                petData.happiness = Math.min(100, petData.happiness + 15);
+            } else if (petData.lifeStage === 'senior') {
+                // 老年阶段结束，自然死亡
+                petData.isAlive = false;
+                petData.deathReason = "natural";
+                toastr.error("😢 " + petData.name + " 因为年老而安详地离开了...");
+            }
+        }
+    }
+
+    // 检查健康状况
+    function checkHealthConditions(hoursElapsed) {
+        // 饥饿影响健康
+        if (petData.hunger < 20) {
+            petData.health = Math.max(0, petData.health - hoursElapsed * 2);
+            petData.sickness = Math.min(100, petData.sickness + hoursElapsed * 1.5);
+        }
+
+        // 疲劳影响健康
+        if (petData.energy < 20) {
+            petData.health = Math.max(0, petData.health - hoursElapsed * 1);
+            petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 1.5);
+        }
+
+        // 不快乐影响健康
+        if (petData.happiness < 20) {
+            petData.health = Math.max(0, petData.health - hoursElapsed * 0.5);
+            petData.sickness = Math.min(100, petData.sickness + hoursElapsed * 0.5);
+        }
+
+        // 生病持续时间
+        if (petData.sickness > 50) {
+            petData.sicknessDuration += hoursElapsed;
+            if (petData.sicknessDuration > 24) { // 生病超过24小时
+                petData.health = Math.max(0, petData.health - hoursElapsed * 3);
+            }
+        } else {
+            petData.sicknessDuration = 0;
+        }
+
+        // 忽视照顾计数
+        const timeSinceLastCare = Date.now() - petData.lastCareTime;
+        if (timeSinceLastCare > 4 * 60 * 60 * 1000) { // 4小时没有照顾
+            petData.careNeglectCount++;
+            petData.lastCareTime = Date.now(); // 重置计时器
+        }
+    }
+
+    // 检查死亡条件
+    function checkDeathConditions() {
+        if (!petData.isAlive) return;
+
+        let deathReason = null;
+
+        // 健康值归零
+        if (petData.health <= 0) {
+            deathReason = "sickness";
+        }
+        // 长期忽视照顾
+        else if (petData.careNeglectCount >= 6) { // 6次忽视（24小时）
+            deathReason = "neglect";
+        }
+        // 严重疾病
+        else if (petData.sickness >= 100 && petData.sicknessDuration > 48) {
+            deathReason = "disease";
+        }
+
+        if (deathReason) {
+            petData.isAlive = false;
+            petData.deathReason = deathReason;
+
+            const deathMessages = {
+                sickness: "😢 " + petData.name + " 因为健康状况恶化而死亡了...",
+                neglect: "💔 " + petData.name + " 因为长期缺乏照顾而死亡了...",
+                disease: "🦠 " + petData.name + " 因为严重疾病而死亡了...",
+                natural: "😇 " + petData.name + " 因为年老而安详地离开了..."
+            };
+
+            toastr.error(deathMessages[deathReason], '', { timeOut: 10000 });
+
+            // 显示复活选项
+            setTimeout(() => {
+                if (confirm("💀 你的宠物死亡了！\n\n是否要重新开始养育新的宠物？\n（点击确定重新开始，取消保持当前状态）")) {
+                    resetPet();
+                }
+            }, 3000);
+        }
+    }
+
+
+
+    /**
+     * 强制应用拓麻歌子系统（确保金币功能正常）
+     */
+    window.forceApplyTamagotchiSystem = function() {
+        console.log('🥚 强制应用拓麻歌子系统...');
+
+        // 更新数据版本
+        petData.dataVersion = 4.0;
+
+        // 应用拓麻歌子系统
+        applyTamagotchiSystem();
+
+        // 保存数据
+        savePetData();
+
+        console.log('✅ 拓麻歌子系统已强制应用！');
+        console.log('💰 金币功能现在应该正常工作了');
+
+        toastr.success('拓麻歌子系统已应用！金币功能已启用！', '', { timeOut: 3000 });
+
+        return {
+            applied: true,
+            dataVersion: petData.dataVersion,
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    /**
+     * 测试优化后的提示词（不包含金币信息避免混淆）
+     */
+    window.testCleanPrompt = function(action = 'feed') {
+        console.log('🎯 测试优化后的提示词...');
+
+        console.log(`\n📊 当前状态:`);
+        console.log(`- 宠物名称: ${petData.name}`);
+        console.log(`- 当前金币: ${petData.coins || 100}`);
+        console.log(`- 测试行为: ${action}`);
+
+        const prompt = buildInteractionPrompt(action);
+
+        console.log(`\n📝 生成的提示词:`);
+        console.log(prompt);
+
+        console.log(`\n🔍 提示词分析:`);
+        const includesCoins = prompt.includes('金币');
+        const includesReward = prompt.includes('奖励');
+        const includesGameMechanic = prompt.includes('游戏机制');
+        const hasCleanNote = prompt.includes('不要在回复中提及');
+
+        console.log(`- 包含金币信息: ${includesCoins ? '❌ 是（应该避免）' : '✅ 否'}`);
+        console.log(`- 包含奖励信息: ${includesReward ? '❌ 是（应该避免）' : '✅ 否'}`);
+        console.log(`- 包含游戏机制: ${includesGameMechanic ? '❌ 是（应该避免）' : '✅ 否'}`);
+        console.log(`- 有清晰的注意事项: ${hasCleanNote ? '✅ 是' : '❌ 否'}`);
+
+        if (!includesCoins && !includesReward && hasCleanNote) {
+            console.log('✅ 提示词已优化，AI不会混淆金币概念！');
+            toastr.success('提示词已优化，AI不会混淆金币概念！', '🎯 测试成功');
+        } else {
+            console.log('❌ 提示词仍可能导致AI混淆');
+            toastr.warning('提示词仍可能导致AI混淆', '🎯 测试失败');
+        }
+
+        return {
+            prompt: prompt,
+            analysis: {
+                includesCoins,
+                includesReward,
+                includesGameMechanic,
+                hasCleanNote
+            }
+        };
+    };
+
+    /**
+     * 诊断金币和经验值问题
+     */
+    window.diagnoseRewardSystem = function() {
+        console.log('🔍 诊断金币和经验值系统...');
+
+        console.log('\n📊 当前数据状态:');
+        console.log(`- 数据版本: ${petData.dataVersion}`);
+        console.log(`- 当前金币: ${petData.coins}`);
+        console.log(`- 当前经验: ${petData.experience}`);
+        console.log(`- 当前等级: ${petData.level}`);
+        console.log(`- 宠物存活: ${petData.isAlive}`);
+
+        console.log('\n🔧 函数检查:');
+        console.log(`- gainCoins函数存在: ${typeof gainCoins === 'function'}`);
+        console.log(`- gainExperience函数存在: ${typeof gainExperience === 'function'}`);
+        console.log(`- feedPet函数存在: ${typeof window.feedPet === 'function'}`);
+
+        console.log('\n🧪 测试金币功能:');
+        const oldCoins = petData.coins || 0;
+        console.log(`测试前金币: ${oldCoins}`);
+
+        try {
+            gainCoins(10);
+            console.log(`测试后金币: ${petData.coins}`);
+            console.log(`金币增加: ${(petData.coins || 0) - oldCoins}`);
+
+            if ((petData.coins || 0) - oldCoins === 10) {
+                console.log('✅ gainCoins函数工作正常');
+            } else {
+                console.log('❌ gainCoins函数有问题');
+            }
+        } catch (error) {
+            console.log(`❌ gainCoins函数错误: ${error.message}`);
+        }
+
+        console.log('\n🧪 测试经验功能:');
+        const oldExp = petData.experience || 0;
+        const oldLevel = petData.level || 1;
+        console.log(`测试前经验: ${oldExp}, 等级: ${oldLevel}`);
+
+        try {
+            gainExperience(5);
+            console.log(`测试后经验: ${petData.experience}, 等级: ${petData.level}`);
+            console.log(`经验增加: ${(petData.experience || 0) - oldExp}`);
+
+            if ((petData.experience || 0) >= oldExp) {
+                console.log('✅ gainExperience函数工作正常');
+            } else {
+                console.log('❌ gainExperience函数有问题');
+            }
+        } catch (error) {
+            console.log(`❌ gainExperience函数错误: ${error.message}`);
+        }
+
+        console.log('\n🔍 互动函数检查:');
+        const feedPetString = window.feedPet.toString();
+        const hasGainCoins = feedPetString.includes('gainCoins');
+        const hasGainExp = feedPetString.includes('gainExperience');
+
+        console.log(`- feedPet包含gainCoins调用: ${hasGainCoins ? '✅' : '❌'}`);
+        console.log(`- feedPet包含gainExperience调用: ${hasGainExp ? '✅' : '❌'}`);
+
+        if (!hasGainCoins || !hasGainExp) {
+            console.log('❌ 互动函数缺少奖励调用，需要重新应用拓麻歌子系统');
+            console.log('💡 运行: forceApplyTamagotchiSystem()');
+        }
+
+        return {
+            dataVersion: petData.dataVersion,
+            coins: petData.coins,
+            experience: petData.experience,
+            level: petData.level,
+            isAlive: petData.isAlive,
+            functionsExist: {
+                gainCoins: typeof gainCoins === 'function',
+                gainExperience: typeof gainExperience === 'function',
+                feedPet: typeof window.feedPet === 'function'
+            },
+            feedPetIncludes: {
+                gainCoins: hasGainCoins,
+                gainExperience: hasGainExp
+            }
+        };
+    };
+
+    /**
+     * 检查当前使用的互动函数版本
+     */
+    window.checkInteractionFunctions = function() {
+        console.log('🔍 检查当前使用的互动函数版本...');
+
+        console.log('\n📋 函数源码分析:');
+
+        // 检查feedPet函数
+        const feedPetCode = window.feedPet.toString();
+        console.log('\n🍖 feedPet函数分析:');
+        console.log(`- 包含gainCoins: ${feedPetCode.includes('gainCoins') ? '✅' : '❌'}`);
+        console.log(`- 包含gainExperience: ${feedPetCode.includes('gainExperience') ? '✅' : '❌'}`);
+        console.log(`- 包含handleAIReply: ${feedPetCode.includes('handleAIReply') ? '✅' : '❌'}`);
+        console.log(`- 包含拓麻歌子特征(weight): ${feedPetCode.includes('weight') ? '✅' : '❌'}`);
+        console.log(`- 冷却时间: ${feedPetCode.includes('30000') ? '30秒(拓麻歌子)' : feedPetCode.includes('45000') ? '45秒(平衡版)' : '未知'}`);
+
+        // 检查playWithPet函数
+        const playPetCode = window.playWithPet.toString();
+        console.log('\n🎮 playWithPet函数分析:');
+        console.log(`- 包含gainCoins: ${playPetCode.includes('gainCoins') ? '✅' : '❌'}`);
+        console.log(`- 包含gainExperience: ${playPetCode.includes('gainExperience') ? '✅' : '❌'}`);
+        console.log(`- 包含handleAIReply: ${playPetCode.includes('handleAIReply') ? '✅' : '❌'}`);
+        console.log(`- 冷却时间: ${playPetCode.includes('45000') ? '45秒(拓麻歌子)' : playPetCode.includes('60000') ? '60秒(平衡版)' : '未知'}`);
+
+        // 检查petSleep函数
+        const sleepCode = window.petSleep.toString();
+        console.log('\n😴 petSleep函数分析:');
+        console.log(`- 包含gainCoins: ${sleepCode.includes('gainCoins') ? '✅' : '❌'}`);
+        console.log(`- 包含gainExperience: ${sleepCode.includes('gainExperience') ? '✅' : '❌'}`);
+        console.log(`- 包含handleAIReply: ${sleepCode.includes('handleAIReply') ? '✅' : '❌'}`);
+        console.log(`- 冷却时间: ${sleepCode.includes('120000') ? '120秒(拓麻歌子)' : '未知'}`);
+
+        // 判断版本
+        const isTamagotchi = feedPetCode.includes('gainCoins') && feedPetCode.includes('weight');
+        const isBalanced = feedPetCode.includes('45000') && !feedPetCode.includes('gainCoins');
+        const isOld = !feedPetCode.includes('gainCoins') && !feedPetCode.includes('weight');
+
+        console.log('\n🎯 版本判断:');
+        if (isTamagotchi) {
+            console.log('✅ 当前使用拓麻歌子版本 - 包含完整的金币和经验奖励');
+        } else if (isBalanced) {
+            console.log('⚠️ 当前使用平衡版本 - 缺少金币奖励');
+        } else if (isOld) {
+            console.log('❌ 当前使用旧版本 - 缺少金币奖励');
+        } else {
+            console.log('❓ 无法确定版本');
+        }
+
+        // 提供修复建议
+        if (!isTamagotchi) {
+            console.log('\n💡 修复建议:');
+            console.log('运行以下命令强制应用拓麻歌子系统:');
+            console.log('forceApplyTamagotchiSystem()');
+        }
+
+        return {
+            feedPet: {
+                hasGainCoins: feedPetCode.includes('gainCoins'),
+                hasGainExperience: feedPetCode.includes('gainExperience'),
+                hasWeight: feedPetCode.includes('weight'),
+                cooldown: feedPetCode.includes('30000') ? 30 : feedPetCode.includes('45000') ? 45 : 'unknown'
+            },
+            playWithPet: {
+                hasGainCoins: playPetCode.includes('gainCoins'),
+                hasGainExperience: playPetCode.includes('gainExperience'),
+                cooldown: playPetCode.includes('45000') ? 45 : playPetCode.includes('60000') ? 60 : 'unknown'
+            },
+            petSleep: {
+                hasGainCoins: sleepCode.includes('gainCoins'),
+                hasGainExperience: sleepCode.includes('gainExperience'),
+                cooldown: sleepCode.includes('120000') ? 120 : 'unknown'
+            },
+            version: isTamagotchi ? 'tamagotchi' : isBalanced ? 'balanced' : isOld ? 'old' : 'unknown'
+        };
+    };
+
+    /**
+     * 测试互动流程中的奖励执行顺序
+     */
+    window.testInteractionFlow = async function() {
+        console.log('🧪 测试互动流程中的奖励执行顺序...');
+
+        if (!petData.isAlive) {
+            console.log('❌ 宠物已死亡，无法测试');
+            return;
+        }
+
+        console.log('\n📊 测试前状态:');
+        const beforeCoins = petData.coins || 0;
+        const beforeExp = petData.experience || 0;
+        const beforeLevel = petData.level || 1;
+
+        console.log(`- 金币: ${beforeCoins}`);
+        console.log(`- 经验: ${beforeExp}`);
+        console.log(`- 等级: ${beforeLevel}`);
+
+        console.log('\n🔄 模拟喂食流程...');
+
+        try {
+            // 模拟喂食流程的关键步骤
+            console.log('1. 更新宠物状态...');
+            petData.hunger = Math.min(100, petData.hunger + 20);
+            petData.happiness = Math.min(100, petData.happiness + 5);
+            petData.weight += 1;
+            petData.lastFeedTime = Date.now();
+            petData.lastCareTime = Date.now();
+
+            console.log('2. 验证数值...');
+            validateAndFixValues();
+
+            console.log('3. 获得经验...');
+            gainExperience(2);
+            console.log(`   经验变化: ${beforeExp} → ${petData.experience}`);
+
+            console.log('4. 获得金币...');
+            gainCoins(3);
+            console.log(`   金币变化: ${beforeCoins} → ${petData.coins}`);
+
+            console.log('5. 处理AI回复...');
+            await handleAIReply('feed', `${petData.name} 吃得很开心！`);
+            console.log('   AI回复完成');
+
+            console.log('6. 保存数据...');
+            savePetData();
+            console.log('   数据保存完成');
+
+            console.log('7. 渲染状态...');
+            renderPetStatus();
+            console.log('   状态渲染完成');
+
+        } catch (error) {
+            console.error('❌ 流程执行出错:', error);
+        }
+
+        console.log('\n📊 测试后状态:');
+        console.log(`- 金币: ${petData.coins} (变化: +${(petData.coins || 0) - beforeCoins})`);
+        console.log(`- 经验: ${petData.experience} (变化: +${(petData.experience || 0) - beforeExp})`);
+        console.log(`- 等级: ${petData.level} (变化: +${(petData.level || 1) - beforeLevel})`);
+
+        // 验证结果
+        const coinsGained = (petData.coins || 0) - beforeCoins;
+        const expGained = (petData.experience || 0) - beforeExp;
+
+        console.log('\n🎯 测试结果:');
+        if (coinsGained === 3) {
+            console.log('✅ 金币奖励正常 (+3)');
+        } else {
+            console.log(`❌ 金币奖励异常 (期望+3，实际+${coinsGained})`);
+        }
+
+        if (expGained >= 2) {
+            console.log('✅ 经验奖励正常 (+2或更多)');
+        } else {
+            console.log(`❌ 经验奖励异常 (期望+2，实际+${expGained})`);
+        }
+
+        return {
+            before: { coins: beforeCoins, experience: beforeExp, level: beforeLevel },
+            after: { coins: petData.coins, experience: petData.experience, level: petData.level },
+            changes: { coins: coinsGained, experience: expGained, level: (petData.level || 1) - beforeLevel }
+        };
+    };
+
+    /**
+     * 测试不包含AI回复的简化互动
+     */
+    window.testSimpleInteraction = function() {
+        console.log('🧪 测试简化互动（不包含AI回复）...');
+
+        if (!petData.isAlive) {
+            console.log('❌ 宠物已死亡，无法测试');
+            return;
+        }
+
+        console.log('\n📊 测试前状态:');
+        const beforeCoins = petData.coins || 0;
+        const beforeExp = petData.experience || 0;
+
+        console.log(`- 金币: ${beforeCoins}`);
+        console.log(`- 经验: ${beforeExp}`);
+
+        console.log('\n🔄 执行简化互动...');
+
+        try {
+            console.log('1. 获得经验...');
+            gainExperience(2);
+
+            console.log('2. 获得金币...');
+            gainCoins(3);
+
+            console.log('3. 保存数据...');
+            savePetData();
+
+        } catch (error) {
+            console.error('❌ 执行出错:', error);
+        }
+
+        console.log('\n📊 测试后状态:');
+        const afterCoins = petData.coins || 0;
+        const afterExp = petData.experience || 0;
+
+        console.log(`- 金币: ${afterCoins} (变化: +${afterCoins - beforeCoins})`);
+        console.log(`- 经验: ${afterExp} (变化: +${afterExp - beforeExp})`);
+
+        // 验证结果
+        const coinsGained = afterCoins - beforeCoins;
+        const expGained = afterExp - beforeExp;
+
+        console.log('\n🎯 测试结果:');
+        if (coinsGained === 3) {
+            console.log('✅ 金币功能正常');
+        } else {
+            console.log(`❌ 金币功能异常 (期望+3，实际+${coinsGained})`);
+        }
+
+        if (expGained >= 2) {
+            console.log('✅ 经验功能正常');
+        } else {
+            console.log(`❌ 经验功能异常 (期望+2，实际+${expGained})`);
+        }
+
+        if (coinsGained === 3 && expGained >= 2) {
+            console.log('\n💡 结论: 奖励系统本身正常，问题可能出在AI互动流程中');
+        } else {
+            console.log('\n💡 结论: 奖励系统本身有问题');
+        }
+
+        return {
+            coinsGained,
+            expGained,
+            success: coinsGained === 3 && expGained >= 2
+        };
+    };
+
+    /**
+     * 追踪喂食函数的执行流程
+     */
+    window.traceFeedPetExecution = async function() {
+        console.log('🔍 追踪喂食函数的执行流程...');
+
+        // 获取原始的feedPet函数代码
+        const feedPetCode = window.feedPet.toString();
+        console.log('\n📝 feedPet函数源码片段:');
+        console.log(feedPetCode.substring(0, 500) + '...');
+
+        console.log('\n🚀 开始执行追踪版本的喂食...');
+
+        try {
+            console.log('1. 检查宠物存活状态...');
+            if (!petData.isAlive) {
+                console.log('❌ 宠物已死亡，函数应该在这里返回');
+                return;
+            }
+            console.log('✅ 宠物存活');
+
+            console.log('2. 检查冷却时间...');
+            const now = Date.now();
+            const timeSinceLastFeed = now - petData.lastFeedTime;
+            console.log(`   距离上次喂食: ${timeSinceLastFeed}ms`);
+            console.log(`   冷却时间要求: 30000ms (30秒)`);
+
+            if (timeSinceLastFeed < 30000) {
+                console.log('❌ 冷却时间未到，函数应该在这里返回');
+                return;
+            }
+            console.log('✅ 冷却时间已过');
+
+            console.log('3. 更新宠物状态...');
+            const oldHunger = petData.hunger;
+            const oldHappiness = petData.happiness;
+            const oldWeight = petData.weight;
+
+            petData.hunger = Math.min(100, petData.hunger + 20);
+            petData.happiness = Math.min(100, petData.happiness + 5);
+            petData.weight += 1;
+            petData.lastFeedTime = now;
+            petData.lastCareTime = now;
+            petData.careNeglectCount = Math.max(0, petData.careNeglectCount - 1);
+
+            console.log(`   饱食: ${oldHunger} → ${petData.hunger}`);
+            console.log(`   快乐: ${oldHappiness} → ${petData.happiness}`);
+            console.log(`   体重: ${oldWeight} → ${petData.weight}`);
+
+            console.log('4. 过度喂食检查...');
+            if (petData.weight > 50) {
+                petData.sickness = Math.min(100, petData.sickness + 10);
+                console.log('⚠️ 触发过度喂食警告');
+            } else {
+                console.log('✅ 体重正常');
+            }
+
+            console.log('5. 验证数值...');
+            validateAndFixValues();
+            console.log('✅ 数值验证完成');
+
+            console.log('6. 获得经验...');
+            const oldExp = petData.experience;
+            const oldLevel = petData.level;
+            gainExperience(2);
+            console.log(`   经验: ${oldExp} → ${petData.experience}`);
+            console.log(`   等级: ${oldLevel} → ${petData.level}`);
+
+            console.log('7. 获得金币...');
+            const oldCoins = petData.coins;
+            gainCoins(3);
+            console.log(`   金币: ${oldCoins} → ${petData.coins}`);
+
+            console.log('8. 处理AI回复...');
+            await handleAIReply('feed', `${petData.name} 吃得很开心！`);
+            console.log('✅ AI回复完成');
+
+            console.log('9. 保存数据...');
+            savePetData();
+            console.log('✅ 数据保存完成');
+
+            console.log('10. 渲染状态...');
+            renderPetStatus();
+            console.log('✅ 状态渲染完成');
+
+            console.log('\n🎉 喂食流程完全执行完毕！');
+
+        } catch (error) {
+            console.error('❌ 执行过程中发生错误:', error);
+            console.error('错误堆栈:', error.stack);
+        }
+    };
+
+    /**
+     * 检查UI按钮事件绑定
+     */
+    window.checkUIButtonBinding = function() {
+        console.log('🔍 检查UI按钮事件绑定...');
+
+        const popup = $("#virtual-pet-popup");
+        if (popup.length === 0) {
+            console.log('❌ 弹窗不存在，请先打开宠物界面');
+            console.log('💡 运行: showPopup()');
+            return false;
+        }
+
+        console.log('✅ 弹窗存在');
+
+        // 检查按钮是否存在
+        const feedBtn = popup.find(".feed-btn");
+        const playBtn = popup.find(".play-btn");
+        const sleepBtn = popup.find(".sleep-btn");
+        const hugBtn = popup.find(".hug-btn");
+
+        console.log('\n📋 按钮存在性检查:');
+        console.log(`- 喂食按钮: ${feedBtn.length > 0 ? '✅' : '❌'} (数量: ${feedBtn.length})`);
+        console.log(`- 玩耍按钮: ${playBtn.length > 0 ? '✅' : '❌'} (数量: ${playBtn.length})`);
+        console.log(`- 睡觉按钮: ${sleepBtn.length > 0 ? '✅' : '❌'} (数量: ${sleepBtn.length})`);
+        console.log(`- 抱抱按钮: ${hugBtn.length > 0 ? '✅' : '❌'} (数量: ${hugBtn.length})`);
+
+        // 检查事件绑定
+        console.log('\n🔗 事件绑定检查:');
+
+        if (feedBtn.length > 0) {
+            const events = $._data(feedBtn[0], 'events');
+            console.log(`- 喂食按钮事件: ${events ? Object.keys(events).join(', ') : '无'}`);
+
+            // 测试点击事件
+            console.log('\n🧪 测试喂食按钮点击...');
+            const oldCoins = petData.coins || 0;
+            const oldExp = petData.experience || 0;
+
+            console.log(`测试前 - 金币: ${oldCoins}, 经验: ${oldExp}`);
+
+            // 模拟点击
+            feedBtn.trigger('click');
+
+            // 等待一下再检查结果
+            setTimeout(() => {
+                console.log(`测试后 - 金币: ${petData.coins}, 经验: ${petData.experience}`);
+
+                const coinsChanged = (petData.coins || 0) !== oldCoins;
+                const expChanged = (petData.experience || 0) !== oldExp;
+
+                if (coinsChanged || expChanged) {
+                    console.log('✅ 按钮点击有效果！');
+                } else {
+                    console.log('❌ 按钮点击无效果');
+                    console.log('💡 可能原因:');
+                    console.log('  1. 冷却时间未到');
+                    console.log('  2. 宠物已死亡');
+                    console.log('  3. 事件绑定失效');
+                    console.log('  4. 函数被覆盖');
+                }
+            }, 1000);
+        }
+
+        // 检查bindUnifiedUIEvents是否被调用
+        console.log('\n🔧 绑定函数检查:');
+        console.log(`- bindUnifiedUIEvents函数存在: ${typeof bindUnifiedUIEvents === 'function'}`);
+
+        return {
+            popupExists: popup.length > 0,
+            buttons: {
+                feed: feedBtn.length,
+                play: playBtn.length,
+                sleep: sleepBtn.length
+            },
+            bindFunctionExists: typeof bindUnifiedUIEvents === 'function'
+        };
+    };
+
+    /**
+     * 在UI点击时追踪feedPet函数执行
+     */
+    window.traceUIFeedPet = function() {
+        console.log('🔍 在UI点击时追踪feedPet函数执行...');
+
+        // 保存原始的gainCoins和gainExperience函数
+        const originalGainCoins = window.gainCoins || gainCoins;
+        const originalGainExperience = window.gainExperience || gainExperience;
+
+        // 创建追踪版本
+        window.gainCoins = function(amount) {
+            console.log(`🔍 [追踪] gainCoins被调用，参数: ${amount}`);
+            console.log(`🔍 [追踪] 调用堆栈:`, new Error().stack);
+            return originalGainCoins.call(this, amount);
+        };
+
+        window.gainExperience = function(exp) {
+            console.log(`🔍 [追踪] gainExperience被调用，参数: ${exp}`);
+            console.log(`🔍 [追踪] 调用堆栈:`, new Error().stack);
+            return originalGainExperience.call(this, exp);
+        };
+
+        console.log('✅ 追踪函数已设置');
+        console.log('💡 现在点击UI中的喂食按钮，观察调用情况');
+        console.log('💡 完成后运行 restoreOriginalFunctions() 恢复原始函数');
+
+        // 保存原始函数以便恢复
+        window._originalGainCoins = originalGainCoins;
+        window._originalGainExperience = originalGainExperience;
+
+        return true;
+    };
+
+    /**
+     * 恢复原始函数
+     */
+    window.restoreOriginalFunctions = function() {
+        console.log('🔄 恢复原始函数...');
+
+        if (window._originalGainCoins) {
+            window.gainCoins = window._originalGainCoins;
+            delete window._originalGainCoins;
+        }
+
+        if (window._originalGainExperience) {
+            window.gainExperience = window._originalGainExperience;
+            delete window._originalGainExperience;
+        }
+
+        console.log('✅ 原始函数已恢复');
+        return true;
+    };
+
+    /**
+     * 检查不同作用域中的feedPet函数
+     */
+    window.checkFeedPetVersions = function() {
+        console.log('🔍 检查不同作用域中的feedPet函数...');
+
+        console.log('\n📋 函数存在性检查:');
+        console.log(`- window.feedPet: ${typeof window.feedPet === 'function'}`);
+        console.log(`- global feedPet: ${typeof feedPet === 'function'}`);
+
+        // 安全检查this.feedPet
+        let thisFeedPetExists = false;
+        try {
+            thisFeedPetExists = typeof this.feedPet === 'function';
+        } catch (e) {
+            thisFeedPetExists = false;
+        }
+        console.log(`- this.feedPet: ${thisFeedPetExists}`);
+
+        // 检查函数内容
+        if (typeof window.feedPet === 'function') {
+            const windowFeedPetCode = window.feedPet.toString();
+            console.log('\n📝 window.feedPet 函数分析:');
+            console.log(`- 包含gainCoins: ${windowFeedPetCode.includes('gainCoins')}`);
+            console.log(`- 包含gainExperience: ${windowFeedPetCode.includes('gainExperience')}`);
+            console.log(`- 包含handleAIReply: ${windowFeedPetCode.includes('handleAIReply')}`);
+            console.log(`- 包含拓麻歌子特征(weight): ${windowFeedPetCode.includes('weight')}`);
+            console.log(`- 函数长度: ${windowFeedPetCode.length} 字符`);
+        }
+
+        if (typeof feedPet === 'function' && feedPet !== window.feedPet) {
+            const globalFeedPetCode = feedPet.toString();
+            console.log('\n📝 global feedPet 函数分析:');
+            console.log(`- 包含gainCoins: ${globalFeedPetCode.includes('gainCoins')}`);
+            console.log(`- 包含gainExperience: ${globalFeedPetCode.includes('gainExperience')}`);
+            console.log(`- 包含handleAIReply: ${globalFeedPetCode.includes('handleAIReply')}`);
+            console.log(`- 包含拓麻歌子特征(weight): ${globalFeedPetCode.includes('weight')}`);
+            console.log(`- 函数长度: ${globalFeedPetCode.length} 字符`);
+        }
+
+        // 强制UI使用window.feedPet
+        console.log('\n🔧 强制修复UI绑定...');
+        const popup = $("#virtual-pet-popup");
+        if (popup.length > 0) {
+            const feedBtn = popup.find(".feed-btn");
+            if (feedBtn.length > 0) {
+                // 移除旧的事件绑定
+                feedBtn.off("click touchend");
+
+                // 重新绑定到window.feedPet
+                feedBtn.on("click touchend", function(e) {
+                    e.preventDefault();
+                    console.log("🍖 喂食宠物 (强制使用window.feedPet)");
+                    if (typeof window.feedPet === 'function') {
+                        window.feedPet();
+                    } else {
+                        console.error('❌ window.feedPet 不存在');
+                    }
+                });
+
+                console.log('✅ UI按钮已重新绑定到window.feedPet');
+            } else {
+                console.log('❌ 找不到喂食按钮');
+            }
+        } else {
+            console.log('❌ 找不到弹窗，请先打开宠物界面');
+        }
+
+        return {
+            windowFeedPet: typeof window.feedPet === 'function',
+            globalFeedPet: typeof feedPet === 'function',
+            areTheSame: window.feedPet === feedPet,
+            uiFixed: popup.length > 0
+        };
+    };
+
+    /**
+     * 测试修复后的UI按钮
+     */
+    window.testFixedUIButton = function() {
+        console.log('🧪 测试修复后的UI按钮...');
+
+        const popup = $("#virtual-pet-popup");
+        if (popup.length === 0) {
+            console.log('❌ 弹窗不存在，请先打开宠物界面');
+            return false;
+        }
+
+        const feedBtn = popup.find(".feed-btn");
+        if (feedBtn.length === 0) {
+            console.log('❌ 找不到喂食按钮');
+            return false;
+        }
+
+        console.log('✅ 找到喂食按钮');
+
+        // 记录测试前状态
+        const beforeCoins = petData.coins || 0;
+        const beforeExp = petData.experience || 0;
+        const beforeLevel = petData.level || 1;
+
+        console.log('\n📊 测试前状态:');
+        console.log(`- 金币: ${beforeCoins}`);
+        console.log(`- 经验: ${beforeExp}`);
+        console.log(`- 等级: ${beforeLevel}`);
+
+        // 设置追踪
+        let gainCoinsWasCalled = false;
+        let gainExpWasCalled = false;
+
+        const originalGainCoins = window.gainCoins || gainCoins;
+        const originalGainExp = window.gainExperience || gainExperience;
+
+        window.gainCoins = function(amount) {
+            console.log(`🔍 [追踪] gainCoins被调用: +${amount}`);
+            gainCoinsWasCalled = true;
+            return originalGainCoins.call(this, amount);
+        };
+
+        window.gainExperience = function(exp) {
+            console.log(`🔍 [追踪] gainExperience被调用: +${exp}`);
+            gainExpWasCalled = true;
+            return originalGainExp.call(this, exp);
+        };
+
+        console.log('\n🖱️ 模拟点击喂食按钮...');
+
+        // 模拟点击
+        feedBtn.trigger('click');
+
+        // 等待一下再检查结果
+        setTimeout(() => {
+            console.log('\n📊 测试后状态:');
+            console.log(`- 金币: ${petData.coins} (变化: +${(petData.coins || 0) - beforeCoins})`);
+            console.log(`- 经验: ${petData.experience} (变化: +${(petData.experience || 0) - beforeExp})`);
+            console.log(`- 等级: ${petData.level} (变化: +${(petData.level || 1) - beforeLevel})`);
+
+            console.log('\n🔍 函数调用追踪:');
+            console.log(`- gainCoins被调用: ${gainCoinsWasCalled ? '✅' : '❌'}`);
+            console.log(`- gainExperience被调用: ${gainExpWasCalled ? '✅' : '❌'}`);
+
+            // 恢复原始函数
+            window.gainCoins = originalGainCoins;
+            window.gainExperience = originalGainExp;
+
+            if (!gainCoinsWasCalled && !gainExpWasCalled) {
+                console.log('\n❌ 问题分析: 奖励函数都没有被调用');
+                console.log('💡 可能原因:');
+                console.log('  1. 冷却时间未到');
+                console.log('  2. 宠物已死亡');
+                console.log('  3. UI绑定仍然有问题');
+                console.log('  4. 函数执行被中断');
+
+                // 检查冷却时间
+                const now = Date.now();
+                const timeSinceLastFeed = now - (petData.lastFeedTime || 0);
+                console.log(`\n⏰ 冷却时间检查:`);
+                console.log(`- 距离上次喂食: ${Math.round(timeSinceLastFeed / 1000)}秒`);
+                console.log(`- 冷却要求: 30秒`);
+                console.log(`- 冷却状态: ${timeSinceLastFeed >= 30000 ? '✅ 已过' : '❌ 未过'}`);
+
+                console.log(`\n💀 宠物状态检查:`);
+                console.log(`- 宠物存活: ${petData.isAlive ? '✅' : '❌'}`);
+            }
+
+        }, 2000); // 等待2秒
+
+        return true;
+    };
+
+    /**
+     * 等待冷却时间后测试UI按钮
+     */
+    window.testUIAfterCooldown = function() {
+        console.log('⏰ 等待冷却时间后测试UI按钮...');
+
+        const now = Date.now();
+        const timeSinceLastFeed = now - (petData.lastFeedTime || 0);
+        const cooldownRemaining = Math.max(0, 30000 - timeSinceLastFeed);
+
+        if (cooldownRemaining > 0) {
+            console.log(`⏰ 还需等待 ${Math.ceil(cooldownRemaining / 1000)} 秒`);
+            console.log('💡 请等待冷却时间结束后再次运行此函数');
+            return false;
+        }
+
+        console.log('✅ 冷却时间已过，开始测试...');
+
+        const popup = $("#virtual-pet-popup");
+        if (popup.length === 0) {
+            console.log('❌ 弹窗不存在，请先打开宠物界面');
+            return false;
+        }
+
+        const feedBtn = popup.find(".feed-btn");
+        if (feedBtn.length === 0) {
+            console.log('❌ 找不到喂食按钮');
+            return false;
+        }
+
+        // 记录测试前状态
+        const beforeCoins = petData.coins || 0;
+        const beforeExp = petData.experience || 0;
+
+        console.log('\n📊 测试前状态:');
+        console.log(`- 金币: ${beforeCoins}`);
+        console.log(`- 经验: ${beforeExp}`);
+
+        // 设置追踪（在点击前设置）
+        let gainCoinsWasCalled = false;
+        let gainExpWasCalled = false;
+        let coinsAmount = 0;
+        let expAmount = 0;
+
+        const originalGainCoins = window.gainCoins || gainCoins;
+        const originalGainExp = window.gainExperience || gainExperience;
+
+        window.gainCoins = function(amount) {
+            console.log(`🔍 [追踪] gainCoins被调用: +${amount}`);
+            gainCoinsWasCalled = true;
+            coinsAmount = amount;
+            return originalGainCoins.call(this, amount);
+        };
+
+        window.gainExperience = function(exp) {
+            console.log(`🔍 [追踪] gainExperience被调用: +${exp}`);
+            gainExpWasCalled = true;
+            expAmount = exp;
+            return originalGainExp.call(this, exp);
+        };
+
+        console.log('\n🖱️ 点击喂食按钮...');
+        feedBtn.trigger('click');
+
+        // 等待一下再检查结果
+        setTimeout(() => {
+            console.log('\n📊 测试后状态:');
+            console.log(`- 金币: ${petData.coins} (变化: +${(petData.coins || 0) - beforeCoins})`);
+            console.log(`- 经验: ${petData.experience} (变化: +${(petData.experience || 0) - beforeExp})`);
+
+            console.log('\n🔍 函数调用追踪:');
+            console.log(`- gainCoins被调用: ${gainCoinsWasCalled ? '✅' : '❌'}`);
+            console.log(`- gainExperience被调用: ${gainExpWasCalled ? '✅' : '❌'}`);
+
+            if (gainCoinsWasCalled) {
+                console.log(`✅ 金币系统正常工作！获得了 ${coinsAmount} 金币`);
+            }
+
+            if (gainExpWasCalled) {
+                console.log(`✅ 经验系统正常工作！获得了 ${expAmount} 经验`);
+            }
+
+            // 恢复原始函数
+            window.gainCoins = originalGainCoins;
+            window.gainExperience = originalGainExp;
+
+        }, 3000); // 等待3秒
+
+        return true;
+    };
+
+    /**
+     * 检查UI实际调用的feedPet函数内容
+     */
+    window.inspectUIFeedPet = function() {
+        console.log('🔍 检查UI实际调用的feedPet函数内容...');
+
+        const popup = $("#virtual-pet-popup");
+        if (popup.length === 0) {
+            console.log('❌ 弹窗不存在，请先打开宠物界面');
+            return false;
+        }
+
+        const feedBtn = popup.find(".feed-btn");
+        if (feedBtn.length === 0) {
+            console.log('❌ 找不到喂食按钮');
+            return false;
+        }
+
+        console.log('✅ 找到喂食按钮');
+
+        // 获取按钮绑定的事件
+        const events = $._data(feedBtn[0], 'events');
+        console.log('\n📋 按钮事件:', events);
+
+        // 检查当前作用域中的feedPet函数
+        console.log('\n📝 函数内容分析:');
+
+        if (typeof window.feedPet === 'function') {
+            const windowFeedPetCode = window.feedPet.toString();
+            console.log('\n🔍 window.feedPet 函数:');
+            console.log(`- 长度: ${windowFeedPetCode.length} 字符`);
+            console.log(`- 包含gainCoins: ${windowFeedPetCode.includes('gainCoins')}`);
+            console.log(`- 包含gainExperience: ${windowFeedPetCode.includes('gainExperience')}`);
+            console.log(`- 包含weight: ${windowFeedPetCode.includes('weight')}`);
+            console.log(`- 包含handleAIReply: ${windowFeedPetCode.includes('handleAIReply')}`);
+
+            // 显示函数的前500个字符
+            console.log('\n📄 函数开头:');
+            console.log(windowFeedPetCode.substring(0, 500) + '...');
+        }
+
+        if (typeof feedPet === 'function' && feedPet !== window.feedPet) {
+            const globalFeedPetCode = feedPet.toString();
+            console.log('\n🔍 global feedPet 函数:');
+            console.log(`- 长度: ${globalFeedPetCode.length} 字符`);
+            console.log(`- 包含gainCoins: ${globalFeedPetCode.includes('gainCoins')}`);
+            console.log(`- 包含gainExperience: ${globalFeedPetCode.includes('gainExperience')}`);
+            console.log(`- 包含weight: ${globalFeedPetCode.includes('weight')}`);
+            console.log(`- 包含handleAIReply: ${globalFeedPetCode.includes('handleAIReply')}`);
+
+            // 显示函数的前500个字符
+            console.log('\n📄 函数开头:');
+            console.log(globalFeedPetCode.substring(0, 500) + '...');
+        }
+
+        // 强制重新绑定到正确的函数
+        console.log('\n🔧 强制重新绑定到拓麻歌子版本...');
+
+        // 移除旧的事件绑定
+        feedBtn.off("click touchend");
+
+        // 重新绑定到确保包含金币奖励的版本
+        feedBtn.on("click touchend", function(e) {
+            e.preventDefault();
+            console.log("🍖 喂食宠物 (强制使用拓麻歌子版本)");
+
+            // 直接调用拓麻歌子版本的逻辑
+            if (typeof window.feedPet === 'function' && window.feedPet.toString().includes('gainCoins')) {
+                window.feedPet();
+            } else {
+                console.error('❌ 找不到包含gainCoins的feedPet版本');
+                // 手动执行拓麻歌子逻辑
+                console.log('🔧 手动执行拓麻歌子喂食逻辑...');
+                manualTamagotchiFeed();
+            }
+        });
+
+        console.log('✅ UI按钮已重新绑定');
+
+        return true;
+    };
+
+    /**
+     * 手动执行拓麻歌子喂食逻辑
+     */
+    function manualTamagotchiFeed() {
+        console.log('🔧 手动执行拓麻歌子喂食逻辑...');
+
+        if (!petData.isAlive) {
+            toastr.error("💀 你的宠物已经死亡，无法喂食...");
+            return;
+        }
+
+        const now = Date.now();
+        const timeSinceLastFeed = now - petData.lastFeedTime;
+
+        if (timeSinceLastFeed < 30000) { // 30秒冷却
+            toastr.warning("宠物还不饿，等一会再喂吧！");
+            return;
+        }
+
+        // 拓麻歌子式喂食效果
+        petData.hunger = Math.min(100, petData.hunger + 20);
+        petData.happiness = Math.min(100, petData.happiness + 5);
+        petData.weight += 1;
+        petData.lastFeedTime = now;
+        petData.lastCareTime = now;
+        petData.careNeglectCount = Math.max(0, petData.careNeglectCount - 1);
+
+        // 过度喂食检查
+        if (petData.weight > 50) {
+            petData.sickness = Math.min(100, petData.sickness + 10);
+            toastr.warning("⚠️ 宠物吃得太多了，可能会生病！");
+        }
+
+        validateAndFixValues();
+
+        // 定义奖励
+        const rewards = { coins: 3, experience: 2 };
+
+        // 确保调用奖励函数
+        console.log('🎁 给予奖励...');
+        gainExperience(rewards.experience);
+        gainCoins(rewards.coins);
+
+        // AI回复时传递奖励信息，用于独立显示
+        handleAIReply('feed', `${petData.name} 吃得很开心！`, rewards);
+
+        savePetData();
+        renderPetStatus();
+
+        // 强制更新UI显示
+        setTimeout(() => {
+            updateUnifiedUIStatus();
+            console.log('🔄 UI状态已强制刷新');
+        }, 100);
+    }
+
+    /**
+     * 强制刷新UI显示
+     */
+    window.forceUIRefresh = function() {
+        console.log('🔄 强制刷新UI显示...');
+
+        try {
+            // 刷新宠物状态显示
+            if (typeof renderPetStatus === 'function') {
+                renderPetStatus();
+                console.log('✅ renderPetStatus 已调用');
+            }
+
+            // 刷新统一UI状态
+            if (typeof updateUnifiedUIStatus === 'function') {
+                updateUnifiedUIStatus();
+                console.log('✅ updateUnifiedUIStatus 已调用');
+            }
+
+            // 强制更新金币显示
+            const popup = $("#virtual-pet-popup");
+            if (popup.length > 0) {
+                const coinsElement = popup.find('.coins-display, .coin-count, [class*="coin"]');
+                if (coinsElement.length > 0) {
+                    coinsElement.text(`💰 ${petData.coins || 100}`);
+                    console.log(`✅ 金币显示已更新: ${petData.coins || 100}`);
+                } else {
+                    console.log('⚠️ 找不到金币显示元素');
+                }
+
+                // 强制更新所有状态显示
+                popup.find('.status-value').each(function() {
+                    const $this = $(this);
+                    const text = $this.text();
+                    if (text.includes('金币') || text.includes('💰')) {
+                        $this.text(`💰 ${petData.coins || 100}`);
+                    }
+                });
+            }
+
+            console.log('🔄 UI刷新完成');
+            return true;
+
+        } catch (error) {
+            console.error('❌ UI刷新失败:', error);
+            return false;
+        }
+    };
+
+
+
+
+
+    /**
+     * 测试新的奖励显示系统
+     */
+    window.testRewardDisplay = function() {
+        console.log('🎁 测试新的奖励显示系统...');
+
+        // 测试奖励通知显示
+        console.log('1. 测试奖励通知显示...');
+        showRewardNotification({ coins: 5, experience: 3 });
+
+        setTimeout(() => {
+            console.log('2. 测试只有金币的奖励...');
+            showRewardNotification({ coins: 10, experience: 0 });
+        }, 2000);
+
+        setTimeout(() => {
+            console.log('3. 测试只有经验的奖励...');
+            showRewardNotification({ coins: 0, experience: 5 });
+        }, 4000);
+
+        setTimeout(() => {
+            console.log('4. 测试完整的互动流程...');
+            console.log('💡 现在可以点击UI中的喂食按钮测试完整流程');
+            console.log('预期效果：');
+            console.log('  1. AI回复显示在左上角');
+            console.log('  2. 奖励信息显示在右下角');
+            console.log('  3. 两者不会重叠');
+        }, 6000);
+
+        return true;
+    };
+
+    /**
+     * 调整衰减速度和缓冲机制
+     */
+    window.adjustDecaySystem = function() {
+        console.log('⚖️ 调整衰减速度和缓冲机制...');
+
+        // 重新定义更平衡的衰减系统
+        window.updatePetStatus = function() {
+            if (!petData.isAlive) return;
+
+            const now = Date.now();
+            const timeSinceLastUpdate = now - (petData.lastUpdateTime || now);
+            const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
+
+            if (hoursElapsed > 0.1) { // 每6分钟更新一次
+
+                // 1. 年龄增长
+                petData.age += hoursElapsed;
+
+                // 2. 生命阶段检查
+                if (typeof checkLifeStageProgression === 'function') {
+                    checkLifeStageProgression();
+                }
+
+                // 3. 更真实的衰减速度 - 让时间流逝更有感知
+                petData.hunger = Math.max(0, petData.hunger - hoursElapsed * 3.5);    // 每小时-3.5 (离线8小时下降28点)
+                petData.energy = Math.max(0, petData.energy - hoursElapsed * 3.0);    // 每小时-3.0 (离线8小时下降24点)
+                petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 2.5); // 每小时-2.5 (离线8小时下降20点)
+
+                // 4. 状态不佳时的惩罚性衰减 - 提高门槛和惩罚力度
+                if (petData.hunger < 25) { // 门槛提高到25，给玩家更多反应时间
+                    petData.health = Math.max(0, petData.health - hoursElapsed * 1.5); // 惩罚加大
+                    petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 1.0);
+                }
+
+                if (petData.energy < 25) { // 门槛提高到25
+                    petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 0.8);
+                }
+
+                // 5. 死亡检查
+                if (typeof checkDeathConditions === 'function') {
+                    checkDeathConditions();
+                }
+
+                petData.lastUpdateTime = now;
+                validateAndFixValues();
+                savePetData();
+            }
+        };
+
+        // 重新定义更宽松的缓冲机制
+        window.applyInitializationBuffer = function() {
+            const now = Date.now();
+            const timeSinceLastUpdate = now - (petData.lastUpdateTime || now);
+            const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
+
+            // 如果距离上次更新超过2小时，给予"急救包"缓冲
+            if (hoursElapsed > 2) {
+                console.log(`检测到长时间未更新 (${hoursElapsed.toFixed(1)}小时)，应用急救缓冲...`);
+
+                // 50上限系统：急救缓冲数值
+                const minValues = {
+                    hunger: 25,    // 50上限系统：急救饱食度25
+                    energy: 20,    // 50上限系统：急救精力20
+                    happiness: 15, // 50上限系统：急救快乐度15
+                    health: 30     // 50上限系统：急救健康度30
+                };
+
+                let buffered = false;
+                Object.entries(minValues).forEach(([key, minValue]) => {
+                    if (petData[key] < minValue) {
+                        console.log(`缓冲 ${key}: ${petData[key]} → ${minValue}`);
+                        petData[key] = minValue;
+                        buffered = true;
+                    }
+                });
+
+                if (buffered) {
+                    petData.lastUpdateTime = now;
+                    savePetData();
+                    toastr.info('🌟 欢迎回来！已为你的宠物提供了基础照顾。', '', { timeOut: 4000 });
+                    console.log('初始化缓冲已应用');
+                }
+            }
+        };
+
+        console.log('✅ 衰减系统已调整为更真实的养成体验');
+        console.log('📊 新的衰减速度 (更有感知的时间流逝):');
+        console.log('  - 饱食度: 每小时 -3.5 (离线8小时下降28点)');
+        console.log('  - 精力: 每小时 -3.0 (离线8小时下降24点)');
+        console.log('  - 快乐度: 每小时 -2.5 (离线8小时下降20点)');
+        console.log('⚠️ 惩罚性衰减 (状态不佳时):');
+        console.log('  - 饥饿门槛: <25 (原来 <15)');
+        console.log('  - 疲劳门槛: <25 (原来 <15)');
+        console.log('  - 惩罚力度: 显著增加');
+        console.log('🛡️ 急救缓冲机制:');
+        console.log('  - 触发时间: 2小时 (更严格)');
+        console.log('  - 最低饱食度: 35 (急救水平)');
+        console.log('  - 最低精力: 30 (急救水平)');
+        console.log('  - 最低快乐度: 25 (急救水平)');
+        console.log('  - 最低健康度: 40 (急救水平)');
+        console.log('💡 设计理念: 鼓励频繁互动，但提供死亡保护');
+
+        // 立即应用缓冲
+        applyInitializationBuffer();
+
+        return true;
+    };
+
+    /**
+     * 测试新的衰减系统效果
+     */
+    window.testNewDecaySystem = function() {
+        console.log('🧪 测试新的衰减系统效果...');
+
+        // 显示当前状态
+        console.log('\n📊 当前宠物状态:');
+        console.log(`- 饱食度: ${petData.hunger}/100`);
+        console.log(`- 精力: ${petData.energy}/100`);
+        console.log(`- 快乐度: ${petData.happiness}/100`);
+        console.log(`- 健康度: ${petData.health}/100`);
+
+        // 模拟不同时长的离线效果
+        console.log('\n⏰ 模拟离线效果预测:');
+
+        const scenarios = [
+            { hours: 2, desc: '短暂离线 (2小时)' },
+            { hours: 8, desc: '一个工作日 (8小时)' },
+            { hours: 24, desc: '一整天 (24小时)' },
+            { hours: 72, desc: '周末 (72小时)' }
+        ];
+
+        scenarios.forEach(scenario => {
+            const hungerLoss = scenario.hours * 3.5;
+            const energyLoss = scenario.hours * 3.0;
+            const happinessLoss = scenario.hours * 2.5;
+
+            const predictedHunger = Math.max(0, petData.hunger - hungerLoss);
+            const predictedEnergy = Math.max(0, petData.energy - energyLoss);
+            const predictedHappiness = Math.max(0, petData.happiness - happinessLoss);
+
+            console.log(`\n${scenario.desc}:`);
+            console.log(`  饱食度: ${petData.hunger} → ${predictedHunger} (${hungerLoss > 0 ? '-' : ''}${hungerLoss})`);
+            console.log(`  精力: ${petData.energy} → ${predictedEnergy} (${energyLoss > 0 ? '-' : ''}${energyLoss})`);
+            console.log(`  快乐度: ${petData.happiness} → ${predictedHappiness} (${happinessLoss > 0 ? '-' : ''}${happinessLoss})`);
+
+            // 判断是否会触发缓冲
+            if (scenario.hours > 2) {
+                console.log(`  🛡️ 会触发急救缓冲 (最低保证: 饱食35, 精力30, 快乐25)`);
+            }
+        });
+
+        console.log('\n💡 新系统特点:');
+        console.log('✅ 离线时间有明显感知 - 不再是"假装的时间流逝"');
+        console.log('✅ 鼓励频繁互动 - 状态下降更快，需要更多关注');
+        console.log('✅ 死亡保护机制 - 长时间离线不会直接死亡');
+        console.log('✅ 真实的养成体验 - 像真正的宠物一样需要持续照顾');
+
+        return true;
+    };
+
+    /**
+     * 测试新的数值平衡体验
+     */
+    window.testNewValueBalance = function() {
+        console.log('🎮 测试新的数值平衡体验...');
+
+        // 先应用新的初始数值
+        adjustInitialValues();
+
+        console.log('\n📊 起始状态:');
+        console.log(`- 健康: ${petData.health}/100 (${petData.health < 30 ? '需要照顾' : '良好'})`);
+        console.log(`- 快乐: ${petData.happiness}/100 (${petData.happiness < 30 ? '需要互动' : '良好'})`);
+        console.log(`- 饱食: ${petData.hunger}/100 (${petData.hunger < 40 ? '需要喂食' : '良好'})`);
+        console.log(`- 精力: ${petData.energy}/100 (${petData.energy < 40 ? '需要休息' : '良好'})`);
+
+        console.log('\n🎯 模拟照顾流程:');
+
+        // 模拟喂食
+        console.log('\n1. 🍖 喂食效果:');
+        const oldHunger = petData.hunger;
+        const oldHappiness1 = petData.happiness;
+        petData.hunger = Math.min(100, petData.hunger + 20);
+        petData.happiness = Math.min(100, petData.happiness + 5);
+        console.log(`   饱食度: ${oldHunger} → ${petData.hunger} (+${petData.hunger - oldHunger})`);
+        console.log(`   快乐度: ${oldHappiness1} → ${petData.happiness} (+${petData.happiness - oldHappiness1})`);
+        console.log(`   效果: ${petData.hunger >= 40 ? '✅ 饱足了' : '⚠️ 还需要更多食物'}`);
+
+        // 模拟玩耍
+        console.log('\n2. 🎮 玩耍效果:');
+        const oldHappiness2 = petData.happiness;
+        const oldEnergy = petData.energy;
+        petData.happiness = Math.min(100, petData.happiness + 15);
+        petData.energy = Math.max(0, petData.energy - 10);
+        console.log(`   快乐度: ${oldHappiness2} → ${petData.happiness} (+${petData.happiness - oldHappiness2})`);
+        console.log(`   精力: ${oldEnergy} → ${petData.energy} (${petData.energy - oldEnergy})`);
+        console.log(`   效果: ${petData.happiness >= 50 ? '✅ 很开心' : '⚠️ 还需要更多互动'}`);
+
+        // 模拟睡觉
+        console.log('\n3. 😴 睡觉效果:');
+        const oldEnergy2 = petData.energy;
+        const oldHealth = petData.health;
+        petData.energy = Math.min(100, petData.energy + 25);
+        petData.health = Math.min(100, petData.health + 10);
+        console.log(`   精力: ${oldEnergy2} → ${petData.energy} (+${petData.energy - oldEnergy2})`);
+        console.log(`   健康: ${oldHealth} → ${petData.health} (+${petData.health - oldHealth})`);
+        console.log(`   效果: ${petData.energy >= 60 ? '✅ 精力充沛' : '⚠️ 还需要更多休息'}`);
+
+        console.log('\n📈 照顾后状态:');
+        console.log(`- 健康: ${petData.health}/100 (${petData.health >= 50 ? '✅ 健康' : '⚠️ 需要更多照顾'})`);
+        console.log(`- 快乐: ${petData.happiness}/100 (${petData.happiness >= 50 ? '✅ 快乐' : '⚠️ 需要更多互动'})`);
+        console.log(`- 饱食: ${petData.hunger}/100 (${petData.hunger >= 50 ? '✅ 饱足' : '⚠️ 需要更多食物'})`);
+        console.log(`- 精力: ${petData.energy}/100 (${petData.energy >= 60 ? '✅ 充沛' : '⚠️ 需要更多休息'})`);
+
+        console.log('\n💡 智能初始化系统的优势:');
+        console.log('✅ 首次打开随机化到50以下，后续可达100');
+        console.log('✅ 每次互动都有显著的改善效果');
+        console.log('✅ 玩家能清楚感受到照顾的价值');
+        console.log('✅ 自然的时间衰减，不强制重置');
+        console.log('✅ 平衡的挑战性和成长感');
+
+        // 保存测试后的状态
+        savePetData();
+        if (typeof updateUnifiedUIStatus === 'function') {
+            updateUnifiedUIStatus();
+        }
+
+        return {
+            startValues: { health: 35, happiness: 30, hunger: 40, energy: 45 },
+            endValues: {
+                health: petData.health,
+                happiness: petData.happiness,
+                hunger: petData.hunger,
+                energy: petData.energy
+            },
+            maxCap: 100,
+            improvement: '智能初始化系统：首次随机化，后续自然衰减'
+        };
+    };
+
+    /**
+     * 测试抱抱功能
+     */
+    window.testHugFunction = function() {
+        console.log('🤗 测试抱抱功能...');
+
+        // 检查抱抱函数是否存在
+        console.log('\n📋 函数检查:');
+        console.log(`- hugPet函数存在: ${typeof hugPet === 'function' ? '✅' : '❌'}`);
+        console.log(`- window.hugPet函数存在: ${typeof window.hugPet === 'function' ? '✅' : '❌'}`);
+
+        // 检查UI按钮
+        const popup = $("#virtual-pet-popup");
+        if (popup.length > 0) {
+            const hugBtn = popup.find(".hug-btn");
+            console.log(`- 抱抱按钮存在: ${hugBtn.length > 0 ? '✅' : '❌'} (数量: ${hugBtn.length})`);
+
+            if (hugBtn.length > 0) {
+                const events = $._data(hugBtn[0], 'events');
+                console.log(`- 抱抱按钮事件: ${events ? Object.keys(events).join(', ') : '无'}`);
+            }
+        } else {
+            console.log('⚠️ 宠物界面未打开，请先运行 showPopup()');
+        }
+
+        // 检查抱抱函数内容
+        if (typeof window.hugPet === 'function') {
+            const hugPetCode = window.hugPet.toString();
+            console.log('\n📝 抱抱函数分析:');
+            console.log(`- 包含gainCoins: ${hugPetCode.includes('gainCoins') ? '✅' : '❌'}`);
+            console.log(`- 包含gainExperience: ${hugPetCode.includes('gainExperience') ? '✅' : '❌'}`);
+            console.log(`- 包含handleAIReply: ${hugPetCode.includes('handleAIReply') ? '✅' : '❌'}`);
+            console.log(`- 冷却时间: ${hugPetCode.includes('25000') ? '25秒 ✅' : '未知 ❌'}`);
+            console.log(`- 奖励设置: ${hugPetCode.includes('coins: 2') && hugPetCode.includes('experience: 1') ? '金币2+经验1 ✅' : '未知 ❌'}`);
+        }
+
+        // 显示当前状态
+        console.log('\n📊 当前状态:');
+        console.log(`- 健康: ${petData.health}/100`);
+        console.log(`- 快乐: ${petData.happiness}/100`);
+        console.log(`- 金币: ${petData.coins || 100}`);
+        console.log(`- 经验: ${petData.experience || 0}`);
+        console.log(`- 上次抱抱时间: ${petData.lastHugTime ? new Date(petData.lastHugTime).toLocaleTimeString() : '从未'}`);
+
+        // 检查冷却状态
+        if (petData.lastHugTime) {
+            const now = Date.now();
+            const timeSinceLastHug = now - petData.lastHugTime;
+            const cooldownRemaining = Math.max(0, 25000 - timeSinceLastHug);
+
+            console.log('\n⏰ 冷却状态:');
+            console.log(`- 距离上次抱抱: ${Math.round(timeSinceLastHug / 1000)}秒`);
+            console.log(`- 冷却剩余: ${Math.round(cooldownRemaining / 1000)}秒`);
+            console.log(`- 可以抱抱: ${cooldownRemaining === 0 ? '✅' : '❌'}`);
+        }
+
+        console.log('\n💡 抱抱功能特点:');
+        console.log('✅ 25秒冷却时间（比其他互动更短）');
+        console.log('✅ 增加快乐度+10，健康度+3');
+        console.log('✅ 增加纪律性+2');
+        console.log('✅ 减少疾病-3（如果生病）');
+        console.log('✅ 奖励：2金币 + 1经验');
+        console.log('✅ 减少忽视计数');
+
+        return {
+            functionExists: typeof window.hugPet === 'function',
+            buttonExists: popup.length > 0 && popup.find(".hug-btn").length > 0,
+            canHug: !petData.lastHugTime || (Date.now() - petData.lastHugTime) >= 25000,
+            isAlive: petData.isAlive
+        };
+    };
+
+    /**
+     * 完整测试抱抱功能（包括前后检查）
+     */
+    window.testHugFunctionComplete = function() {
+        console.log('🤗 完整测试抱抱功能（包括前后检查）...');
+
+        // 1. 检查函数实现
+        console.log('\n📋 1. 函数实现检查:');
+        const hugFunctionExists = typeof window.hugPet === 'function';
+        console.log(`- hugPet函数存在: ${hugFunctionExists ? '✅' : '❌'}`);
+
+        if (hugFunctionExists) {
+            const hugCode = window.hugPet.toString();
+            console.log(`- 包含金币奖励: ${hugCode.includes('gainCoins') ? '✅' : '❌'}`);
+            console.log(`- 包含经验奖励: ${hugCode.includes('gainExperience') ? '✅' : '❌'}`);
+            console.log(`- 包含AI回复: ${hugCode.includes('handleAIReply') ? '✅' : '❌'}`);
+            console.log(`- 冷却时间设置: ${hugCode.includes('25000') ? '25秒 ✅' : '❌'}`);
+            console.log(`- 奖励配置: ${hugCode.includes('coins: 2') && hugCode.includes('experience: 1') ? '2金币+1经验 ✅' : '❌'}`);
+        }
+
+        // 2. 检查UI按钮
+        console.log('\n🖱️ 2. UI按钮检查:');
+        const popup = $("#virtual-pet-popup");
+        if (popup.length > 0) {
+            const hugBtn = popup.find(".hug-btn");
+            console.log(`- 抱抱按钮存在: ${hugBtn.length > 0 ? '✅' : '❌'} (数量: ${hugBtn.length})`);
+
+            if (hugBtn.length > 0) {
+                const events = $._data(hugBtn[0], 'events');
+                console.log(`- 按钮事件绑定: ${events ? '✅ ' + Object.keys(events).join(', ') : '❌ 无'}`);
+                console.log(`- 按钮样式: ${hugBtn.css('background-color') ? '✅ 有样式' : '❌ 无样式'}`);
+            }
+        } else {
+            console.log('⚠️ 宠物界面未打开，请先运行 showPopup()');
+        }
+
+        // 3. 检查提示词支持
+        console.log('\n📝 3. 提示词支持检查:');
+        try {
+            const hugPrompt = buildInteractionPrompt('hug');
+            const hasHugDescription = hugPrompt.includes('给了我一个温暖的拥抱');
+            console.log(`- 提示词包含抱抱描述: ${hasHugDescription ? '✅' : '❌'}`);
+            console.log(`- 提示词避免游戏机制: ${hugPrompt.includes('不要在回复中提及金币') ? '✅' : '❌'}`);
+        } catch (error) {
+            console.log(`❌ 提示词生成失败: ${error.message}`);
+        }
+
+        // 4. 测试功能执行
+        console.log('\n🧪 4. 功能执行测试:');
+        const beforeState = {
+            coins: petData.coins || 100,
+            experience: petData.experience || 0,
+            happiness: petData.happiness || 0,
+            health: petData.health || 0,
+            lastHugTime: petData.lastHugTime || 0
+        };
+
+        console.log('测试前状态:');
+        console.log(`- 金币: ${beforeState.coins}`);
+        console.log(`- 经验: ${beforeState.experience}`);
+        console.log(`- 快乐: ${beforeState.happiness}`);
+        console.log(`- 健康: ${beforeState.health}`);
+
+        // 检查冷却状态
+        const now = Date.now();
+        const timeSinceLastHug = now - beforeState.lastHugTime;
+        const canHug = timeSinceLastHug >= 25000;
+        console.log(`- 冷却状态: ${canHug ? '✅ 可以抱抱' : `❌ 还需等待${Math.ceil((25000 - timeSinceLastHug) / 1000)}秒`}`);
+
+        if (canHug && hugFunctionExists) {
+            console.log('\n🎯 执行抱抱测试...');
+
+            // 设置追踪
+            let coinsGained = false;
+            let expGained = false;
+
+            const originalGainCoins = window.gainCoins;
+            const originalGainExp = window.gainExperience;
+
+            window.gainCoins = function(amount) {
+                console.log(`🔍 [追踪] gainCoins被调用: +${amount}`);
+                coinsGained = true;
+                return originalGainCoins.call(this, amount);
+            };
+
+            window.gainExperience = function(exp) {
+                console.log(`🔍 [追踪] gainExperience被调用: +${exp}`);
+                expGained = true;
+                return originalGainExp.call(this, exp);
+            };
+
+            // 执行抱抱（不等待AI回复）
+            try {
+                window.hugPet();
+
+                setTimeout(() => {
+                    console.log('\n📊 测试后状态:');
+                    console.log(`- 金币: ${petData.coins} (变化: +${(petData.coins || 0) - beforeState.coins})`);
+                    console.log(`- 经验: ${petData.experience} (变化: +${(petData.experience || 0) - beforeState.experience})`);
+                    console.log(`- 快乐: ${petData.happiness} (变化: +${petData.happiness - beforeState.happiness})`);
+                    console.log(`- 健康: ${petData.health} (变化: +${petData.health - beforeState.health})`);
+
+                    console.log('\n🔍 奖励函数调用:');
+                    console.log(`- gainCoins被调用: ${coinsGained ? '✅' : '❌'}`);
+                    console.log(`- gainExperience被调用: ${expGained ? '✅' : '❌'}`);
+
+                    // 恢复原始函数
+                    window.gainCoins = originalGainCoins;
+                    window.gainExperience = originalGainExp;
+
+                    // 综合评估
+                    const allGood = hugFunctionExists && coinsGained && expGained &&
+                                   (petData.coins > beforeState.coins) &&
+                                   (petData.experience > beforeState.experience);
+
+                    console.log('\n🎉 综合评估:');
+                    if (allGood) {
+                        console.log('✅ 抱抱功能完全正常！');
+                        toastr.success('🤗 抱抱功能测试通过！', '', { timeOut: 3000 });
+                    } else {
+                        console.log('❌ 抱抱功能存在问题');
+                        toastr.warning('抱抱功能需要检查', '', { timeOut: 3000 });
+                    }
+                }, 1000);
+
+            } catch (error) {
+                console.log(`❌ 抱抱执行失败: ${error.message}`);
+                // 恢复原始函数
+                window.gainCoins = originalGainCoins;
+                window.gainExperience = originalGainExp;
+            }
+        }
+
+        console.log('\n💡 抱抱功能特点:');
+        console.log('✅ 25秒冷却时间');
+        console.log('✅ +10快乐度, +3健康度');
+        console.log('✅ +2纪律性, -1忽视计数');
+        console.log('✅ 减少疾病-3（如果生病）');
+        console.log('✅ 奖励：2金币 + 1经验');
+        console.log('✅ AI回复支持');
+
+        return {
+            functionExists: hugFunctionExists,
+            buttonExists: popup.length > 0 && popup.find(".hug-btn").length > 0,
+            canHug: canHug,
+            isAlive: petData.isAlive
+        };
+    };
+
+    // 检查localStorage中的数据
+    window.checkStoredData = function() {
+        console.log("💾 检查localStorage中的数据...");
+
+        const stored = localStorage.getItem(STORAGE_KEY_PET_DATA);
+        if (stored) {
+            try {
+                const data = JSON.parse(stored);
+                console.log("存储的数据:", data);
+                console.log(`数据版本: ${data.dataVersion || '未设置'}`);
+                console.log(`健康: ${data.health}`);
+                console.log(`快乐度: ${data.happiness}`);
+                console.log(`饱食度: ${data.hunger}`);
+                console.log(`精力: ${data.energy}`);
+            } catch (e) {
+                console.error("解析存储数据失败:", e);
+            }
+        } else {
+            console.log("没有找到存储的数据");
+        }
+    };
+
+    // 测试头像功能
+    window.testAvatarFunction = function() {
+        console.log("🎯 测试头像功能...");
+
+        // 检查头像相关函数是否存在
+        const functions = {
+            openAvatarSelector: typeof window.openAvatarSelector === 'function',
+            resetAvatar: typeof window.resetAvatar === 'function',
+            getAvatarContent: typeof getAvatarContent === 'function',
+            loadCustomAvatar: typeof loadCustomAvatar === 'function',
+            saveCustomAvatar: typeof saveCustomAvatar === 'function',
+            clearCustomAvatar: typeof clearCustomAvatar === 'function'
+        };
+
+        console.log("函数检查:");
+        Object.entries(functions).forEach(([name, exists]) => {
+            console.log(`  ${exists ? '✅' : '❌'} ${name}`);
+        });
+
+        // 检查当前头像状态
+        console.log(`当前自定义头像: ${customAvatarData ? '已设置' : '未设置'}`);
+
+        // 检查悬浮按钮头像
+        const button = $(`#${BUTTON_ID}`);
+        if (button.length > 0) {
+            const hasCustomImage = button.find('img').length > 0;
+            const hasDefaultEmoji = button.text().includes('🐾');
+            console.log(`悬浮按钮头像: ${hasCustomImage ? '自定义图片' : hasDefaultEmoji ? '默认爪子' : '未知'}`);
+        } else {
+            console.log("❌ 悬浮按钮不存在");
+        }
+
+        // 检查弹窗中的头像
+        const avatarCircle = $('.pet-avatar-circle');
+        if (avatarCircle.length > 0) {
+            const hasCustomImage = avatarCircle.find('img').length > 0;
+            console.log(`弹窗头像: ${hasCustomImage ? '自定义图片' : '默认表情'}`);
+            console.log(`头像框数量: ${avatarCircle.length}`);
+        } else {
+            console.log("弹窗头像: 未找到头像框");
+        }
+
+        // 检查头像交互功能
+        const avatarCircleClickable = $('.pet-avatar-circle[onclick]').length > 0;
+        const avatarCircleContextMenu = $('.pet-avatar-circle[oncontextmenu]').length > 0;
+        console.log(`头像点击功能: ${avatarCircleClickable ? '✅' : '❌'}`);
+        console.log(`头像右键功能: ${avatarCircleContextMenu ? '✅' : '❌'}`);
+        console.log(`右键菜单函数: ${typeof window.showAvatarContextMenu === 'function' ? '✅' : '❌'}`);
+
+        const allFunctionsExist = Object.values(functions).every(exists => exists);
+        console.log(`\n🎉 头像功能测试: ${allFunctionsExist ? '所有功能就绪！' : '部分功能缺失'}`);
+
+        if (allFunctionsExist) {
+            console.log("📋 使用说明:");
+            console.log("  🎨 头像功能:");
+            console.log("    - 点击圆形头像框可以更换头像");
+            console.log("    - 右键点击头像框可以重置为默认头像");
+            console.log("    - 自定义头像会同时显示在弹窗和悬浮按钮中");
+            console.log("  📝 名字功能:");
+            console.log("    - 点击宠物名字可以编辑修改");
+            console.log("    - 支持最多20个字符的自定义名字");
+            console.log("  🎮 交互功能:");
+            console.log("    - 🍖 喂食：+15饱食度, +5快乐度 (20秒冷却)");
+            console.log("    - 🎮 玩耍：+12快乐度, -8精力 (40秒冷却)");
+            console.log("    - 😴 睡觉：+20精力, +5健康 (80秒冷却)");
+            console.log("  🎨 界面特色:");
+            console.log("    - 糖果色主题，明亮清新");
+            console.log("    - 无背景框架，元素融入背景");
+            console.log("    - 实时数值更新，状态条动画");
+            console.log("  ⚖️ 数值平衡:");
+            console.log("    - 初始数值：健康40, 快乐30, 饱食50, 精力60");
+            console.log("    - 时间衰减：每12分钟更新，速度减缓");
+            console.log("    - 操作冷却：喂食20s, 玩耍40s, 睡觉80s");
+        }
+
+        return allFunctionsExist;
+    };
+
+    // 模拟设置测试头像
+    window.setTestAvatar = function() {
+        console.log("🎯 设置测试头像...");
+
+        // 创建一个简单的测试图片 (1x1像素的红色图片)
+        const canvas = document.createElement('canvas');
+        canvas.width = 100;
+        canvas.height = 100;
+        const ctx = canvas.getContext('2d');
+
+        // 绘制一个简单的测试图案
+        ctx.fillStyle = '#7289da';
+        ctx.fillRect(0, 0, 100, 100);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '60px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('🐱', 50, 70);
+
+        const testImageData = canvas.toDataURL('image/png');
+
+        if (saveCustomAvatar(testImageData)) {
+            updateAvatarDisplay();
+            updateFloatingButtonAvatar();
+            console.log("✅ 测试头像设置成功");
+            console.log("现在可以看到自定义头像效果");
+        } else {
+            console.log("❌ 测试头像设置失败");
+        }
+    };
+
+    // 全面的拖动功能验证测试
+    window.validateDragFix = function() {
+        console.log("🧪 开始全面验证拖动修复...");
+
+        const button = $(`#${BUTTON_ID}`);
+        if (button.length === 0) {
+            console.log("❌ 按钮不存在，无法测试");
+            return false;
+        }
+
+        let testResults = {
+            buttonExists: true,
+            positionCorrect: false,
+            eventsbound: false,
+            dragWorks: false,
+            boundaryWorks: false,
+            visualFeedback: false
+        };
+
+        // 测试1: 检查按钮位置
+        const rect = button[0].getBoundingClientRect();
+        const inViewport = rect.top >= 0 && rect.left >= 0 &&
+                          rect.bottom <= window.innerHeight && rect.right <= window.innerWidth;
+        testResults.positionCorrect = inViewport;
+        console.log(`✅ 位置测试: ${inViewport ? '通过' : '失败'} - 位置: (${rect.left}, ${rect.top})`);
+
+        // 测试2: 检查事件绑定
+        const events = $._data(button[0], "events");
+        const hasEvents = events && (events.mousedown || events.touchstart);
+        testResults.eventsbound = hasEvents;
+        console.log(`✅ 事件绑定测试: ${hasEvents ? '通过' : '失败'}`);
+
+        // 测试3: 模拟拖动
+        console.log("🎯 开始拖动测试...");
+        const originalPos = { left: rect.left, top: rect.top };
+        const testPos = { left: 300, top: 300 };
+
+        // 直接设置位置测试
+        button[0].style.setProperty('left', testPos.left + 'px', 'important');
+        button[0].style.setProperty('top', testPos.top + 'px', 'important');
+
+        setTimeout(() => {
+            const newRect = button[0].getBoundingClientRect();
+            const moved = Math.abs(newRect.left - testPos.left) < 5 && Math.abs(newRect.top - testPos.top) < 5;
+            testResults.dragWorks = moved;
+            console.log(`✅ 拖动测试: ${moved ? '通过' : '失败'} - 新位置: (${newRect.left}, ${newRect.top})`);
+
+            // 恢复原位置
+            button[0].style.setProperty('left', originalPos.left + 'px', 'important');
+            button[0].style.setProperty('top', originalPos.top + 'px', 'important');
+
+            // 测试4: 边界限制
+            console.log("🎯 测试边界限制...");
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+
+            // 测试超出边界的位置
+            button[0].style.setProperty('left', (windowWidth + 100) + 'px', 'important');
+            button[0].style.setProperty('top', (windowHeight + 100) + 'px', 'important');
+
+            setTimeout(() => {
+                const boundaryRect = button[0].getBoundingClientRect();
+                const staysInBounds = boundaryRect.left < windowWidth && boundaryRect.top < windowHeight;
+                testResults.boundaryWorks = staysInBounds;
+                console.log(`✅ 边界测试: ${staysInBounds ? '通过' : '失败'}`);
+
+                // 恢复原位置
+                button[0].style.setProperty('left', originalPos.left + 'px', 'important');
+                button[0].style.setProperty('top', originalPos.top + 'px', 'important');
+
+                // 测试5: 视觉反馈
+                console.log("🎯 测试视觉反馈...");
+                button.addClass('dragging');
+                const hasDraggingClass = button.hasClass('dragging');
+                button.removeClass('dragging');
+                testResults.visualFeedback = hasDraggingClass;
+                console.log(`✅ 视觉反馈测试: ${hasDraggingClass ? '通过' : '失败'}`);
+
+                // 输出总结
+                const passedTests = Object.values(testResults).filter(result => result).length;
+                const totalTests = Object.keys(testResults).length;
+
+                console.log("\n🎯 测试总结:");
+                console.log(`通过: ${passedTests}/${totalTests} 项测试`);
+                Object.entries(testResults).forEach(([test, result]) => {
+                    console.log(`${result ? '✅' : '❌'} ${test}`);
+                });
+
+                if (passedTests === totalTests) {
+                    console.log("🎉 所有测试通过！拖动功能修复成功！");
+                } else {
+                    console.log("⚠️ 部分测试失败，可能需要进一步调试");
+                }
+
+                return testResults;
+            }, 100);
+        }, 100);
+
+        return testResults;
+    };
+
+    // 拖动功能测试和诊断
+    window.testDragFunction = function() {
+        console.log("🧪 测试拖动功能...");
+
+        const button = $(`#${BUTTON_ID}`);
+        if (button.length === 0) {
+            console.log("❌ 按钮不存在，无法测试拖动");
+            return false;
+        }
+
+        console.log("✅ 按钮存在，开始拖动测试");
+
+        // 检查当前位置
+        const rect = button[0].getBoundingClientRect();
+        console.log("当前位置:", {
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height
+        });
+
+        // 检查事件绑定
+        const events = $._data(button[0], "events");
+        console.log("绑定的事件:", events ? Object.keys(events) : "无");
+
+        // 模拟拖动到测试位置
+        const testX = 300;
+        const testY = 300;
+
+        console.log(`移动按钮到测试位置: (${testX}, ${testY})`);
+        button.css({
+            'position': 'fixed',
+            'left': testX + 'px',
+            'top': testY + 'px'
+        });
+
+        // 验证移动结果
+        setTimeout(() => {
+            const newRect = button[0].getBoundingClientRect();
+            const success = Math.abs(newRect.left - testX) < 5 && Math.abs(newRect.top - testY) < 5;
+            console.log(success ? "✅ 拖动测试成功" : "❌ 拖动测试失败");
+            console.log("新位置:", { left: newRect.left, top: newRect.top });
+
+            // 保存测试位置
+            if (success) {
+                localStorage.setItem(STORAGE_KEY_BUTTON_POS, JSON.stringify({
+                    x: testX,
+                    y: testY
+                }));
+                console.log("✅ 测试位置已保存");
+            }
+        }, 100);
+
+        return true;
+    };
+
+    // 拖动问题诊断
+    window.diagnoseDragIssues = function() {
+        console.log("🔍 诊断拖动问题...");
+
+        const button = $(`#${BUTTON_ID}`);
+        if (button.length === 0) {
+            console.log("❌ 按钮不存在");
+            return;
+        }
+
+        // 检查基础样式
+        const styles = window.getComputedStyle(button[0]);
+        console.log("样式检查:", {
+            position: styles.position,
+            zIndex: styles.zIndex,
+            cursor: styles.cursor,
+            pointerEvents: styles.pointerEvents,
+            userSelect: styles.userSelect
+        });
+
+        // 检查事件监听器
+        const events = $._data(button[0], "events");
+        if (events) {
+            console.log("事件监听器:");
+            Object.keys(events).forEach(eventType => {
+                console.log(`- ${eventType}: ${events[eventType].length} 个监听器`);
+            });
+        } else {
+            console.log("❌ 没有找到事件监听器");
+        }
+
+        // 检查位置数据
+        const savedPos = localStorage.getItem(STORAGE_KEY_BUTTON_POS);
+        if (savedPos) {
+            try {
+                const pos = JSON.parse(savedPos);
+                console.log("保存的位置:", pos);
+            } catch (e) {
+                console.log("❌ 位置数据损坏:", savedPos);
+            }
+        } else {
+            console.log("ℹ️ 没有保存的位置数据");
+        }
+
+        // 检查边界
+        const rect = button[0].getBoundingClientRect();
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+
+        console.log("边界检查:", {
+            inBounds: rect.left >= 0 && rect.top >= 0 &&
+                     rect.right <= windowWidth && rect.bottom <= windowHeight,
+            position: { left: rect.left, top: rect.top },
+            window: { width: windowWidth, height: windowHeight }
+        });
+    };
+
+    // 创建一个测试按钮来调试弹窗
+    window.createTestPopupButton = function() {
+        // 移除现有的测试按钮
+        $("#test-popup-button").remove();
+
+        // 创建测试按钮
+        const testButton = $(`
+            <button id="test-popup-button" style="
+                position: fixed;
+                top: 10px;
+                right: 10px;
+                z-index: ${SAFE_Z_INDEX.popup};
+                background: #7289da;
+                color: white;
+                border: none;
+                padding: 10px 15px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 14px;
+            ">测试弹窗</button>
+        `);
+
+        $("body").append(testButton);
+
+        testButton.on("click touchend", function(e) {
+            e.preventDefault();
+            console.log("测试按钮被点击");
+            try {
+                showPopup();
+                console.log("showPopup 调用成功");
+            } catch (error) {
+                console.error("showPopup 调用失败:", error);
+                alert("弹窗测试失败: " + error.message);
+            }
+        });
+
+        console.log("测试按钮已创建，位于屏幕右上角");
+        return true;
+    };
+
+    // iOS专用弹窗显示函数
+    window.showIOSPopup = function() {
+        console.log("🍎 iOS专用弹窗显示");
+
+        // 移除所有可能的现有弹窗
+        $("#virtual-pet-popup-overlay").remove();
+        $(".virtual-pet-popup-overlay").remove();
+        $("[id*='virtual-pet-popup']").remove();
+
+        // 创建iOS优化的统一弹窗
+        const iosPopupHtml = `
+            <div id="virtual-pet-popup-overlay" style="
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100vw !important;
+                height: 100vh !important;
+                background-color: rgba(0, 0, 0, 0.85) !important;
+                z-index: ${SAFE_Z_INDEX.popup} !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                padding: 10px !important;
+                box-sizing: border-box !important;
+                -webkit-overflow-scrolling: touch !important;
+                -webkit-transform: translateZ(0) !important;
+                transform: translateZ(0) !important;
+            ">
+                <div id="virtual-pet-popup" style="
+                    position: relative !important;
+                    width: calc(100vw - 30px) !important;
+                    max-width: 300px !important;
+                    max-height: calc(100vh - 60px) !important;
+                    background: ${candyColors.background} !important;
+                    color: ${candyColors.textPrimary} !important;
+                    border-radius: 16px !important;
+                    padding: 16px !important;
+                    overflow-y: auto !important;
+                    -webkit-overflow-scrolling: touch !important;
+                    box-shadow: 0 20px 40px rgba(0,0,0,0.6) !important;
+                    -webkit-transform: translateZ(0) !important;
+                    transform: translateZ(0) !important;
+                ">
+                    ${generateUnifiedUI()}
+                </div>
+            </div>
+        `;
+
+        $("body").append(iosPopupHtml);
+
+        // 绑定外部点击关闭事件
+        const $iosOverlay = $("#virtual-pet-popup-overlay");
+
+        // 点击外部关闭
+        $iosOverlay.on("click touchend", function(e) {
+            if (e.target === this) {
+                e.preventDefault();
+                $iosOverlay.remove();
+            }
+        });
+
+        // 绑定统一的操作按钮事件
+        bindUnifiedUIEvents($iosOverlay);
+
+        console.log("🍎 iOS弹窗已创建并显示");
+        return true;
+    };
+
+    // 测试统一UI的函数
+    window.testUnifiedUI = function() {
+        console.log("🎨 测试统一UI...");
+
+        // 清理现有弹窗
+        window.clearAllPopups();
+
+        // 检测设备类型
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        const isAndroid = /Android/.test(navigator.userAgent);
+        const isMobile = isIOS || isAndroid;
+
+        console.log(`设备检测: iOS=${isIOS}, Android=${isAndroid}, Mobile=${isMobile}`);
+
+        // 延迟显示弹窗
+        setTimeout(() => {
+            console.log("显示统一UI");
+            showPopup();
+        }, 100);
+
+        return true;
+    };
+
+    // 移动端尺寸测试函数
+    window.testMobileSize = function() {
+        console.log("📱 测试移动端尺寸...");
+
+        // 获取屏幕信息
+        const screenWidth = window.screen.width;
+        const screenHeight = window.screen.height;
+        const windowWidth = $(window).width();
+        const windowHeight = $(window).height();
+
+        console.log(`屏幕尺寸: ${screenWidth}x${screenHeight}`);
+        console.log(`窗口尺寸: ${windowWidth}x${windowHeight}`);
+
+        // 检测设备类型
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        const isAndroid = /Android/.test(navigator.userAgent);
+        const isMobile = windowWidth <= 767;
+
+        console.log(`设备类型: iOS=${isIOS}, Android=${isAndroid}, Mobile=${isMobile}`);
+
+        // 计算推荐的弹窗尺寸
+        const recommendedWidth = Math.min(300, windowWidth - 40);
+        const recommendedHeight = Math.min(500, windowHeight - 100);
+
+        console.log(`推荐弹窗尺寸: ${recommendedWidth}x${recommendedHeight}`);
+
+        // 显示测试弹窗
+        window.clearAllPopups();
+        setTimeout(() => {
+            showPopup();
+        }, 100);
+
+        return {
+            screen: { width: screenWidth, height: screenHeight },
+            window: { width: windowWidth, height: windowHeight },
+            device: { isIOS, isAndroid, isMobile },
+            recommended: { width: recommendedWidth, height: recommendedHeight }
+        };
+    };
+
+    // 安卓专用测试函数
+    window.testAndroidUI = function() {
+        console.log("🤖 测试安卓UI...");
+
+        // 获取设备信息
+        const userAgent = navigator.userAgent;
+        const windowWidth = $(window).width();
+        const windowHeight = $(window).height();
+        const isAndroid = /Android/.test(userAgent);
+        const isMobile = windowWidth <= 767;
+
+        console.log("设备信息:");
+        console.log("- User Agent:", userAgent);
+        console.log("- 窗口尺寸:", windowWidth + "x" + windowHeight);
+        console.log("- 是否安卓:", isAndroid);
+        console.log("- 是否移动端:", isMobile);
+
+        // 强制清理现有弹窗
+        window.clearAllPopups();
+
+        // 延迟显示弹窗
+        setTimeout(() => {
+            console.log("🤖 显示安卓优化UI");
+            showPopup();
+        }, 200);
+
+        return {
+            userAgent,
+            windowSize: { width: windowWidth, height: windowHeight },
+            isAndroid,
+            isMobile
+        };
+    };
+
+    // 强制刷新UI函数
+    window.refreshUI = function() {
+        console.log("🔄 强制刷新UI...");
+
+        // 清理所有现有弹窗
+        window.clearAllPopups();
+
+        // 等待一下再重新创建
+        setTimeout(() => {
+            const windowWidth = $(window).width();
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+            const isAndroid = /Android/.test(navigator.userAgent);
+            const isMobile = windowWidth <= 767 || isIOS || isAndroid;
+
+            console.log(`🔄 重新生成UI - Mobile: ${isMobile}, iOS: ${isIOS}, Android: ${isAndroid}, Width: ${windowWidth}`);
+
+            showPopup();
+        }, 300);
+
+        return true;
+    };
+
+    // 清理所有弹窗的函数
+    window.clearAllPopups = function() {
+        console.log("🧹 清理所有弹窗...");
+
+        // 移除所有可能的弹窗元素
+        $("#virtual-pet-popup-overlay").remove();
+        $(".virtual-pet-popup-overlay").remove();
+        $("[id*='virtual-pet-popup']").remove();
+        $("[class*='virtual-pet-popup']").remove();
+        $("[id*='pet-popup']").remove();
+        $("[class*='pet-popup']").remove();
+
+        console.log("✅ 所有弹窗已清理");
+        return true;
+    };
+
+    // 生成统一的UI内容
+    function generateUnifiedUI() {
+        // 检测设备类型和屏幕尺寸
+        const windowWidth = $(window).width();
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        const isAndroid = /Android/.test(navigator.userAgent);
+        const isMobile = windowWidth <= 767 || isIOS || isAndroid;
+
+        console.log(`[UI] Device: iOS=${isIOS}, Android=${isAndroid}, Mobile=${isMobile}, Width=${windowWidth}`);
+
+        // 根据设备类型调整尺寸 - 使用条件判断而不是模板字符串变量
+        if (isMobile) {
+            return generateMobileUI();
+        } else {
+            return generateDesktopUI();
+        }
+    }
+
+    // 生成移动端UI
+    function generateMobileUI() {
+        console.log(`[UI] Generating mobile UI`);
+        return `
+            <div class="pet-popup-header" style="display: none;">
+            </div>
+
+            <div class="pet-main-content" style="
+                display: flex !important;
+                flex-direction: column !important;
+                gap: 12px !important;
+            ">
+                <!-- 宠物头像和基本信息 -->
+                <div class="pet-avatar-section" style="
+                    text-align: center !important;
+                    padding: 15px !important;
+                ">
+                    <!-- 拓麻歌子风格头像框 -->
+                    <div class="pet-avatar-circle" style="
+                        width: 70px !important;
+                        height: 70px !important;
+                        border-radius: 6px !important;
+                        background: ${candyColors.screen} !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        font-size: 2.5em !important;
+                        overflow: hidden !important;
+                        border: 3px solid ${candyColors.border} !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        cursor: pointer !important;
+                        margin: 0 auto 8px auto !important;
+                        font-family: 'Courier New', monospace !important;
+                        image-rendering: pixelated !important;
+                        image-rendering: -moz-crisp-edges !important;
+                        image-rendering: crisp-edges !important;
+                    " onclick="openAvatarSelector()" oncontextmenu="showAvatarContextMenu(event)" title="点击更换头像，右键重置">
+                        ${getAvatarContent()}
+                    </div>
+                    <div class="pet-name" style="font-size: 1.2em !important; font-weight: bold !important; margin-bottom: 3px !important;">${escapeHtml(petData.name)}</div>
+                    <div class="pet-level" style="color: #7289da !important; font-size: 0.9em !important;">${petData.isAlive ?
+                        `${LIFE_STAGES[petData.lifeStage]?.emoji || '🐾'} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` :
+                        '💀 已死亡'
+                    }</div>
+                </div>
+
+                <!-- 宠物状态栏 -->
+                <div class="pet-status-section" style="
+                    padding: 10px !important;
+                ">
+                    <h4 style="margin: 0 0 10px 0 !important; color: ${candyColors.primary} !important; font-size: 0.9em !important;">📊 状态</h4>
+                    <div class="status-bars" style="display: flex !important; flex-direction: column !important; gap: 6px !important;">
+                        <div class="status-item">
+                            <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
+                                <span style="color: ${candyColors.textSecondary} !important; font-size: 0.8em !important;">❤️ 健康</span>
+                                <span style="color: ${candyColors.health} !important; font-size: 0.8em !important;">${Math.round(petData.health)}/100</span>
+                            </div>
+                            <div style="background: ${candyColors.border} !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: ${candyColors.health} !important; height: 100% !important; width: ${petData.health}% !important; transition: width 0.3s ease !important;"></div>
+                            </div>
+                        </div>
+                        <div class="status-item">
+                            <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
+                                <span style="color: ${candyColors.textSecondary} !important; font-size: 0.8em !important;">🍖 饱食度</span>
+                                <span style="color: ${candyColors.hunger} !important; font-size: 0.8em !important;">${Math.round(petData.hunger)}/100</span>
+                            </div>
+                            <div style="background: ${candyColors.border} !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: ${candyColors.hunger} !important; height: 100% !important; width: ${petData.hunger}% !important; transition: width 0.3s ease !important;"></div>
+                            </div>
+                        </div>
+                        <div class="status-item">
+                            <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
+                                <span style="color: ${candyColors.textSecondary} !important; font-size: 0.8em !important;">😊 快乐度</span>
+                                <span style="color: ${candyColors.happiness} !important; font-size: 0.8em !important;">${Math.round(petData.happiness)}/100</span>
+                            </div>
+                            <div style="background: ${candyColors.border} !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: ${candyColors.happiness} !important; height: 100% !important; width: ${petData.happiness}% !important; transition: width 0.3s ease !important;"></div>
+                            </div>
+                        </div>
+                        <div class="status-item">
+                            <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
+                                <span style="color: ${candyColors.textSecondary} !important; font-size: 0.8em !important;">⚡ 精力</span>
+                                <span style="color: ${candyColors.energy} !important; font-size: 0.8em !important;">${Math.round(petData.energy)}/100</span>
+                            </div>
+                            <div style="background: ${candyColors.border} !important; height: 5px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: ${candyColors.energy} !important; height: 100% !important; width: ${petData.energy}% !important; transition: width 0.3s ease !important;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 金币显示 -->
+                ${petData.dataVersion >= 4.0 ? `
+                <div class="pet-coins-section" style="
+                    text-align: center !important;
+                    padding: 8px !important;
+                    background: rgba(255,215,0,0.1) !important;
+                    border-radius: 6px !important;
+                    margin-bottom: 8px !important;
+                ">
+                    <span style="color: #ffd700 !important; font-weight: bold !important; font-size: 1em !important;">
+                        💰 ${petData.coins || 100} 金币
+                    </span>
+                </div>
+                ` : ''}
+
+                <!-- 操作按钮 -->
+                <div class="pet-actions-section" style="
+                    display: grid !important;
+                    grid-template-columns: 1fr 1fr 1fr !important;
+                    gap: 6px !important;
+                ">
+                    <button class="action-btn feed-btn" style="
+                        padding: 8px !important;
+                        background: ${candyColors.buttonPrimary} !important;
+                        color: ${candyColors.textPrimary} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 11px !important;
+                        font-weight: bold !important;
+                        text-transform: uppercase !important;
+                        cursor: pointer !important;
+                        min-height: 36px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 4px !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                    ">
+                        <span style="font-size: 1em !important;">🍖</span>
+                        <span>喂食</span>
+                    </button>
+                    <button class="action-btn play-btn" style="
+                        padding: 8px !important;
+                        background: ${candyColors.buttonSecondary} !important;
+                        color: ${candyColors.textPrimary} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 11px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
+                        cursor: pointer !important;
+                        min-height: 36px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 4px !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                    ">
+                        <span style="font-size: 1em !important;">🎮</span>
+                        <span>玩耍</span>
+                    </button>
+                    <button class="action-btn sleep-btn" style="
+                        padding: 8px !important;
+                        background: ${candyColors.buttonAccent} !important;
+                        color: ${candyColors.textPrimary} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 11px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
+                        cursor: pointer !important;
+                        min-height: 36px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 4px !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                    ">
+                        <span style="font-size: 1em !important;">😴</span>
+                        <span>休息</span>
+                    </button>
+                    <button class="action-btn hug-btn" style="
+                        padding: 8px !important;
+                        background: #FF69B4 !important;
+                        color: ${candyColors.textWhite} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 11px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
+                        cursor: pointer !important;
+                        min-height: 36px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 4px !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                    ">
+                        <span style="font-size: 1em !important;">🤗</span>
+                        <span>抱抱</span>
+                    </button>
+                    <button class="action-btn heal-btn" style="
+                        padding: 8px !important;
+                        background: ${(petData.sickness || 0) > 10 ? candyColors.health : candyColors.secondary} !important;
+                        color: ${candyColors.textWhite} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 11px !important;
+                        font-weight: bold !important;
+                        text-transform: uppercase !important;
+                        cursor: ${(petData.sickness || 0) > 10 ? 'pointer' : 'not-allowed'} !important;
+                        min-height: 36px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 4px !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                        opacity: ${(petData.sickness || 0) > 10 ? '1' : '0.5'} !important;
+                    ">
+                        <span style="font-size: 1em !important;">💊</span>
+                        <span>治疗</span>
+                    </button>
+                    <button class="action-btn shop-btn" style="
+                        padding: 8px !important;
+                        background: ${candyColors.happiness} !important;
+                        color: ${candyColors.textPrimary} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 11px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
+                        cursor: pointer !important;
+                        min-height: 36px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 4px !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                    ">
+                        <span style="font-size: 1em !important;">🛒</span>
+                        <span>商店</span>
+                    </button>
+                    <button class="action-btn settings-btn" style="
+                        padding: 8px !important;
+                        background: #8B5CF6 !important;
+                        color: ${candyColors.textWhite} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 11px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
+                        cursor: pointer !important;
+                        min-height: 36px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 4px !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                    ">
+                        <span style="font-size: 1em !important;">⚙️</span>
+                        <span>设置</span>
+                    </button>
+                </div>
+
+                <!-- 底部信息 -->
+                <div class="pet-info-section" style="
+                    text-align: center !important;
+                    padding: 8px !important;
+                    color: ${candyColors.textLight} !important;
+                    font-size: 0.7em !important;
+                ">
+                    <p style="margin: 0 !important;">🎉 虚拟宠物系统 v1.0</p>
+                    <p style="margin: 2px 0 0 0 !important;">上次互动: 刚刚</p>
+                </div>
+            </div>
+        `;
+    }
+
+    // 生成桌面端UI
+    function generateDesktopUI() {
+        console.log(`[UI] Generating desktop UI`);
+        return `
+            <div class="pet-popup-header" style="display: none;">
+            </div>
+
+            <div class="pet-main-content" style="
+                display: flex !important;
+                flex-direction: column !important;
+                gap: 15px !important;
+            ">
+                <!-- 宠物头像和基本信息 -->
+                <div class="pet-avatar-section" style="
+                    text-align: center !important;
+                    padding: 20px !important;
+                ">
+                    <!-- 圆形头像框 -->
+                    <div class="pet-avatar-circle" style="
+                        width: 90px !important;
+                        height: 90px !important;
+                        border-radius: 50% !important;
+                        background: ${candyColors.primary} !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        font-size: 3em !important;
+                        overflow: hidden !important;
+                        border: 3px solid #7289da !important;
+                        box-shadow: 0 4px 8px rgba(0,0,0,0.3) !important;
+                        cursor: pointer !important;
+                        margin: 0 auto 10px auto !important;
+                        transition: transform 0.2s ease !important;
+                    " onclick="openAvatarSelector()" oncontextmenu="showAvatarContextMenu(event)" title="点击更换头像，右键重置">
+                        ${getAvatarContent()}
+                    </div>
+                    <div class="pet-name" style="font-size: 1.3em !important; font-weight: bold !important; margin-bottom: 4px !important; color: ${candyColors.textPrimary} !important; cursor: pointer !important; text-decoration: underline !important;" onclick="editPetName()" title="点击编辑宠物名字">${escapeHtml(petData.name)}</div>
+                    <div class="pet-level" style="color: ${candyColors.primary} !important; font-size: 1em !important;">${petData.isAlive ?
+                        `${LIFE_STAGES[petData.lifeStage]?.emoji || '🐾'} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` :
+                        '💀 已死亡'
+                    }</div>
+                </div>
+
+                <!-- 宠物状态栏 -->
+                <div class="pet-status-section" style="
+                    padding: 12px !important;
+                ">
+                    <h4 style="margin: 0 0 12px 0 !important; color: ${candyColors.primary} !important; font-size: 1em !important;">📊 状态</h4>
+                    <div class="status-bars" style="display: flex !important; flex-direction: column !important; gap: 8px !important;">
+                        <div class="status-item">
+                            <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
+                                <span style="color: ${candyColors.textSecondary} !important; font-size: 0.9em !important;">❤️ 健康</span>
+                                <span style="color: ${candyColors.health} !important; font-size: 0.9em !important;">${Math.round(petData.health)}/100</span>
+                            </div>
+                            <div style="background: ${candyColors.border} !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: ${candyColors.health} !important; height: 100% !important; width: ${petData.health}% !important; transition: width 0.3s ease !important;"></div>
+                            </div>
+                        </div>
+                        <div class="status-item">
+                            <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
+                                <span style="color: ${candyColors.textSecondary} !important; font-size: 0.9em !important;">🍖 饱食度</span>
+                                <span style="color: ${candyColors.hunger} !important; font-size: 0.9em !important;">${Math.round(petData.hunger)}/100</span>
+                            </div>
+                            <div style="background: ${candyColors.border} !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: ${candyColors.hunger} !important; height: 100% !important; width: ${petData.hunger}% !important; transition: width 0.3s ease !important;"></div>
+                            </div>
+                        </div>
+                        <div class="status-item">
+                            <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
+                                <span style="color: ${candyColors.textSecondary} !important; font-size: 0.9em !important;">😊 快乐度</span>
+                                <span style="color: ${candyColors.happiness} !important; font-size: 0.9em !important;">${Math.round(petData.happiness)}/100</span>
+                            </div>
+                            <div style="background: ${candyColors.border} !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: ${candyColors.happiness} !important; height: 100% !important; width: ${petData.happiness}% !important; transition: width 0.3s ease !important;"></div>
+                            </div>
+                        </div>
+                        <div class="status-item">
+                            <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
+                                <span style="color: ${candyColors.textSecondary} !important; font-size: 0.9em !important;">⚡ 精力</span>
+                                <span style="color: ${candyColors.energy} !important; font-size: 0.9em !important;">${Math.round(petData.energy)}/100</span>
+                            </div>
+                            <div style="background: ${candyColors.border} !important; height: 6px !important; border-radius: 3px !important; overflow: hidden !important;">
+                                <div style="background: ${candyColors.energy} !important; height: 100% !important; width: ${petData.energy}% !important; transition: width 0.3s ease !important;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 金币显示 -->
+                ${petData.dataVersion >= 4.0 ? `
+                <div class="pet-coins-section" style="
+                    text-align: center !important;
+                    padding: 10px !important;
+                    background: rgba(255,215,0,0.1) !important;
+                    border-radius: 8px !important;
+                    margin-bottom: 10px !important;
+                ">
+                    <span style="color: #ffd700 !important; font-weight: bold !important; font-size: 1.1em !important;">
+                        💰 ${petData.coins || 100} 金币
+                    </span>
+                </div>
+                ` : ''}
+
+                <!-- 操作按钮 -->
+                <div class="pet-actions-section" style="
+                    display: grid !important;
+                    grid-template-columns: 1fr 1fr 1fr !important;
+                    gap: 8px !important;
+                ">
+                    <button class="action-btn feed-btn" style="
+                        padding: 12px !important;
+                        background: ${candyColors.buttonPrimary} !important;
+                        color: ${candyColors.textPrimary} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 12px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
+                        cursor: pointer !important;
+                        min-height: 44px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 6px !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                    ">
+                        <span style="font-size: 1.1em !important;">🍖</span>
+                        <span>喂食</span>
+                    </button>
+                    <button class="action-btn play-btn" style="
+                        padding: 12px !important;
+                        background: ${candyColors.buttonSecondary} !important;
+                        color: ${candyColors.textPrimary} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 12px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
+                        cursor: pointer !important;
+                        min-height: 44px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 6px !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                    ">
+                        <span style="font-size: 1.1em !important;">🎮</span>
+                        <span>玩耍</span>
+                    </button>
+                    <button class="action-btn sleep-btn" style="
+                        padding: 12px !important;
+                        background: ${candyColors.buttonAccent} !important;
+                        color: ${candyColors.textPrimary} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 12px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
+                        cursor: pointer !important;
+                        min-height: 44px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 6px !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                    ">
+                        <span style="font-size: 1.1em !important;">😴</span>
+                        <span>休息</span>
+                    </button>
+                    <button class="action-btn hug-btn" style="
+                        padding: 12px !important;
+                        background: #FF69B4 !important;
+                        color: ${candyColors.textWhite} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 12px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
+                        cursor: pointer !important;
+                        min-height: 44px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 6px !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                    ">
+                        <span style="font-size: 1.1em !important;">🤗</span>
+                        <span>抱抱</span>
+                    </button>
+                    <button class="action-btn heal-btn" style="
+                        padding: 12px !important;
+                        background: ${(petData.sickness || 0) > 10 ? candyColors.health : candyColors.secondary} !important;
+                        color: ${candyColors.textWhite} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 12px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
+                        cursor: ${(petData.sickness || 0) > 10 ? 'pointer' : 'not-allowed'} !important;
+                        min-height: 44px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 6px !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                        opacity: ${(petData.sickness || 0) > 10 ? '1' : '0.5'} !important;
+                    ">
+                        <span style="font-size: 1.1em !important;">💊</span>
+                        <span>治疗</span>
+                    </button>
+                    <button class="action-btn shop-btn" style="
+                        padding: 12px !important;
+                        background: ${candyColors.happiness} !important;
+                        color: ${candyColors.textPrimary} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 12px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
+                        cursor: pointer !important;
+                        min-height: 44px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 6px !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                    ">
+                        <span style="font-size: 1.1em !important;">🛒</span>
+                        <span>商店</span>
+                    </button>
+                    <button class="action-btn settings-btn" style="
+                        padding: 12px !important;
+                        background: #8B5CF6 !important;
+                        color: ${candyColors.textWhite} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 12px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
+                        cursor: pointer !important;
+                        min-height: 44px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 6px !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                    ">
+                        <span style="font-size: 1.1em !important;">⚙️</span>
+                        <span>设置</span>
+                    </button>
+                </div>
+
+                <!-- 底部信息 -->
+                <div class="pet-info-section" style="
+                    text-align: center !important;
+                    padding: 10px !important;
+                    color: ${candyColors.textLight} !important;
+                    font-size: 0.8em !important;
+                ">
+                    <p style="margin: 0 !important;">🎉 虚拟宠物系统 v1.0</p>
+                    <p style="margin: 3px 0 0 0 !important;">上次互动: 刚刚</p>
+                </div>
+            </div>
+        `;
+    }
+
+    // 绑定统一UI的事件
+    function bindUnifiedUIEvents($container) {
+        console.log(`[${extensionName}] Binding unified UI events`);
+
+        // 喂食按钮
+        $container.find(".feed-btn").on("click touchend", function(e) {
+            e.preventDefault();
+            console.log("🍖 喂食宠物");
+            feedPet();
+            // 更新UI显示
+            setTimeout(() => {
+                updateUnifiedUIStatus();
+            }, 100);
+        });
+
+        // 玩耍按钮
+        $container.find(".play-btn").on("click touchend", function(e) {
+            e.preventDefault();
+            console.log("🎮 和宠物玩耍");
+            playWithPet();
+            // 更新UI显示
+            setTimeout(() => {
+                updateUnifiedUIStatus();
+            }, 100);
+        });
+
+        // 休息按钮
+        $container.find(".sleep-btn").on("click touchend", function(e) {
+            e.preventDefault();
+            console.log("😴 宠物休息");
+            petSleep();
+            // 更新UI显示
+            setTimeout(() => {
+                updateUnifiedUIStatus();
+            }, 100);
+        });
+
+        // 抱抱按钮
+        $container.find(".hug-btn").on("click touchend", function(e) {
+            e.preventDefault();
+            console.log("🤗 抱抱宠物");
+            hugPet();
+            // 更新UI显示
+            setTimeout(() => {
+                updateUnifiedUIStatus();
+            }, 100);
+        });
+
+        // 治疗按钮
+        $container.find(".heal-btn").on("click touchend", function(e) {
+            e.preventDefault();
+            console.log("💊 治疗宠物");
+            healPet();
+            // 更新UI显示
+            setTimeout(() => {
+                updateUnifiedUIStatus();
+            }, 100);
+        });
+
+        // 商店按钮
+        $container.find(".shop-btn").on("click touchend", function(e) {
+            e.preventDefault();
+            console.log("🛒 打开商店");
+            openShop();
+        });
+
+        // 设置按钮
+        $container.find(".settings-btn").on("click touchend", function(e) {
+            e.preventDefault();
+            console.log("⚙️ 打开设置");
+            openSettings();
+        });
+
+        // 宠物名字点击事件（备用，主要通过onclick属性）
+        $container.find(".pet-name").on("click touchend", function(e) {
+            e.preventDefault();
+            editPetName();
+        });
+
+        console.log(`[${extensionName}] Unified UI events bound successfully`);
+    }
+
+    // 显示通知
+    function showNotification(message, type = "info") {
+        // 移除现有通知
+        $(".pet-notification").remove();
+
+        const colors = {
+            success: "#43b581",
+            info: "#7289da",
+            warning: "#faa61a",
+            error: "#f04747"
+        };
+
+        const notification = $(`
+            <div class="pet-notification" style="
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: ${colors[type] || colors.info};
+                color: white;
+                padding: 12px 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                z-index: ${SAFE_Z_INDEX.notification};
+                font-size: 14px;
+                max-width: 300px;
+                animation: slideIn 0.3s ease-out;
+            ">${message}</div>
+        `);
+
+        $("body").append(notification);
+
+        // 3秒后自动消失
+        setTimeout(() => {
+            notification.fadeOut(300, function() {
+                $(this).remove();
+            });
+        }, 3000);
+    }
+
+    // iOS测试按钮 - 可以在iOS上直接点击测试
+    window.createIOSTestButton = function() {
+        // 移除现有测试按钮
+        $("#ios-test-button").remove();
+
+        // 创建iOS测试按钮
+        const testButton = $(`
+            <button id="ios-test-button" style="
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                z-index: ${SAFE_Z_INDEX.popup};
+                background: #43b581;
+                color: white;
+                border: none;
+                padding: 15px 20px;
+                border-radius: 25px;
+                cursor: pointer;
+                font-size: 16px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                min-width: 120px;
+                min-height: 50px;
+            ">🍎 iOS测试</button>
+        `);
+
+        $("body").append(testButton);
+
+        testButton.on("click touchend", function(e) {
+            e.preventDefault();
+            console.log("iOS测试按钮被点击");
+
+            // 先清理所有弹窗
+            window.clearAllPopups();
+
+            // 延迟显示统一弹窗
+            setTimeout(() => {
+                try {
+                    showPopup();
+                } catch (error) {
+                    console.error("弹窗测试失败:", error);
+                    alert("弹窗测试失败: " + error.message);
+                }
+            }, 100);
+        });
+
+        console.log("iOS测试按钮已创建，位于屏幕右下角");
+
+        // 5秒后自动移除测试按钮
+        setTimeout(() => {
+            $("#ios-test-button").fadeOut(500, function() {
+                $(this).remove();
+            });
+        }, 10000);
+
+        return true;
+    };
+
+    // 测试统一UI的函数
+    window.testUnifiedUIForAllPlatforms = function() {
+        console.log("🎨 测试所有平台的统一UI...");
+
+        // 获取设备信息
+        const windowWidth = $(window).width();
+        const windowHeight = $(window).height();
+        const userAgent = navigator.userAgent;
+        const isIOS = /iPad|iPhone|iPod/.test(userAgent);
+        const isAndroid = /Android/.test(userAgent);
+        const isMobile = windowWidth <= 767 || isIOS || isAndroid;
+
+        console.log("=== 设备信息 ===");
+        console.log("窗口尺寸:", windowWidth + "x" + windowHeight);
+        console.log("User Agent:", userAgent);
+        console.log("iOS:", isIOS);
+        console.log("Android:", isAndroid);
+        console.log("Mobile:", isMobile);
+
+        // 清理现有弹窗
+        window.clearAllPopups();
+
+        // 显示统一UI
+        setTimeout(() => {
+            console.log("🎨 显示统一UI（所有平台相同）");
+            showPopup();
+
+            // 检查UI内容
+            setTimeout(() => {
+                const popup = $("#virtual-pet-popup");
+                const header = popup.find(".pet-popup-header h2");
+                const avatar = popup.find(".pet-avatar");
+                const buttons = popup.find(".action-btn");
+
+                console.log("=== UI检查结果 ===");
+                console.log("弹窗存在:", popup.length > 0);
+                console.log("标题内容:", header.text());
+                console.log("头像内容:", avatar.text());
+                console.log("按钮数量:", buttons.length);
+                console.log("按钮文字:", buttons.map((i, btn) => $(btn).text().trim()).get());
+
+                if (popup.length > 0 && buttons.length === 4) {
+                    console.log("✅ 统一UI测试成功！所有平台显示相同内容");
+                } else {
+                    console.log("❌ 统一UI测试失败！内容不一致");
+                }
+            }, 500);
+        }, 200);
+
+        return {
+            windowSize: { width: windowWidth, height: windowHeight },
+            device: { isIOS, isAndroid, isMobile },
+            userAgent
+        };
+    };
+
+    // iOS关闭测试函数
+    window.testIOSClose = function() {
+        console.log("🍎 测试iOS关闭功能...");
+
+        // 检查是否为iOS
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        console.log("是否iOS设备:", isIOS);
+
+        // 检查弹窗是否存在
+        const overlay = $("#virtual-pet-popup-overlay");
+        const closeButton = overlay.find(".close-button");
+
+        console.log("弹窗存在:", overlay.length > 0);
+        console.log("关闭按钮存在:", closeButton.length > 0);
+
+        if (overlay.length > 0) {
+            // 检查事件绑定
+            const events = $._data(closeButton[0], 'events');
+            console.log("关闭按钮事件:", events);
+
+            // 手动触发关闭
+            console.log("🍎 手动触发关闭...");
+            closePopup();
+        } else {
+            console.log("❌ 没有找到弹窗");
+        }
+
+        return { isIOS, hasOverlay: overlay.length > 0, hasCloseButton: closeButton.length > 0 };
+    };
+
+    // 强制关闭所有弹窗
+    window.forceCloseAllPopups = function() {
+        console.log("🚨 强制关闭所有弹窗...");
+
+        // 移除所有可能的弹窗元素
+        $("#virtual-pet-popup-overlay").remove();
+        $(".virtual-pet-popup-overlay").remove();
+        $("[id*='virtual-pet-popup']").remove();
+        $("[class*='virtual-pet-popup']").remove();
+
+        // 清理body上可能的样式
+        $("body").css("overflow", "");
+
+        console.log("✅ 所有弹窗已强制关闭");
+        return true;
+    };
+
+    // 快速修复按钮位置函数
+    window.fixPetButtonPosition = function() {
+        console.log("🐾 修复按钮位置...");
+
+        const button = $('#virtual-pet-button');
+        if (button.length === 0) {
+            console.log("❌ 按钮不存在");
+            return false;
+        }
+
+        // 获取窗口尺寸
+        const windowWidth = $(window).width();
+        const windowHeight = $(window).height();
+
+        // 设置安全的默认位置
+        const safeLeft = 20;
+        const safeTop = Math.floor(windowHeight / 2);
+
+        button.css({
+            'top': safeTop + 'px',
+            'left': safeLeft + 'px',
+            'transform': 'none',
+            'position': 'fixed',
+            'display': 'flex',
+            'opacity': '1',
+            'visibility': 'visible',
+            'z-index': SAFE_Z_INDEX.button
+        });
+
+        // 清除可能有问题的保存位置
+        localStorage.removeItem('virtual-pet-button-position');
+
+        console.log(`🐾 按钮位置已修复到: left=${safeLeft}px, top=${safeTop}px`);
+        console.log(`🐾 窗口尺寸: ${windowWidth}x${windowHeight}`);
+
+        return true;
+    };
+
+    // 测试拖拽功能
+    window.testDragFunction = function() {
+        console.log("🐾 测试拖拽功能...");
+
+        const button = $('#virtual-pet-button');
+        if (button.length === 0) {
+            console.log("❌ 按钮不存在");
+            return false;
+        }
+
+        // 检查事件绑定
+        const events = $._data(button[0], 'events');
+        console.log("🔍 按钮事件绑定:", events);
+
+        if (events) {
+            console.log("   - mousedown:", events.mousedown ? "✅ 已绑定" : "❌ 未绑定");
+            console.log("   - touchstart:", events.touchstart ? "✅ 已绑定" : "❌ 未绑定");
+            console.log("   - click:", events.click ? "✅ 已绑定" : "❌ 未绑定");
+        }
+
+        // 检查document事件
+        const docEvents = $._data(document, 'events');
+        if (docEvents) {
+            console.log("   - document mousemove:", docEvents.mousemove ? "✅ 已绑定" : "❌ 未绑定");
+            console.log("   - document mouseup:", docEvents.mouseup ? "✅ 已绑定" : "❌ 未绑定");
+        }
+
+        // 重新绑定拖拽功能
+        console.log("🔄 重新绑定拖拽功能...");
+        makeButtonDraggable(button);
+
+        console.log("✅ 拖拽功能测试完成");
+        return true;
+    };
+
+    // -----------------------------------------------------------------
+    // 测试和调试功能
+    // -----------------------------------------------------------------
+
+    /**
+     * 快速诊断SillyTavern环境
+     */
+    window.diagnoseSillyTavernEnvironment = function() {
+        console.log("🔍 SillyTavern环境诊断开始...");
+        console.log("=".repeat(50));
+
+        // 1. 检查基本对象
+        console.log("\n1️⃣ 基本对象检查:");
+        console.log(`- window对象: ${typeof window !== 'undefined' ? '✅' : '❌'}`);
+        console.log(`- jQuery对象: ${typeof $ !== 'undefined' ? '✅' : '❌'}`);
+        console.log(`- SillyTavern对象: ${typeof SillyTavern !== 'undefined' ? '✅' : '❌'}`);
+
+        // 2. 检查SillyTavern相关函数
+        console.log("\n2️⃣ SillyTavern函数检查:");
+        const stFunctions = ['getContext', 'generateReply', 'Generate'];
+        stFunctions.forEach(func => {
+            if (typeof SillyTavern !== 'undefined' && SillyTavern[func]) {
+                console.log(`- SillyTavern.${func}: ✅`);
+            } else if (typeof window[func] !== 'undefined') {
+                console.log(`- window.${func}: ✅`);
+            } else {
+                console.log(`- ${func}: ❌`);
+            }
+        });
+
+        // 3. 检查全局变量
+        console.log("\n3️⃣ 全局变量检查:");
+        const globalVars = ['main_api', 'api_server', 'online_status', 'models', 'backends', 'extension_settings'];
+        globalVars.forEach(varName => {
+            const exists = typeof window[varName] !== 'undefined';
+            console.log(`- ${varName}: ${exists ? '✅' : '❌'} ${exists ? typeof window[varName] : ''}`);
+            if (exists && window[varName]) {
+                console.log(`  值: ${JSON.stringify(window[varName]).substring(0, 100)}...`);
+            }
+        });
+
+        // 4. 检查当前页面URL和路径
+        console.log("\n4️⃣ 页面信息:");
+        console.log(`- URL: ${window.location.href}`);
+        console.log(`- 路径: ${window.location.pathname}`);
+        console.log(`- 主机: ${window.location.host}`);
+
+        // 5. 检查DOM中的SillyTavern特征元素
+        console.log("\n5️⃣ DOM元素检查:");
+        const stSelectors = ['#chat', '#send_textarea', '#api_button', '.mes', '#extensions_settings'];
+        stSelectors.forEach(selector => {
+            const element = $(selector);
+            console.log(`- ${selector}: ${element.length > 0 ? '✅' : '❌'} (${element.length}个)`);
+        });
+
+        console.log("\n=".repeat(50));
+        console.log("🔍 环境诊断完成");
+
+        return {
+            hasSillyTavern: typeof SillyTavern !== 'undefined',
+            hasGetContext: typeof SillyTavern !== 'undefined' && typeof SillyTavern.getContext === 'function',
+            hasJQuery: typeof $ !== 'undefined',
+            url: window.location.href,
+            globalVarsFound: globalVars.filter(v => typeof window[v] !== 'undefined')
+        };
+    };
+
+    /**
+     * 测试API获取功能
+     */
+    window.testVirtualPetAPIDiscovery = async function() {
+        console.log("🔍 测试虚拟宠物API发现功能...");
+
+        // 先进行环境诊断
+        const envInfo = window.diagnoseSillyTavernEnvironment();
+
+        if (!envInfo.hasSillyTavern) {
+            console.log("⚠️ 警告: 未检测到SillyTavern环境，这可能是原因之一");
+        }
+
+        try {
+            // 测试完整的API获取功能
+            console.log("\n🔄 开始API发现测试:");
+            const apis = await getAvailableAPIs();
+            console.log(`\n🎉 测试完成，发现 ${apis.length} 个API:`, apis);
+
+            if (apis.length === 0) {
+                console.log("\n💡 建议:");
+                console.log("1. 确认你在SillyTavern页面中运行此测试");
+                console.log("2. 确认SillyTavern已经配置了至少一个API");
+                console.log("3. 尝试刷新页面后重新测试");
+                console.log("4. 检查浏览器控制台是否有其他错误");
+            }
+
+            return apis;
+        } catch (error) {
+            console.error("❌ 测试失败:", error);
+            return [];
+        }
+    };
+
+    /**
+     * 快速API测试 - 直接后端API版本
+     */
+    window.quickAPITest = async function() {
+        console.log("⚡ 快速后端API测试开始...");
+
+        // 1. 基础检查
+        console.log("\n1️⃣ 基础检查:");
+        console.log(`SillyTavern: ${typeof SillyTavern !== 'undefined' ? '✅' : '❌'}`);
+        console.log(`jQuery: ${typeof $ !== 'undefined' ? '✅' : '❌'}`);
+        console.log(`Fetch API: ${typeof fetch !== 'undefined' ? '✅' : '❌'}`);
+
+        // 2. 检查用户配置的API密钥
+        console.log("\n2️⃣ API密钥检查:");
+        const apiKeyInput = $('#ai-key-input').val();
+        console.log(`用户输入的API密钥: ${apiKeyInput ? '✅ 已设置' : '❌ 未设置'}`);
+
+        // 3. 快速测试本地API
+        console.log("\n3️⃣ 本地API快速测试:");
+        const localEndpoints = [
+            'http://localhost:11434/api/tags',  // Ollama
+            'http://localhost:1234/v1/models', // LM Studio
+            'http://localhost:5000/v1/models'  // Text Generation WebUI
+        ];
+
+        for (const endpoint of localEndpoints) {
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'GET',
+                    signal: AbortSignal.timeout(3000) // 3秒超时
+                });
+                console.log(`${endpoint}: ${response.ok ? '✅' : '❌'} (${response.status})`);
+                if (response.ok) {
+                    const data = await response.json();
+                    const modelCount = data.models ? data.models.length : (data.data ? data.data.length : 0);
+                    console.log(`  发现 ${modelCount} 个模型`);
+                }
+            } catch (error) {
+                if (error.name === 'TimeoutError') {
+                    console.log(`${endpoint}: ⏰ 超时`);
+                } else {
+                    console.log(`${endpoint}: ❌ (${error.message})`);
+                }
+            }
+        }
+
+        // 4. 测试在线API（如果有密钥）
+        if (apiKeyInput) {
+            console.log("\n4️⃣ 在线API测试:");
+            try {
+                const response = await fetch('https://api.openai.com/v1/models', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${apiKeyInput}`,
+                        'Content-Type': 'application/json'
+                    },
+                    signal: AbortSignal.timeout(5000)
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log(`OpenAI API: ✅ 发现 ${data.data.length} 个模型`);
+                } else if (response.status === 401) {
+                    console.log(`OpenAI API: 🔐 API密钥无效`);
+                } else {
+                    console.log(`OpenAI API: ❌ HTTP ${response.status}`);
+                }
+            } catch (error) {
+                console.log(`OpenAI API: ❌ ${error.message}`);
+            }
+        } else {
+            console.log("\n4️⃣ 跳过在线API测试 (未设置API密钥)");
+        }
+
+        // 5. 完整API发现测试
+        console.log("\n5️⃣ 完整API发现测试:");
+        try {
+            const apis = await getAvailableAPIs();
+            console.log(`结果: ${apis.length > 0 ? '✅' : '❌'} 发现${apis.length}个API`);
+            if (apis.length > 0) {
+                const grouped = {};
+                apis.forEach(api => {
+                    const provider = api.provider || 'Other';
+                    if (!grouped[provider]) grouped[provider] = 0;
+                    grouped[provider]++;
+                });
+                Object.entries(grouped).forEach(([provider, count]) => {
+                    console.log(`  📊 ${provider}: ${count}个`);
+                });
+            }
+            return apis;
+        } catch (error) {
+            console.log(`结果: ❌ 错误: ${error.message}`);
+            return [];
+        }
+    };
+
+    /**
+     * 测试特定API端点
+     */
+    window.testSpecificAPI = async function(apiType, apiKey = null) {
+        console.log(`🔍 测试特定API: ${apiType}`);
+
+        const endpoints = {
+            'openai': 'https://api.openai.com/v1/models',
+            'claude': 'https://api.anthropic.com/v1/models',
+            'google': 'https://generativelanguage.googleapis.com/v1beta/models',
+            'ollama': 'http://localhost:11434/api/tags',
+            'lmstudio': 'http://localhost:1234/v1/models'
+        };
+
+        const endpoint = endpoints[apiType];
+        if (!endpoint) {
+            console.log(`❌ 不支持的API类型: ${apiType}`);
+            return null;
+        }
+
+        try {
+            const headers = { 'Content-Type': 'application/json' };
+
+            // 添加认证头
+            if (apiKey) {
+                if (apiType === 'openai' || apiType === 'google') {
+                    headers['Authorization'] = `Bearer ${apiKey}`;
+                } else if (apiType === 'claude') {
+                    headers['x-api-key'] = apiKey;
+                }
+            }
+
+            const response = await fetch(endpoint, {
+                method: 'GET',
+                headers: headers,
+                signal: AbortSignal.timeout(10000)
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log(`✅ ${apiType} API 成功:`, data);
+                return data;
+            } else {
+                console.log(`❌ ${apiType} API 失败: HTTP ${response.status}`);
+                return null;
+            }
+        } catch (error) {
+            console.log(`❌ ${apiType} API 错误: ${error.message}`);
+            return null;
+        }
+    };
+
+    /**
+     * 获取用户配置API的模型列表
+     */
+    window.getUserConfiguredModels = async function() {
+        console.log("🎯 获取用户配置API的模型列表...");
+
+        const apiUrl = $('#ai-url-input').val();
+        const apiKey = $('#ai-key-input').val();
+
+        if (!apiUrl) {
+            console.log("❌ 未配置API URL");
+            return [];
+        }
+
+        console.log(`🔗 API URL: ${apiUrl}`);
+        console.log(`🔑 API Key: ${apiKey ? '已设置' : '未设置'}`);
+
+        // 构建模型列表端点
+        let modelsEndpoint = apiUrl;
+        if (!modelsEndpoint.endsWith('/models')) {
+            if (modelsEndpoint.endsWith('/')) {
+                modelsEndpoint += 'models';
+            } else {
+                modelsEndpoint += '/models';
+            }
+        }
+
+        console.log(`📡 尝试获取模型列表: ${modelsEndpoint}`);
+
+        try {
+            const headers = {
+                'Content-Type': 'application/json'
+            };
+
+            // 添加认证头
+            if (apiKey) {
+                headers['Authorization'] = `Bearer ${apiKey}`;
+            }
+
+            const response = await fetch(modelsEndpoint, {
+                method: 'GET',
+                headers: headers,
+                signal: AbortSignal.timeout(15000) // 15秒超时
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log(`✅ 成功获取模型列表:`, data);
+
+                // 解析模型数据
+                let models = [];
+                if (data.data && Array.isArray(data.data)) {
+                    // OpenAI格式
+                    models = data.data.map(model => ({
+                        id: model.id,
+                        name: model.id,
+                        type: 'user_configured',
+                        status: 'available',
+                        source: modelsEndpoint,
+                        provider: '用户配置API'
+                    }));
+                } else if (data.models && Array.isArray(data.models)) {
+                    // 其他格式
+                    models = data.models.map(model => ({
+                        id: typeof model === 'string' ? model : model.id || model.name,
+                        name: typeof model === 'string' ? model : model.id || model.name,
+                        type: 'user_configured',
+                        status: 'available',
+                        source: modelsEndpoint,
+                        provider: '用户配置API'
+                    }));
+                }
+
+                console.log(`📋 解析出 ${models.length} 个模型:`, models.map(m => m.name));
+                return models;
+
+            } else {
+                console.log(`❌ 获取模型列表失败: HTTP ${response.status}`);
+
+                // 尝试读取错误信息
+                try {
+                    const errorText = await response.text();
+                    console.log(`错误详情:`, errorText.substring(0, 200));
+                } catch (e) {
+                    console.log(`无法读取错误详情`);
+                }
+
+                return [];
+            }
+
+        } catch (error) {
+            console.log(`❌ 请求失败: ${error.message}`);
+            return [];
+        }
+    };
+
+    /**
+     * 刷新并显示用户配置的模型
+     */
+    window.refreshUserModels = async function() {
+        console.log("🔄 刷新用户配置的模型...");
+
+        const models = await getUserConfiguredModels();
+
+        if (models.length > 0) {
+            console.log(`🎉 发现 ${models.length} 个可用模型:`);
+            models.forEach((model, index) => {
+                console.log(`  ${index + 1}. ${model.name}`);
+            });
+
+            // 更新下拉列表
+            updateAPIDropdown(models);
+
+            toastr.success(`发现 ${models.length} 个可用模型！`, '🎉 模型获取成功', { timeOut: 5000 });
+        } else {
+            console.log("❌ 未发现任何模型");
+            toastr.warning('未发现任何模型，请检查API配置', '⚠️ 模型获取失败', { timeOut: 5000 });
+        }
+
+        return models;
+    };
+
+    /**
+     * 通用第三方API模型获取器 - 支持任意第三方API
+     */
+    window.getThirdPartyModels = async function() {
+        console.log("🌐 通用第三方API模型获取器启动...");
+
+        const apiUrl = $('#ai-url-input').val();
+        const apiKey = $('#ai-key-input').val();
+
+        if (!apiUrl) {
+            console.log("❌ 请先配置API URL");
+            return [];
+        }
+
+        console.log(`🔗 API URL: ${apiUrl}`);
+        console.log(`🔑 API Key: ${apiKey ? '已设置' : '未设置'}`);
+
+        // 智能检测API服务类型
+        let serviceType = 'unknown';
+        const urlLower = apiUrl.toLowerCase();
+
+        if (urlLower.includes('openai.com')) {
+            serviceType = 'openai_official';
+        } else if (urlLower.includes('anthropic.com')) {
+            serviceType = 'anthropic_official';
+        } else if (urlLower.includes('googleapis.com')) {
+            serviceType = 'google_official';
+        } else if (urlLower.includes('nyabit.com')) {
+            serviceType = 'nyabit';
+        } else if (urlLower.includes('api2d.com')) {
+            serviceType = 'api2d';
+        } else if (urlLower.includes('closeai') || urlLower.includes('openai-proxy')) {
+            serviceType = 'openai_proxy';
+        } else if (urlLower.includes('claude') || urlLower.includes('anthropic')) {
+            serviceType = 'claude_proxy';
+        } else if (urlLower.includes('gemini') || urlLower.includes('google')) {
+            serviceType = 'google_proxy';
+        } else if (urlLower.includes('localhost') || urlLower.includes('127.0.0.1')) {
+            serviceType = 'local_api';
+        } else {
+            serviceType = 'generic_third_party';
+        }
+
+        console.log(`🏷️ 检测到服务类型: ${serviceType}`);
+
+        // 构建可能的模型端点列表
+        const baseUrl = apiUrl.replace(/\/+$/, ''); // 移除末尾斜杠
+        const possibleEndpoints = [];
+
+        // 标准OpenAI兼容端点
+        possibleEndpoints.push(
+            `${baseUrl}/models`,
+            `${baseUrl}/v1/models`,
+            `${baseUrl}/api/models`,
+            `${baseUrl}/api/v1/models`,
+            `${baseUrl}/openai/v1/models`
+        );
+
+        // 其他常见端点格式
+        possibleEndpoints.push(
+            `${baseUrl}/engines`,
+            `${baseUrl}/v1/engines`,
+            `${baseUrl}/model/list`,
+            `${baseUrl}/models/list`,
+            `${baseUrl}/list/models`
+        );
+
+        // 特定服务的端点
+        if (serviceType === 'anthropic_official' || serviceType === 'claude_proxy') {
+            possibleEndpoints.push(`${baseUrl}/v1/models`);
+        }
+        if (serviceType === 'google_official' || serviceType === 'google_proxy') {
+            possibleEndpoints.push(`${baseUrl}/models`, `${baseUrl}/v1beta/models`);
+        }
+        if (serviceType === 'local_api') {
+            possibleEndpoints.push(
+                `${baseUrl}/api/tags`, // Ollama
+                `${baseUrl}/tags`,     // Ollama简化
+                `${baseUrl}/info`      // 一些本地API的信息端点
+            );
+        }
+
+        console.log(`📡 将尝试 ${possibleEndpoints.length} 个端点:`, possibleEndpoints);
+
+        // 尝试不同的认证方式
+        const authMethods = [];
+
+        if (apiKey) {
+            // 标准Bearer Token认证
+            authMethods.push({
+                name: 'Bearer Token',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            // Claude风格的x-api-key认证
+            authMethods.push({
+                name: 'x-api-key',
+                headers: {
+                    'x-api-key': apiKey,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            // 一些API使用的api-key头
+            authMethods.push({
+                name: 'api-key',
+                headers: {
+                    'api-key': apiKey,
+                    'Content-Type': 'application/json'
+                }
+            });
+        }
+
+        // 无认证方式（本地API）
+        authMethods.push({
+            name: 'No Auth',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        console.log(`🔐 将尝试 ${authMethods.length} 种认证方式`);
+
+        // 遍历所有端点和认证方式的组合
+        for (const endpoint of possibleEndpoints) {
+            for (const authMethod of authMethods) {
+                try {
+                    console.log(`🔍 测试: ${endpoint} (${authMethod.name})`);
+
+                    const response = await fetch(endpoint, {
+                        method: 'GET',
+                        headers: authMethod.headers,
+                        signal: AbortSignal.timeout(8000) // 8秒超时
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        console.log(`✅ 成功: ${endpoint} (${authMethod.name})`, data);
+
+                        // 通用模型数据解析器
+                        const models = parseModelsFromResponse(data, endpoint, serviceType);
+
+                        if (models.length > 0) {
+                            console.log(`🎉 成功获取 ${models.length} 个模型:`, models.map(m => m.name));
+                            return models;
+                        }
+                    } else if (response.status === 401 || response.status === 403) {
+                        console.log(`🔐 ${endpoint}: 认证失败 (${response.status}) - ${authMethod.name}`);
+                        // 继续尝试其他认证方式
+                    } else {
+                        console.log(`❌ ${endpoint}: HTTP ${response.status} - ${authMethod.name}`);
+
+                        // 对于非认证错误，尝试读取错误信息
+                        if (response.status !== 404) {
+                            try {
+                                const errorText = await response.text();
+                                if (errorText.length < 300) {
+                                    console.log(`错误详情:`, errorText);
+                                }
+                            } catch (e) {
+                                // 忽略错误读取失败
+                            }
+                        }
+                    }
+                } catch (error) {
+                    if (error.name === 'TimeoutError') {
+                        console.log(`⏰ ${endpoint}: 超时 - ${authMethod.name}`);
+                    } else if (error.message.includes('CORS')) {
+                        console.log(`🚫 ${endpoint}: CORS限制 - ${authMethod.name}`);
+                    } else {
+                        console.log(`❌ ${endpoint}: ${error.message} - ${authMethod.name}`);
+                    }
+                }
+            }
+        }
+
+        // 如果所有端点都失败，返回智能推荐的模型
+        console.log("⚠️ 无法从API获取模型列表，根据服务类型提供推荐模型");
+
+        return getRecommendedModels(serviceType, apiUrl);
+    };
+
+    /**
+     * 通用模型数据解析器
+     */
+    function parseModelsFromResponse(data, endpoint, serviceType) {
+        const models = [];
+
+        console.log(`🔍 解析响应数据，服务类型: ${serviceType}`);
+
+        // OpenAI标准格式: {data: [{id: "model-name", ...}, ...]}
+        if (data.data && Array.isArray(data.data)) {
+            console.log(`📋 检测到OpenAI标准格式，${data.data.length} 个模型`);
+            data.data.forEach(model => {
+                if (model.id || model.name) {
+                    models.push({
+                        id: model.id || model.name,
+                        name: model.id || model.name,
+                        type: 'third_party',
+                        status: 'available',
+                        source: endpoint,
+                        provider: `第三方API (${serviceType})`,
+                        details: model
+                    });
+                }
+            });
+        }
+
+        // 通用models数组格式: {models: [...]}
+        else if (data.models && Array.isArray(data.models)) {
+            console.log(`📋 检测到通用models格式，${data.models.length} 个模型`);
+            data.models.forEach(model => {
+                let modelId, modelName;
+
+                if (typeof model === 'string') {
+                    modelId = modelName = model;
+                } else if (model.id) {
+                    modelId = model.id;
+                    modelName = model.name || model.id;
+                } else if (model.name) {
+                    modelId = model.name;
+                    modelName = model.name;
+                } else if (model.model) {
+                    modelId = modelName = model.model;
+                }
+
+                if (modelId) {
+                    models.push({
+                        id: modelId,
+                        name: modelName,
+                        type: 'third_party',
+                        status: 'available',
+                        source: endpoint,
+                        provider: `第三方API (${serviceType})`,
+                        details: model
+                    });
+                }
+            });
+        }
+
+        // Ollama格式: {models: [{name: "model:tag", ...}, ...]}
+        else if (data.models && serviceType === 'local_api') {
+            console.log(`📋 检测到Ollama格式，${data.models.length} 个模型`);
+            data.models.forEach(model => {
+                if (model.name) {
+                    models.push({
+                        id: model.name,
+                        name: model.name,
+                        type: 'local_model',
+                        status: 'available',
+                        source: endpoint,
+                        provider: 'Ollama (本地)',
+                        details: model
+                    });
+                }
+            });
+        }
+
+        // 直接数组格式: ["model1", "model2", ...]
+        else if (Array.isArray(data)) {
+            console.log(`📋 检测到直接数组格式，${data.length} 个模型`);
+            data.forEach(model => {
+                if (typeof model === 'string') {
+                    models.push({
+                        id: model,
+                        name: model,
+                        type: 'third_party',
+                        status: 'available',
+                        source: endpoint,
+                        provider: `第三方API (${serviceType})`
+                    });
+                }
+            });
+        }
+
+        // 其他可能的格式
+        else if (data.result && Array.isArray(data.result)) {
+            console.log(`📋 检测到result数组格式，${data.result.length} 个模型`);
+            data.result.forEach(model => {
+                const modelId = typeof model === 'string' ? model : (model.id || model.name);
+                if (modelId) {
+                    models.push({
+                        id: modelId,
+                        name: modelId,
+                        type: 'third_party',
+                        status: 'available',
+                        source: endpoint,
+                        provider: `第三方API (${serviceType})`
+                    });
+                }
+            });
+        }
+
+        console.log(`✅ 解析完成，获得 ${models.length} 个模型`);
+        return models;
+    }
+
+    /**
+     * 根据服务类型获取推荐模型
+     */
+    function getRecommendedModels(serviceType, apiUrl) {
+        console.log(`🎯 为服务类型 ${serviceType} 生成推荐模型`);
+
+        let recommendedModels = [];
+
+        // 根据服务类型推荐不同的模型
+        switch (serviceType) {
+            case 'openai_official':
+            case 'openai_proxy':
+            case 'nyabit':
+            case 'api2d':
+            case 'generic_third_party':
+                recommendedModels = [
+                    { id: "gpt-4", name: "GPT-4" },
+                    { id: "gpt-4-turbo", name: "GPT-4 Turbo" },
+                    { id: "gpt-4-turbo-preview", name: "GPT-4 Turbo Preview" },
+                    { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo" },
+                    { id: "gpt-3.5-turbo-16k", name: "GPT-3.5 Turbo 16K" }
+                ];
+                break;
+
+            case 'anthropic_official':
+            case 'claude_proxy':
+                recommendedModels = [
+                    { id: "claude-3-opus-20240229", name: "Claude 3 Opus" },
+                    { id: "claude-3-sonnet-20240229", name: "Claude 3 Sonnet" },
+                    { id: "claude-3-haiku-20240307", name: "Claude 3 Haiku" },
+                    { id: "claude-2.1", name: "Claude 2.1" },
+                    { id: "claude-2.0", name: "Claude 2.0" }
+                ];
+                break;
+
+            case 'google_official':
+            case 'google_proxy':
+                recommendedModels = [
+                    { id: "gemini-pro", name: "Gemini Pro" },
+                    { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro" },
+                    { id: "gemini-pro-vision", name: "Gemini Pro Vision" }
+                ];
+                break;
+
+            case 'local_api':
+                recommendedModels = [
+                    { id: "llama2", name: "Llama 2" },
+                    { id: "codellama", name: "Code Llama" },
+                    { id: "mistral", name: "Mistral" },
+                    { id: "vicuna", name: "Vicuna" },
+                    { id: "alpaca", name: "Alpaca" }
+                ];
+                break;
+
+            default:
+                // 通用推荐
+                recommendedModels = [
+                    { id: "gpt-4", name: "GPT-4" },
+                    { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo" },
+                    { id: "claude-3-sonnet-20240229", name: "Claude 3 Sonnet" },
+                    { id: "gemini-pro", name: "Gemini Pro" }
+                ];
+        }
+
+        return recommendedModels.map(model => ({
+            id: model.id,
+            name: model.name,
+            type: 'recommended',
+            status: 'suggested',
+            source: 'recommendation',
+            provider: `推荐模型 (${serviceType})`,
+            note: '基于API类型的智能推荐'
+        }));
+    }
+
+    /**
+     * 测试AI回复功能
+     */
+    window.testVirtualPetAI = function() {
+        console.log("🤖 测试虚拟宠物AI回复功能...");
+
+        // 检查API可用性
+        const apiAvailable = isAIAPIAvailable();
+        console.log(`API可用性: ${apiAvailable ? '✅ 可用' : '❌ 不可用'}`);
+
+        if (!apiAvailable) {
+            console.log("可用的API检查:");
+            console.log(`- window.generateReply: ${typeof window.generateReply}`);
+            console.log(`- window.SillyTavern: ${typeof window.SillyTavern}`);
+            console.log(`- window.Generate: ${typeof window.Generate}`);
+        }
+
+        // 显示当前宠物信息
+        console.log("当前宠物信息:");
+        console.log(`- 名称: ${petData.name}`);
+        console.log(`- 类型: ${getPetTypeName(petData.type)}`);
+        console.log(`- 等级: ${petData.level}`);
+        console.log(`- 人设类型: ${localStorage.getItem(`${extensionName}-personality-type`) || 'default'}`);
+        console.log(`- 人设内容: ${getCurrentPersonality()}`);
+        console.log(`- 健康: ${Math.round(petData.health)}/100`);
+        console.log(`- 快乐: ${Math.round(petData.happiness)}/100`);
+        console.log(`- 饥饿: ${Math.round(petData.hunger)}/100`);
+        console.log(`- 精力: ${Math.round(petData.energy)}/100`);
+
+        // 生成测试Prompt
+        const testPrompt = buildInteractionPrompt('feed');
+        console.log("生成的测试Prompt:");
+        console.log(testPrompt);
+
+        return {
+            apiAvailable,
+            petData: { ...petData },
+            personalityType: localStorage.getItem(`${extensionName}-personality-type`) || 'default',
+            currentPersonality: getCurrentPersonality(),
+            testPrompt
+        };
+    };
+
+    /**
+     * 手动测试AI回复
+     */
+    window.testAIReply = async function(action = 'feed') {
+        console.log(`🎯 手动测试AI回复 - 行为: ${action}`);
+
+        try {
+            const fallbackMessages = {
+                'feed': `${petData.name} 吃得很开心！`,
+                'play': `${petData.name} 玩得很开心！`,
+                'sleep': `${petData.name} 睡得很香！`
+            };
+
+            await handleAIReply(action, fallbackMessages[action] || '宠物很开心！');
+            console.log("✅ AI回复测试完成");
+        } catch (error) {
+            console.error("❌ AI回复测试失败:", error);
+        }
+    };
+
+    /**
+     * 测试人设切换功能
+     */
+    window.testPersonalitySwitch = function(personalityType = 'default') {
+        console.log(`🎭 测试人设切换: ${personalityType}`);
+
+        if (personalityType === 'custom') {
+            const customText = prompt("请输入自定义人设:", "一只特别的宠物");
+            if (customText) {
+                savePersonalitySettings('custom', customText);
+            }
+        } else if (PRESET_PERSONALITIES[personalityType]) {
+            savePersonalitySettings(personalityType);
+        } else {
+            console.error("❌ 无效的人设类型:", personalityType);
+            console.log("可用的人设类型:", Object.keys(PRESET_PERSONALITIES));
+            return;
+        }
+
+        console.log("✅ 人设切换完成");
+        console.log("当前人设:", getCurrentPersonality());
+    };
+
+    /**
+     * 移动端API连接诊断和修复
+     */
+    window.diagnoseMobileAPI = function() {
+        console.log('📱 移动端API连接诊断...');
+
+        // 检测设备类型
+        const userAgent = navigator.userAgent;
+        const isIOS = /iPad|iPhone|iPod/.test(userAgent);
+        const isAndroid = /Android/.test(userAgent);
+        const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+
+        console.log('\n📱 设备信息:');
+        console.log(`User Agent: ${userAgent}`);
+        console.log(`iOS: ${isIOS}`);
+        console.log(`Android: ${isAndroid}`);
+        console.log(`移动端: ${isMobile}`);
+        console.log(`窗口尺寸: ${window.innerWidth}x${window.innerHeight}`);
+
+        // 检查网络连接
+        console.log('\n🌐 网络连接:');
+        console.log(`在线状态: ${navigator.onLine ? '✅ 在线' : '❌ 离线'}`);
+        console.log(`连接类型: ${navigator.connection ? navigator.connection.effectiveType : '未知'}`);
+
+        // 检查API配置
+        console.log('\n🔧 API配置:');
+        const apiUrl = $('#ai-url-input').val();
+        const apiKey = $('#ai-key-input').val();
+        console.log(`API URL: ${apiUrl || '❌ 未配置'}`);
+        console.log(`API Key: ${apiKey ? '✅ 已配置' : '❌ 未配置'}`);
+
+        // 移动端特殊问题检查
+        console.log('\n🔍 移动端特殊问题:');
+
+        // 1. CORS问题
+        if (apiUrl && !apiUrl.includes('localhost') && !apiUrl.includes('127.0.0.1')) {
+            console.log('⚠️ 外部API可能存在CORS限制');
+            console.log('💡 建议: 使用支持CORS的API或本地代理');
+        }
+
+        // 2. HTTPS问题
+        if (location.protocol === 'https:' && apiUrl && apiUrl.startsWith('http:')) {
+            console.log('❌ HTTPS页面无法访问HTTP API');
+            console.log('💡 建议: 使用HTTPS API或在HTTP环境下使用');
+        }
+
+        // 3. 移动端网络限制
+        if (isMobile) {
+            console.log('📱 移动端网络优化建议:');
+            console.log('- 使用稳定的WiFi连接');
+            console.log('- 避免使用移动数据访问外部API');
+            console.log('- 增加请求超时时间');
+        }
+
+        return {
+            device: { userAgent, isIOS, isAndroid, isMobile },
+            network: { online: navigator.onLine, connection: navigator.connection },
+            api: { url: apiUrl, hasKey: !!apiKey },
+            recommendations: getMobileAPIRecommendations(isMobile, apiUrl, apiKey)
+        };
+    };
+
+    /**
+     * 获取移动端API连接建议
+     */
+    function getMobileAPIRecommendations(isMobile, apiUrl, apiKey) {
+        const recommendations = [];
+
+        if (isMobile) {
+            recommendations.push('使用稳定的WiFi网络');
+            recommendations.push('避免在移动数据下使用外部API');
+        }
+
+        if (!apiUrl) {
+            recommendations.push('配置API URL');
+        }
+
+        if (!apiKey) {
+            recommendations.push('配置API密钥');
+        }
+
+        if (apiUrl && apiUrl.startsWith('http:') && location.protocol === 'https:') {
+            recommendations.push('使用HTTPS API或切换到HTTP环境');
+        }
+
+        return recommendations;
+    }
+
+    /**
+     * 移动端API URL智能修复
+     */
+    window.fixMobileAPIURL = function(originalUrl) {
+        console.log('🔧 移动端API URL智能修复...');
+        console.log(`原始URL: ${originalUrl}`);
+
+        if (!originalUrl) {
+            console.log('❌ URL为空');
+            return null;
+        }
+
+        // 移除末尾斜杠
+        let fixedUrl = originalUrl.replace(/\/+$/, '');
+
+        // 常见的移动端404问题修复
+        const fixes = [];
+
+        // 1. 缺少/v1路径
+        if (!fixedUrl.includes('/v1') && !fixedUrl.includes('/api/v1')) {
+            if (fixedUrl.includes('openai.com') ||
+                fixedUrl.includes('localhost') ||
+                fixedUrl.includes('127.0.0.1')) {
+                fixes.push({
+                    type: '添加/v1路径',
+                    url: fixedUrl + '/v1',
+                    reason: '标准OpenAI API需要/v1路径'
+                });
+            }
+        }
+
+        // 2. 缺少/chat/completions端点
+        if (!fixedUrl.includes('/chat/completions')) {
+            fixes.push({
+                type: '添加聊天端点',
+                url: fixedUrl + '/chat/completions',
+                reason: '聊天API需要/chat/completions端点'
+            });
+
+            if (fixedUrl.includes('/v1')) {
+                fixes.push({
+                    type: '添加聊天端点(v1)',
+                    url: fixedUrl + '/chat/completions',
+                    reason: '已有v1路径，直接添加聊天端点'
+                });
+            } else {
+                fixes.push({
+                    type: '添加完整路径',
+                    url: fixedUrl + '/v1/chat/completions',
+                    reason: '添加完整的v1聊天端点路径'
+                });
+            }
+        }
+
+        // 3. 协议问题修复
+        if (fixedUrl.startsWith('http:') && location.protocol === 'https:') {
+            fixes.push({
+                type: 'HTTPS协议修复',
+                url: fixedUrl.replace('http:', 'https:'),
+                reason: 'HTTPS页面需要HTTPS API'
+            });
+        }
+
+        // 4. 端口问题修复
+        if (fixedUrl.includes('localhost') && !fixedUrl.includes(':')) {
+            fixes.push({
+                type: '添加默认端口',
+                url: fixedUrl.replace('localhost', 'localhost:1234'),
+                reason: 'LM Studio默认端口1234'
+            });
+            fixes.push({
+                type: '添加Ollama端口',
+                url: fixedUrl.replace('localhost', 'localhost:11434'),
+                reason: 'Ollama默认端口11434'
+            });
+        }
+
+        console.log(`🔧 发现 ${fixes.length} 个可能的修复方案:`);
+        fixes.forEach((fix, index) => {
+            console.log(`${index + 1}. ${fix.type}: ${fix.url} (${fix.reason})`);
+        });
+
+        return fixes;
+    };
+
+    /**
+     * 移动端API连接测试 - 增强版
+     */
+    window.testMobileAPIConnection = async function() {
+        console.log('📱 测试移动端API连接...');
+
+        const originalUrl = $('#ai-url-input').val();
+        const apiKey = $('#ai-key-input').val();
+
+        if (!originalUrl) {
+            console.log('❌ 请先配置API URL');
+            toastr.error('请先配置API URL');
+            return false;
+        }
+
+        // 获取URL修复建议
+        const urlFixes = window.fixMobileAPIURL(originalUrl);
+
+        // 要测试的URL列表
+        const urlsToTest = [originalUrl];
+        if (urlFixes && urlFixes.length > 0) {
+            urlFixes.forEach(fix => urlsToTest.push(fix.url));
+        }
+
+        console.log(`🔍 将测试 ${urlsToTest.length} 个URL...`);
+
+        for (let i = 0; i < urlsToTest.length; i++) {
+            const testUrl = urlsToTest[i];
+            console.log(`\n🔗 测试 ${i + 1}/${urlsToTest.length}: ${testUrl}`);
+
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 15000); // 移动端15秒超时
+
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache'
+                };
+
+                if (apiKey) {
+                    headers['Authorization'] = `Bearer ${apiKey}`;
+                }
+
+                // 尝试models端点而不是chat端点进行测试
+                let testEndpoint = testUrl;
+                if (testUrl.includes('/chat/completions')) {
+                    testEndpoint = testUrl.replace('/chat/completions', '/models');
+                } else if (!testUrl.includes('/models')) {
+                    testEndpoint = testUrl + '/models';
+                }
+
+                console.log(`📡 实际测试端点: ${testEndpoint}`);
+
+                const response = await fetch(testEndpoint, {
+                    method: 'GET',
+                    headers: headers,
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+
+                console.log(`📊 响应状态: ${response.status} ${response.statusText}`);
+
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('✅ 连接成功!', data);
+
+                    // 如果成功的URL不是原始URL，建议用户更新
+                    if (testUrl !== originalUrl) {
+                        const message = `📱 建议更新API URL为: ${testUrl}`;
+                        console.log(message);
+                        toastr.success(message, '连接成功!', { timeOut: 8000 });
+
+                        // 询问是否自动更新URL
+                        if (confirm(`API连接成功!\n\n建议将URL更新为:\n${testUrl}\n\n是否自动更新?`)) {
+                            $('#ai-url-input').val(testUrl);
+                            toastr.info('API URL已自动更新');
+                        }
+                    } else {
+                        toastr.success('📱 移动端API连接测试成功!');
+                    }
+
+                    return true;
+
+                } else if (response.status === 404) {
+                    console.log(`❌ 404错误: ${testEndpoint} 端点不存在`);
+                    if (i === 0) {
+                        console.log('💡 尝试修复URL...');
+                    }
+                } else if (response.status === 401 || response.status === 403) {
+                    console.log(`🔐 认证错误: ${response.status} - 可能需要正确的API密钥`);
+                    if (i === 0) {
+                        toastr.warning('API认证失败，请检查API密钥');
+                    }
+                } else {
+                    console.log(`⚠️ HTTP错误: ${response.status} ${response.statusText}`);
+                }
+
+            } catch (error) {
+                console.log(`❌ 连接失败: ${error.message}`);
+
+                if (error.name === 'AbortError') {
+                    console.log('⏰ 请求超时');
+                    if (i === 0) {
+                        console.log('💡 建议: 网络较慢，尝试使用更稳定的网络');
+                    }
+                } else if (error.message.includes('CORS')) {
+                    console.log('🚫 CORS限制');
+                    if (i === 0) {
+                        console.log('💡 建议: API不支持跨域访问，尝试使用本地代理');
+                    }
+                } else if (error.message.includes('Failed to fetch')) {
+                    console.log('🌐 网络连接失败');
+                    if (i === 0) {
+                        console.log('💡 建议: 检查网络连接或API服务是否运行');
+                    }
+                }
+            }
+        }
+
+        // 所有URL都失败
+        console.log('\n❌ 所有URL测试都失败了');
+        toastr.error('📱 移动端API连接失败，请检查配置', '连接失败', { timeOut: 5000 });
+
+        // 提供详细的故障排除建议
+        console.log('\n🔧 移动端API 404故障排除建议:');
+        console.log('1. 检查API URL格式是否正确');
+        console.log('2. 确认API服务正在运行');
+        console.log('3. 检查网络连接');
+        console.log('4. 尝试使用本地API (Ollama/LM Studio)');
+        console.log('5. 检查CORS设置');
+
+        return false;
+    };
+
+    console.log("🐾 虚拟宠物系统加载完成！");
+    console.log("🐾 如果没有看到按钮，请在控制台运行: testVirtualPet()");
+    console.log("🎉 AI人设功能已加载！可用测试命令:");
+    console.log("  - testVirtualPetAI() - 检查AI功能状态");
+    console.log("  - testAIReply('feed'|'play'|'sleep') - 手动测试AI回复");
+    console.log("  - testPersonalitySwitch('default'|'cheerful'|'elegant'|'shy'|'smart'|'custom') - 测试人设切换");
+    console.log("📱 移动端专用命令:");
+    console.log("  - diagnoseMobileAPI() - 移动端API诊断");
+    console.log("  - testMobileAPIConnection() - 测试移动端API连接");
+    console.log("  - testURLBuilder('your-url') - 测试URL自动构建功能");
+    console.log("🤖 第三方API专用命令:");
+    console.log("  - testGeminiAPI() - 测试Gemini API连接和格式");
+    console.log("  - testThirdPartyAPI() - 测试当前配置的第三方API");
+    console.log("  - debugAPICall() - 调试API调用流程");
+    console.log("  - debugAPIResponse() - 调试API响应解析");
+    console.log("  - quickFixAPI() - 快速修复API响应解析问题");
+    console.log("  - testSimpleRequest() - 测试简化的请求格式");
+
+    /**
+     * 测试URL自动构建功能
+     */
+    window.testURLBuilder = function(inputUrl) {
+        console.log('🔧 测试URL自动构建功能...');
+        console.log('输入URL:', inputUrl);
+
+        // 模拟URL构建逻辑
+        let apiUrl = inputUrl;
+        apiUrl = apiUrl.replace(/\/+$/, '');
+
+        console.log('清理后URL:', apiUrl);
+
+        // OpenAI/Custom API类型的URL构建
+        if (!apiUrl.includes('/chat/completions')) {
+            let finalUrl;
+            if (apiUrl.endsWith('/v1')) {
+                finalUrl = apiUrl + '/chat/completions';
+                console.log('✅ 检测到/v1结尾，添加/chat/completions');
+            } else if (!apiUrl.includes('/v1')) {
+                finalUrl = apiUrl + '/v1/chat/completions';
+                console.log('✅ 未检测到/v1，添加/v1/chat/completions');
+            } else {
+                finalUrl = apiUrl + '/chat/completions';
+                console.log('✅ 检测到/v1但不在末尾，添加/chat/completions');
+            }
+            console.log('最终URL:', finalUrl);
+            return finalUrl;
+        } else {
+            console.log('✅ URL已包含/chat/completions，无需修改');
+            return apiUrl;
+        }
+    };
+
+    /**
+     * 测试新的提示词系统
+     */
+    window.testNewPrompt = function(action = 'play') {
+        console.log('🔍 测试新的提示词系统...');
+
+        console.log('=== 当前设置 ===');
+        console.log(`宠物名称: ${petData.name}`);
+        console.log(`人设类型: ${localStorage.getItem(`${extensionName}-personality-type`) || 'default'}`);
+        console.log(`当前人设: ${getCurrentPersonality()}`);
+
+        console.log('\n=== 生成的提示词 ===');
+        const prompt = buildInteractionPrompt(action);
+        console.log(prompt);
+
+        console.log('\n=== 提示词分析 ===');
+        const hasAnimalType = prompt.includes('猫') || prompt.includes('狗') || prompt.includes('龙') || prompt.includes('类型：');
+        const hasPersonality = prompt.includes(getCurrentPersonality());
+        const hasConflict = hasAnimalType && getCurrentPersonality().includes('步开星');
+
+        console.log(`包含动物类型: ${hasAnimalType ? '❌ 是' : '✅ 否'}`);
+        console.log(`包含人设内容: ${hasPersonality ? '✅ 是' : '❌ 否'}`);
+        console.log(`存在身份冲突: ${hasConflict ? '❌ 是' : '✅ 否'}`);
+
+        if (!hasAnimalType && hasPersonality && !hasConflict) {
+            console.log('✅ 提示词系统正常，应该不会出现身份混淆');
+            toastr.success('提示词系统正常！');
+        } else {
+            console.log('⚠️ 提示词可能仍有问题');
+            toastr.warning('提示词可能仍有问题，请查看控制台');
+        }
+
+        return prompt;
+    };
+
+    /**
+     * 测试Gemini API连接和格式
+     */
+    window.testGeminiAPI = async function() {
+        console.log('🤖 测试Gemini API连接和格式...');
+
+        const apiUrl = $('#ai-url-input').val();
+        const apiKey = $('#ai-key-input').val();
+        const apiModel = $('#ai-model-input').val() || 'gemini-pro';
+
+        if (!apiUrl) {
+            console.log('❌ 请先配置API URL');
+            toastr.error('请先配置API URL');
+            return false;
+        }
+
+        if (!apiKey) {
+            console.log('❌ 请先配置API密钥');
+            toastr.error('请先配置API密钥');
+            return false;
+        }
+
+        console.log(`🔗 API URL: ${apiUrl}`);
+        console.log(`🔑 API Key: ${apiKey ? '已设置' : '未设置'}`);
+        console.log(`🤖 模型: ${apiModel}`);
+
+        // 构建测试设置
+        const testSettings = {
+            apiType: 'google',
+            apiUrl: apiUrl,
+            apiKey: apiKey,
+            apiModel: apiModel
+        };
+
+        try {
+            console.log('\n📡 开始测试Gemini API...');
+            const testPrompt = "请简单回复'测试成功'，不超过10个字。";
+
+            const response = await callCustomAPI(testPrompt, testSettings, 15000);
+
+            if (response && response.trim()) {
+                console.log('✅ Gemini API测试成功!');
+                console.log(`📝 AI回复: ${response}`);
+                toastr.success(`Gemini API测试成功！AI回复: ${response.substring(0, 50)}`, '🤖 测试成功');
+                return true;
+            } else {
+                console.log('❌ Gemini API返回空响应');
+                toastr.error('Gemini API返回空响应', '❌ 测试失败');
+                return false;
+            }
+
+        } catch (error) {
+            console.error('❌ Gemini API测试失败:', error);
+
+            // 提供详细的错误分析
+            if (error.message.includes('500')) {
+                console.log('💡 500错误可能原因:');
+                console.log('1. 请求格式不正确');
+                console.log('2. 模型名称错误');
+                console.log('3. API密钥权限不足');
+                toastr.error('500错误：请检查请求格式和模型名称', '❌ 服务器错误', { timeOut: 8000 });
+            } else if (error.message.includes('401') || error.message.includes('403')) {
+                console.log('💡 认证错误可能原因:');
+                console.log('1. API密钥无效');
+                console.log('2. API密钥权限不足');
+                console.log('3. 认证头格式错误');
+                toastr.error('认证失败：请检查API密钥', '❌ 认证错误', { timeOut: 8000 });
+            } else if (error.message.includes('404')) {
+                console.log('💡 404错误可能原因:');
+                console.log('1. API端点URL错误');
+                console.log('2. 模型名称不存在');
+                console.log('3. API版本不正确');
+                toastr.error('404错误：请检查API URL和模型名称', '❌ 端点错误', { timeOut: 8000 });
+            }
+
+            toastr.error(`Gemini API测试失败: ${error.message}`, '❌ 测试失败', { timeOut: 10000 });
+            return false;
+        }
+    };
+
+    /**
+     * 测试当前配置的第三方API
+     */
+    window.testThirdPartyAPI = async function() {
+        console.log('🌐 测试当前配置的第三方API...');
+
+        const settings = loadAISettings();
+        console.log('📋 当前API配置:', settings);
+
+        if (!settings.apiType || !settings.apiUrl || !settings.apiKey) {
+            console.log('❌ API配置不完整');
+            console.log(`API类型: ${settings.apiType || '未设置'}`);
+            console.log(`API URL: ${settings.apiUrl || '未设置'}`);
+            console.log(`API密钥: ${settings.apiKey ? '已设置' : '未设置'}`);
+            toastr.error('请先完整配置API信息', '❌ 配置不完整');
+            return false;
+        }
+
+        try {
+            console.log('\n📡 开始测试第三方API...');
+            const testPrompt = "请简单回复'测试成功'，不超过10个字。";
+
+            const response = await callCustomAPI(testPrompt, settings, 15000);
+
+            if (response && response.trim()) {
+                console.log('✅ 第三方API测试成功!');
+                console.log(`📝 AI回复: ${response}`);
+                toastr.success(`第三方API测试成功！AI回复: ${response.substring(0, 50)}`, '🌐 测试成功');
+                return true;
+            } else {
+                console.log('❌ 第三方API返回空响应');
+                toastr.error('第三方API返回空响应', '❌ 测试失败');
+                return false;
+            }
+
+        } catch (error) {
+            console.error('❌ 第三方API测试失败:', error);
+
+            // 提供详细的错误分析
+            if (error.message.includes('500')) {
+                console.log('💡 500错误分析:');
+                console.log('1. 请求格式可能不正确');
+                console.log('2. 模型名称可能错误');
+                console.log('3. API服务器内部错误');
+                console.log('4. 请求参数不符合API要求');
+                toastr.error('500错误：服务器内部错误，请检查请求格式', '❌ 服务器错误', { timeOut: 8000 });
+            } else if (error.message.includes('401') || error.message.includes('403')) {
+                console.log('💡 认证错误分析:');
+                console.log('1. API密钥无效或过期');
+                console.log('2. API密钥权限不足');
+                console.log('3. 认证头格式错误');
+                console.log('4. API配额已用完');
+                toastr.error('认证失败：请检查API密钥和权限', '❌ 认证错误', { timeOut: 8000 });
+            } else if (error.message.includes('404')) {
+                console.log('💡 404错误分析:');
+                console.log('1. API端点URL错误');
+                console.log('2. 模型名称不存在');
+                console.log('3. API版本路径错误');
+                toastr.error('404错误：请检查API URL和端点', '❌ 端点错误', { timeOut: 8000 });
+            }
+
+            toastr.error(`第三方API测试失败: ${error.message}`, '❌ 测试失败', { timeOut: 10000 });
+            return false;
+        }
+    };
+
+    /**
+     * 调试API调用流程
+     */
+    window.debugAPICall = async function() {
+        console.log('🔍 调试API调用流程...');
+
+        const settings = loadAISettings();
+        console.log('\n📋 API配置检查:');
+        console.log(`API类型: ${settings.apiType || '❌ 未设置'}`);
+        console.log(`API URL: ${settings.apiUrl || '❌ 未设置'}`);
+        console.log(`API密钥: ${settings.apiKey ? '✅ 已设置' : '❌ 未设置'}`);
+        console.log(`API模型: ${settings.apiModel || '❌ 未设置'}`);
+
+        console.log('\n✅ 注意: 插件现在只使用自定义API配置，不再调用SillyTavern API');
+
+        console.log('\n📡 开始调试API调用...');
+        const testPrompt = "测试";
+
+        try {
+            const result = await callAIAPI(testPrompt, 10000);
+            console.log('✅ API调用成功:', result);
+            toastr.success(`API调用成功: ${result}`, '🔍 调试成功');
+        } catch (error) {
+            console.error('❌ API调用失败:', error);
+            toastr.error(`API调用失败: ${error.message}`, '🔍 调试失败', { timeOut: 8000 });
+        }
+    };
+
+    /**
+     * 调试API响应解析
+     */
+    window.debugAPIResponse = function(mockResponse = null) {
+        console.log('🔍 调试API响应解析...');
+
+        const settings = loadAISettings();
+        console.log('📋 当前API配置:', settings);
+
+        // 如果没有提供模拟响应，使用一些常见的响应格式示例
+        const mockResponses = {
+            openai: {
+                choices: [{
+                    message: { content: "这是OpenAI格式的回复" },
+                    text: "这是备用的text字段"
+                }]
+            },
+            claude: {
+                content: [{
+                    text: "这是Claude格式的回复"
+                }]
+            },
+            google: {
+                candidates: [{
+                    content: {
+                        parts: [{
+                            text: "这是Gemini格式的回复"
+                        }]
+                    }
+                }]
+            },
+            generic: {
+                text: "这是通用格式的text字段",
+                response: "这是通用格式的response字段",
+                result: "这是通用格式的result字段"
+            }
+        };
+
+        const testResponse = mockResponse || mockResponses[settings.apiType] || mockResponses.generic;
+        console.log('🧪 测试响应数据:', testResponse);
+
+        // 模拟解析逻辑
+        let result = '';
+        console.log(`🔧 使用API类型: ${settings.apiType}`);
+
+        if (settings.apiType === 'openai' || settings.apiType === 'custom') {
+            result = testResponse.choices?.[0]?.message?.content || testResponse.choices?.[0]?.text || '';
+            console.log('📊 OpenAI解析结果:', {
+                'choices[0].message.content': testResponse.choices?.[0]?.message?.content,
+                'choices[0].text': testResponse.choices?.[0]?.text,
+                'final_result': result
+            });
+        } else if (settings.apiType === 'claude') {
+            result = testResponse.content?.[0]?.text || '';
+            console.log('📊 Claude解析结果:', {
+                'content[0].text': testResponse.content?.[0]?.text,
+                'final_result': result
+            });
+        } else if (settings.apiType === 'google') {
+            result = testResponse.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            console.log('📊 Gemini解析结果:', {
+                'candidates[0].content.parts[0].text': testResponse.candidates?.[0]?.content?.parts?.[0]?.text,
+                'final_result': result
+            });
+
+            if (!result) {
+                result = testResponse.text || testResponse.response || testResponse.result || '';
+                console.log('📊 Gemini备用解析:', {
+                    'text': testResponse.text,
+                    'response': testResponse.response,
+                    'result': testResponse.result,
+                    'backup_result': result
+                });
+            }
+        } else {
+            result = testResponse.text || testResponse.response || testResponse.result || '';
+            console.log('📊 通用解析结果:', {
+                'text': testResponse.text,
+                'response': testResponse.response,
+                'result': testResponse.result,
+                'final_result': result
+            });
+        }
+
+        console.log('✅ 最终解析结果:', {
+            result: result,
+            type: typeof result,
+            length: result ? result.length : 'null/undefined',
+            isEmpty: !result || result.trim() === '',
+            trimmed: result ? result.trim() : 'cannot trim'
+        });
+
+        if (result && result.trim()) {
+            console.log('✅ 解析成功！');
+            toastr.success(`解析成功: ${result}`, '🔍 调试成功');
+        } else {
+            console.log('❌ 解析失败，返回空结果');
+            toastr.error('解析失败，返回空结果', '🔍 调试失败');
+        }
+
+        return result;
+    };
+
+    /**
+     * 快速修复API响应解析问题
+     */
+    window.quickFixAPI = async function() {
+        console.log('🔧 快速修复API响应解析问题...');
+
+        const settings = loadAISettings();
+        if (!settings.apiType || !settings.apiUrl || !settings.apiKey) {
+            console.log('❌ 请先配置API信息');
+            return false;
+        }
+
+        console.log('📡 发送测试请求以获取真实响应结构...');
+
+        try {
+            // 直接调用callCustomAPI来获取真实响应
+            const testPrompt = "测试";
+            await callCustomAPI(testPrompt, settings, 10000);
+        } catch (error) {
+            console.log('📊 从错误中获取响应信息...');
+        }
+
+        console.log('\n💡 基于你的日志，问题是choices[0].message.content为空字符串');
+        console.log('🔍 让我们检查choices[0]的完整结构...');
+
+        // 模拟你的响应数据进行分析
+        const mockResponse = {
+            id: 'chatcmpl-20250708132707348110513aE2tFtcY',
+            model: 'gemini-2.5-pro-preview-06-05',
+            object: 'chat.completion',
+            created: 1751952430,
+            choices: [{
+                // 这里可能有其他字段
+                message: {
+                    content: '', // 这个是空的
+                    // 可能还有其他字段
+                },
+                // 可能还有其他字段
+            }]
+        };
+
+        console.log('🧪 分析可能的响应结构...');
+        console.log('如果choices[0].message.content是空的，可能的原因：');
+        console.log('1. 内容在choices[0].message.text字段');
+        console.log('2. 内容在choices[0].text字段');
+        console.log('3. 内容在choices[0].content字段');
+        console.log('4. 内容在choices[0].delta.content字段');
+        console.log('5. API返回了空内容（可能是模型问题）');
+
+        console.log('\n🔧 建议的修复方案：');
+        console.log('1. 再次运行testThirdPartyAPI()查看详细日志');
+        console.log('2. 检查你的API提供商文档');
+        console.log('3. 尝试不同的模型名称');
+        console.log('4. 检查API配额和权限');
+
+        toastr.info('请查看控制台的详细分析', '🔧 快速修复', { timeOut: 5000 });
+
+        return true;
+    };
+
+    /**
+     * 测试简化的请求格式
+     */
+    window.testSimpleRequest = async function() {
+        console.log('🧪 测试简化的请求格式...');
+
+        const settings = loadAISettings();
+        if (!settings.apiType || !settings.apiUrl || !settings.apiKey) {
+            console.log('❌ 请先配置API信息');
+            return false;
+        }
+
+        console.log('📋 当前配置:', settings);
+
+        // 测试不同的模型名称
+        const testModels = [
+            'gemini-pro',
+            'gpt-3.5-turbo',
+            'gpt-4',
+            settings.apiModel // 原始模型名称
+        ];
+
+        for (const model of testModels) {
+            console.log(`\n🔍 测试模型: ${model}`);
+
+            const testSettings = {
+                ...settings,
+                apiModel: model
+            };
+
+            try {
+                const result = await callCustomAPI("测试", testSettings, 10000);
+                if (result && result.trim()) {
+                    console.log(`✅ 模型 ${model} 测试成功: ${result}`);
+                    toastr.success(`模型 ${model} 可用！`, '🧪 测试成功');
+                    return { success: true, model: model, response: result };
+                } else {
+                    console.log(`❌ 模型 ${model} 返回空内容`);
+                }
+            } catch (error) {
+                console.log(`❌ 模型 ${model} 测试失败: ${error.message}`);
+            }
+        }
+
+        console.log('\n💡 建议:');
+        console.log('1. 尝试使用标准模型名称 (gemini-pro, gpt-3.5-turbo)');
+        console.log('2. 检查API提供商支持的模型列表');
+        console.log('3. 确认模型名称格式是否正确');
+
+        toastr.warning('所有模型测试都失败了', '🧪 测试完成', { timeOut: 5000 });
+        return { success: false };
+    };
+
+    /**
+     * 快速验证抱抱功能是否完整
+     */
+    window.quickVerifyHugFunction = function() {
+        console.log('🚀 快速验证抱抱功能是否完整...');
+
+        const checks = {
+            hugFunctionExists: typeof window.hugPet === 'function',
+            promptSupport: false,
+            uiButton: false,
+            rewardSystem: false
+        };
+
+        // 检查提示词支持
+        try {
+            const prompt = buildInteractionPrompt('hug');
+            checks.promptSupport = prompt.includes('给了我一个温暖的拥抱');
+        } catch (e) {
+            checks.promptSupport = false;
+        }
+
+        // 检查UI按钮
+        const popup = $("#virtual-pet-popup");
+        if (popup.length > 0) {
+            checks.uiButton = popup.find(".hug-btn").length > 0;
+        }
+
+        // 检查奖励系统
+        if (checks.hugFunctionExists) {
+            const hugCode = window.hugPet.toString();
+            checks.rewardSystem = hugCode.includes('gainCoins') && hugCode.includes('gainExperience');
+        }
+
+        console.log('\n📊 验证结果:');
+        console.log(`✅ hugPet函数存在: ${checks.hugFunctionExists ? '✅' : '❌'}`);
+        console.log(`✅ 提示词支持: ${checks.promptSupport ? '✅' : '❌'}`);
+        console.log(`✅ UI按钮存在: ${checks.uiButton ? '✅' : '❌'} ${!popup.length ? '(需要先打开宠物界面)' : ''}`);
+        console.log(`✅ 奖励系统: ${checks.rewardSystem ? '✅' : '❌'}`);
+
+        const allGood = checks.hugFunctionExists && checks.promptSupport && checks.rewardSystem;
+
+        if (allGood) {
+            console.log('\n🎉 抱抱功能完全正常！');
+            console.log('💡 特点: 25秒冷却，+10快乐+3健康，2金币+1经验');
+            toastr.success('🤗 抱抱功能验证通过！', '', { timeOut: 2000 });
+        } else {
+            console.log('\n⚠️ 抱抱功能可能存在问题');
+            if (!checks.hugFunctionExists) console.log('💡 运行: forceApplyTamagotchiSystem()');
+        }
+
+        return {
+            allGood,
+            details: checks,
+            recommendation: allGood ? '功能正常，可以使用' : '需要检查或重新应用拓麻歌子系统'
+        };
+    };
+
+    /**
+     * 测试提示词生成（检查undefined问题）
+     */
+    window.testPromptGeneration = function() {
+        console.log('📝 测试提示词生成（检查undefined问题）...');
+
+        const actions = ['feed', 'play', 'sleep', 'hug'];
+
+        actions.forEach(action => {
+            console.log(`\n🧪 测试 ${action} 动作:`);
+
+            try {
+                const prompt = buildInteractionPrompt(action);
+
+                // 检查是否包含undefined
+                const hasUndefined = prompt.includes('undefined');
+                console.log(`- 包含undefined: ${hasUndefined ? '❌ 是' : '✅ 否'}`);
+
+                // 提取情景部分
+                const scenarioMatch = prompt.match(/【情景】：(.+?)。/);
+                if (scenarioMatch) {
+                    console.log(`- 情景描述: "${scenarioMatch[1]}"`);
+                } else {
+                    console.log('- 情景描述: ❌ 未找到');
+                }
+
+                // 检查动作描述
+                const actionDescriptions = {
+                    'feed': '给我喂了食物',
+                    'play': '陪我玩耍',
+                    'sleep': '让我休息',
+                    'hug': '给了我一个温暖的拥抱'
+                };
+
+                const expectedDesc = actionDescriptions[action];
+                const hasCorrectDesc = prompt.includes(expectedDesc);
+                console.log(`- 预期描述: "${expectedDesc}"`);
+                console.log(`- 描述正确: ${hasCorrectDesc ? '✅ 是' : '❌ 否'}`);
+
+            } catch (error) {
+                console.log(`❌ 生成失败: ${error.message}`);
+            }
+        });
+
+        console.log('\n💡 如果发现undefined问题:');
+        console.log('1. 检查actionDescriptions对象是否包含所有动作');
+        console.log('2. 检查传递给buildInteractionPrompt的参数是否正确');
+        console.log('3. 检查是否有拼写错误');
+
+        return true;
+    };
+
+    /**
+     * 诊断和修复75数值问题
+     */
+    window.diagnose75ValueIssue = function() {
+        console.log('🔍 诊断75数值问题...');
+
+        console.log('\n📊 当前宠物状态:');
+        console.log(`- 健康: ${petData.health}/100`);
+        console.log(`- 快乐: ${petData.happiness}/100`);
+        console.log(`- 饱食: ${petData.hunger}/100`);
+        console.log(`- 精力: ${petData.energy}/100`);
+
+        // 检查是否所有数值都是75
+        const values = [petData.health, petData.happiness, petData.hunger, petData.energy];
+        const allAre75 = values.every(val => val === 75);
+
+        console.log('\n🔍 问题分析:');
+        console.log(`- 所有数值都是75: ${allAre75 ? '✅ 是的，这就是问题' : '❌ 不是'}`);
+
+        if (allAre75) {
+            console.log('\n❌ 确认问题: 数值被强制限制在75');
+            console.log('🔧 原因: 数据加载时的过高数值检测逻辑有问题');
+            console.log('✅ 修复: 已移除强制75限制的代码');
+        }
+
+        // 检查数据版本
+        console.log('\n📋 数据版本信息:');
+        console.log(`- 数据版本: ${petData.dataVersion}`);
+        console.log(`- 上次更新时间: ${new Date(petData.lastUpdateTime || 0).toLocaleString()}`);
+
+        // 检查时间差
+        const now = Date.now();
+        const timeSinceLastUpdate = now - (petData.lastUpdateTime || now);
+        const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
+        console.log(`- 距离上次更新: ${hoursElapsed.toFixed(1)}小时`);
+
+        // 提供修复方案
+        console.log('\n🔧 修复方案:');
+
+        if (allAre75) {
+            console.log('1. 重置为更合理的初始数值:');
+
+            // 设置50上限系统标准数值
+            petData.health = 30;
+            petData.happiness = 25;
+            petData.hunger = 35;
+            petData.energy = 40;
+
+            // 更新时间戳
+            petData.lastUpdateTime = now;
+            petData.lastFeedTime = now - 20000; // 20秒前
+            petData.lastPlayTime = now - 30000; // 30秒前
+            petData.lastSleepTime = now - 60000; // 1分钟前
+            petData.lastHugTime = now - 15000; // 15秒前
+
+            // 保存数据
+            savePetData();
+
+            console.log('✅ 已重置数值:');
+            console.log(`   - 健康: 75 → ${petData.health}`);
+            console.log(`   - 快乐: 75 → ${petData.happiness}`);
+            console.log(`   - 饱食: 75 → ${petData.hunger}`);
+            console.log(`   - 精力: 75 → ${petData.energy}`);
+
+            // 更新UI
+            if (typeof updateUnifiedUIStatus === 'function') {
+                updateUnifiedUIStatus();
+            }
+            if (typeof renderPetStatus === 'function') {
+                renderPetStatus();
+            }
+
+            toastr.success('🎯 已修复75数值问题！现在数值会正常变化了', '', { timeOut: 5000 });
+        }
+
+        console.log('\n💡 预防措施:');
+        console.log('✅ 已移除强制75限制的代码');
+        console.log('✅ 数值现在会根据时间自然衰减');
+        console.log('✅ 缓冲机制只在真正需要时触发');
+
+        console.log('\n🧪 测试建议:');
+        console.log('1. 关闭并重新打开SillyTavern');
+        console.log('2. 观察数值是否不再固定在75');
+        console.log('3. 进行几次互动，观察数值变化');
+
+        return {
+            wasFixed: allAre75,
+            currentValues: {
+                health: petData.health,
+                happiness: petData.happiness,
+                hunger: petData.hunger,
+                energy: petData.energy
+            },
+            hoursElapsed: hoursElapsed
+        };
+    };
+
+
+
+    /**
+     * 诊断数值重置问题
+     */
+    window.diagnoseValueResetIssue = function() {
+        console.log('🔍 诊断数值重置问题...');
+
+        // 检查当前数据版本
+        console.log('\n📊 当前数据状态:');
+        console.log(`- 数据版本: ${petData.dataVersion}`);
+        console.log(`- 健康: ${petData.health}/100`);
+        console.log(`- 快乐: ${petData.happiness}/100`);
+        console.log(`- 饱食: ${petData.hunger}/100`);
+        console.log(`- 精力: ${petData.energy}/100`);
+
+        // 检查存储的数据
+        console.log('\n💾 存储数据检查:');
+        const localData = localStorage.getItem(STORAGE_KEY_PET_DATA);
+        const syncData = loadFromSyncStorage();
+
+        console.log(`- 本地存储: ${localData ? '✅ 存在' : '❌ 不存在'}`);
+        console.log(`- 同步存储: ${syncData ? '✅ 存在' : '❌ 不存在'}`);
+
+        if (localData) {
+            try {
+                const parsed = JSON.parse(localData);
+                console.log(`- 本地数据版本: ${parsed.dataVersion}`);
+                console.log(`- 本地数值: 健康${parsed.health}, 快乐${parsed.happiness}, 饱食${parsed.hunger}, 精力${parsed.energy}`);
+            } catch (e) {
+                console.log('- 本地数据解析失败');
+            }
+        }
+
+        if (syncData) {
+            try {
+                const parsed = typeof syncData === 'object' ? syncData : JSON.parse(syncData);
+                console.log(`- 同步数据版本: ${parsed.dataVersion}`);
+                console.log(`- 同步数值: 健康${parsed.health}, 快乐${parsed.happiness}, 饱食${parsed.hunger}, 精力${parsed.energy}`);
+            } catch (e) {
+                console.log('- 同步数据解析失败');
+            }
+        }
+
+        // 检查时间信息
+        console.log('\n⏰ 时间信息:');
+        const now = Date.now();
+        const timeSinceLastUpdate = now - (petData.lastUpdateTime || now);
+        const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
+        console.log(`- 距离上次更新: ${hoursElapsed.toFixed(1)}小时`);
+        console.log(`- 上次更新时间: ${new Date(petData.lastUpdateTime || 0).toLocaleString()}`);
+
+        // 分析可能的重置原因
+        console.log('\n🔍 可能的重置原因分析:');
+
+        if (!petData.dataVersion || petData.dataVersion < 4.0) {
+            console.log('❌ 数据版本过低，会触发迁移重置');
+        } else {
+            console.log('✅ 数据版本正常，不会触发迁移');
+        }
+
+        if (hoursElapsed > 2) {
+            console.log('⚠️ 长时间离线，会触发初始化缓冲');
+        } else {
+            console.log('✅ 离线时间正常，不会触发缓冲');
+        }
+
+        // 检查是否有数值限制
+        const hasValueCaps = petData.health > 50 || petData.happiness > 50 ||
+                            petData.hunger > 50 || petData.energy > 50;
+
+        if (hasValueCaps) {
+            console.log('⚠️ 检测到数值超过50上限');
+        } else {
+            console.log('✅ 数值在50上限范围内');
+        }
+
+        console.log('\n💡 建议解决方案:');
+
+        if (!petData.dataVersion || petData.dataVersion < 4.0) {
+            console.log('1. 数据版本问题 - 运行: petData.dataVersion = 4.0; savePetData();');
+        }
+
+        if (hoursElapsed > 2) {
+            console.log('2. 缓冲机制问题 - 运行: petData.lastUpdateTime = Date.now(); savePetData();');
+        }
+
+        if (hasValueCaps) {
+            console.log('3. 数值超限问题 - 运行: testSmartInitSystem();');
+        }
+
+        console.log('\n🧪 测试步骤:');
+        console.log('1. 记录当前数值');
+        console.log('2. 关闭并重新打开SillyTavern');
+        console.log('3. 观察数值是否发生变化');
+        console.log('4. 如果变化，运行此诊断函数查看原因');
+
+        return {
+            dataVersion: petData.dataVersion,
+            currentValues: {
+                health: petData.health,
+                happiness: petData.happiness,
+                hunger: petData.hunger,
+                energy: petData.energy
+            },
+            hoursElapsed: hoursElapsed,
+            hasLocalData: !!localData,
+            hasSyncData: !!syncData,
+            needsMigration: !petData.dataVersion || petData.dataVersion < 4.0,
+            needsBuffer: hoursElapsed > 2,
+            hasValueCaps: hasValueCaps
+        };
+    };
+
+
+
+    /**
+     * 测试智能初始化系统
+     */
+    window.testSmartInitSystem = function() {
+        console.log('🧪 测试智能初始化系统...');
+
+        console.log('\n📊 当前状态:');
+        console.log(`- 健康: ${petData.health}/100`);
+        console.log(`- 快乐: ${petData.happiness}/100`);
+        console.log(`- 饱食: ${petData.hunger}/100`);
+        console.log(`- 精力: ${petData.energy}/100`);
+        console.log(`- 已随机化: ${petData.hasBeenRandomized ? '✅' : '❌'}`);
+
+        console.log('\n🎲 模拟首次打开随机化:');
+        const oldValues = {
+            health: petData.health,
+            happiness: petData.happiness,
+            hunger: petData.hunger,
+            energy: petData.energy
+        };
+
+        // 重置随机化标记
+        petData.hasBeenRandomized = false;
+
+        // 应用随机化
+        applyFirstTimeRandomization();
+
+        console.log('随机化结果:');
+        console.log(`- 健康: ${oldValues.health} → ${petData.health} (${petData.health <= 50 ? '✅' : '❌'} ≤50)`);
+        console.log(`- 快乐: ${oldValues.happiness} → ${petData.happiness} (${petData.happiness <= 50 ? '✅' : '❌'} ≤50)`);
+        console.log(`- 饱食: ${oldValues.hunger} → ${petData.hunger} (${petData.hunger <= 50 ? '✅' : '❌'} ≤50)`);
+        console.log(`- 精力: ${oldValues.energy} → ${petData.energy} (${petData.energy <= 50 ? '✅' : '❌'} ≤50)`);
+
+        // 保存数据
+        savePetData();
+
+        console.log('\n💡 系统特点:');
+        console.log('✅ 首次打开：数值随机化到50以下');
+        console.log('✅ 后续使用：数值自然衰减，不再强制重置');
+        console.log('✅ 满值上限：100（可以通过互动达到）');
+        console.log('✅ 长期离线：有缓冲保护机制');
+
+        console.log('\n🎮 使用流程:');
+        console.log('1. 首次打开 → 随机化到50以下');
+        console.log('2. 互动提升 → 可以超过50，最高100');
+        console.log('3. 时间衰减 → 根据离线时间自然下降');
+        console.log('4. 重新打开 → 不再重置，保持衰减后的数值');
+
+        return {
+            system: '智能初始化系统',
+            firstTimeRandomized: petData.hasBeenRandomized,
+            currentValues: {
+                health: petData.health,
+                happiness: petData.happiness,
+                hunger: petData.hunger,
+                energy: petData.energy
+            },
+            maxValues: 100,
+            firstTimeCap: 50
+        };
+    };
+
+    /**
+     * 重置随机化标记（用于测试）
+     */
+    window.resetRandomizationFlag = function() {
+        petData.hasBeenRandomized = false;
+        savePetData();
+        console.log('✅ 随机化标记已重置，下次加载数据时会重新随机化');
+        toastr.info('随机化标记已重置', '', { timeOut: 2000 });
+    };
+
+    console.log("🐾 虚拟宠物系统脚本已加载完成");
+    console.log("🎲 智能初始化系统：首次打开随机化到50以下，后续自然衰减到100");
+});

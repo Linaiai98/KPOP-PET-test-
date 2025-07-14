@@ -1825,18 +1825,11 @@ jQuery(async () => {
                 }
 
                 console.log(`[${extensionName}] AI设置已加载:`, settings);
-
-                // 更新UI状态
-                setTimeout(() => updateUIAfterAPICheck(), 100);
-
                 return settings;
             }
         } catch (error) {
             console.error(`[${extensionName}] 加载AI设置失败:`, error);
         }
-
-        // 即使加载失败也要更新UI状态
-        setTimeout(() => updateUIAfterAPICheck(), 100);
         return {};
     }
 
@@ -2623,7 +2616,7 @@ ${currentPersonality}
                 toastr.success("虚拟宠物系统已启用");
                 // 如果当前没有显示宠物按钮，重新创建
                 if ($("#virtual-pet-button").length === 0) {
-                    createPetButton();
+                    initializeFloatingButton();
                 }
             } else {
                 toastr.info("虚拟宠物系统已禁用");
@@ -2780,32 +2773,59 @@ ${currentPersonality}
         }
     }
 
+    // 防止重复调用的标志
+    let isUpdatingUI = false;
+
     /**
      * 根据API配置更新UI显示状态
      */
     function updateUIAfterAPICheck() {
-        const chatButton = $('#goto-chat-btn');
-        const settings = loadAISettings();
-        const hasFullConfig = settings.apiType && settings.apiUrl && settings.apiKey;
+        // 防止重复调用
+        if (isUpdatingUI) {
+            console.log(`[${extensionName}] UI更新正在进行中，跳过重复调用`);
+            return;
+        }
 
-        console.log(`[${extensionName}] API配置检查:`, {
-            apiType: settings.apiType || '未设置',
-            apiUrl: settings.apiUrl || '未设置',
-            apiKey: settings.apiKey ? '已设置' : '未设置',
-            hasFullConfig: hasFullConfig
-        });
+        isUpdatingUI = true;
 
-        // 聊天按钮始终显示，但根据配置状态调整样式和行为
-        chatButton.show();
+        try {
+            const chatButton = $('#goto-chat-btn');
 
-        if (hasFullConfig) {
-            // API配置完整 - 正常样式
-            chatButton.removeClass('api-not-configured').attr('title', '与宠物聊天');
-            console.log(`[${extensionName}] 聊天按钮已启用 - API配置完整`);
-        } else {
-            // API配置不完整 - 添加视觉提示
-            chatButton.addClass('api-not-configured').attr('title', '点击配置AI后即可聊天');
-            console.log(`[${extensionName}] 聊天按钮显示但需要配置 - API配置不完整`);
+            // 直接从localStorage获取设置，避免调用loadAISettings造成循环
+            const settingsStr = localStorage.getItem(`${extensionName}-ai-settings`);
+            let settings = {};
+
+            if (settingsStr) {
+                try {
+                    settings = JSON.parse(settingsStr);
+                } catch (e) {
+                    console.warn(`[${extensionName}] AI设置解析失败`);
+                }
+            }
+
+            const hasFullConfig = settings.apiType && settings.apiUrl && settings.apiKey;
+
+            console.log(`[${extensionName}] API配置检查:`, {
+                apiType: settings.apiType || '未设置',
+                apiUrl: settings.apiUrl || '未设置',
+                apiKey: settings.apiKey ? '已设置' : '未设置',
+                hasFullConfig: hasFullConfig ? '是' : '否'
+            });
+
+            // 聊天按钮始终显示，但根据配置状态调整样式和行为
+            chatButton.show();
+
+            if (hasFullConfig) {
+                // API配置完整 - 正常样式
+                chatButton.removeClass('api-not-configured').attr('title', '与宠物聊天');
+                console.log(`[${extensionName}] 聊天按钮已启用 - API配置完整`);
+            } else {
+                // API配置不完整 - 添加视觉提示
+                chatButton.addClass('api-not-configured').attr('title', '点击配置AI后即可聊天');
+                console.log(`[${extensionName}] 聊天按钮显示但需要配置 - API配置不完整`);
+            }
+        } finally {
+            isUpdatingUI = false;
         }
     }
 
@@ -5625,6 +5645,22 @@ ${personality}
         setTimeout(() => {
             updateUIAfterAPICheck();
         }, 500); // 延迟500ms确保DOM完全加载
+
+        // 12. 调试：检查按钮状态
+        setTimeout(() => {
+            const buttonExists = $(`#${BUTTON_ID}`).length > 0;
+            const isEnabled = localStorage.getItem(STORAGE_KEY_ENABLED) === 'true';
+            console.log(`[${extensionName}] 按钮状态检查:`, {
+                buttonExists: buttonExists,
+                isEnabled: isEnabled,
+                buttonId: BUTTON_ID
+            });
+
+            if (isEnabled && !buttonExists) {
+                console.warn(`[${extensionName}] 按钮应该存在但未找到，尝试重新创建`);
+                initializeFloatingButton();
+            }
+        }, 2000);
 
         console.log(`[${extensionName}] Extension loaded successfully.`);
     }

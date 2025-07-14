@@ -295,31 +295,36 @@ jQuery(async () => {
     // 4. 初始化
     // -----------------------------------------------------------------
     function init() {
-        loadPetData();
+        // 延迟初始化，以避免与SillyTavern核心脚本的加载冲突
+        setTimeout(() => {
+            loadPetData();
 
-        $('body').append(`<div id="${OVERLAY_ID}" class="vpet-overlay"><div id="${POPUP_ID}" class="vpet-popup-container"></div></div>`);
-        $('body').append(`<div id="${BUTTON_ID}">🐾</div>`);
-        
-        const floatingButton = $(`#${BUTTON_ID}`);
-        const savedPos = localStorage.getItem(STORAGE_KEY_BUTTON_POS);
-        if (savedPos) floatingButton.css(JSON.parse(savedPos));
-        else floatingButton.css({ top: '200px', left: '20px' });
+            $('body').append(`<div id="${OVERLAY_ID}" class="vpet-overlay"><div id="${POPUP_ID}" class="vpet-popup-container"></div></div>`);
+            $('body').append(`<div id="${BUTTON_ID}">🐾</div>`);
+            
+            const floatingButton = $(`#${BUTTON_ID}`);
+            const savedPos = localStorage.getItem(STORAGE_KEY_BUTTON_POS);
+            if (savedPos) floatingButton.css(JSON.parse(savedPos));
+            else floatingButton.css({ top: '200px', left: '20px' });
 
-        makeDraggable(floatingButton);
-        floatingButton.on('click', (e) => {
-            if ($(e.currentTarget).is('.dragging')) return;
-            togglePopup(!isPopupOpen);
-        });
+            makeDraggable(floatingButton);
+            floatingButton.on('click', (e) => {
+                if ($(e.currentTarget).is('.dragging')) return;
+                togglePopup(!isPopupOpen);
+            });
 
-        setInterval(() => {
-            const diffSeconds = (Date.now() - petData.lastUpdateTime) / 1000;
-            if (diffSeconds > 300) {
-                petData.hunger = Math.max(0, petData.hunger - 2);
-                petData.happiness = Math.max(0, petData.happiness - 1);
-                petData.lastUpdateTime = Date.now();
-                savePetData();
-            }
-        }, 60000);
+            setInterval(() => {
+                const diffSeconds = (Date.now() - petData.lastUpdateTime) / 1000;
+                if (diffSeconds > 300) {
+                    petData.hunger = Math.max(0, petData.hunger - 2);
+                    petData.happiness = Math.max(0, petData.happiness - 1);
+                    petData.lastUpdateTime = Date.now();
+                    savePetData();
+                }
+            }, 60000);
+
+            console.log("🐾 虚拟宠物系统已成功初始化！");
+        }, 500); // 延迟500毫秒
     }
 
     init();

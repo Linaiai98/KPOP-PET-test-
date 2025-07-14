@@ -5653,10 +5653,7 @@ ${currentPersonality}
             petSleep();
         });
 
-        $("#chat-pet-btn").on("click touchend", (e) => {
-            e.preventDefault();
-            handleChatButtonClick();
-        });
+
 
         // 视图切换按钮
         $("#goto-pet-detail-btn").on("click touchend", (e) => {
@@ -11491,6 +11488,28 @@ ${currentPersonality}
                         <span style="font-size: 1em !important;">🛒</span>
                         <span>商店</span>
                     </button>
+                    <button class="action-btn chat-btn" style="
+                        padding: 8px !important;
+                        background: ${candyColors.info} !important;
+                        color: ${candyColors.textWhite} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 11px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
+                        cursor: pointer !important;
+                        min-height: 36px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 4px !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                    ">
+                        <span style="font-size: 1em !important;">💬</span>
+                        <span>聊天</span>
+                    </button>
                     <button class="action-btn settings-btn" style="
                         padding: 8px !important;
                         background: #8B5CF6 !important;
@@ -11771,6 +11790,28 @@ ${currentPersonality}
                         <span style="font-size: 1.1em !important;">🛒</span>
                         <span>商店</span>
                     </button>
+                    <button class="action-btn chat-btn" style="
+                        padding: 12px !important;
+                        background: ${candyColors.info} !important;
+                        color: ${candyColors.textWhite} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 12px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
+                        cursor: pointer !important;
+                        min-height: 44px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 6px !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                    ">
+                        <span style="font-size: 1.1em !important;">💬</span>
+                        <span>聊天</span>
+                    </button>
                     <button class="action-btn settings-btn" style="
                         padding: 12px !important;
                         background: #8B5CF6 !important;
@@ -11873,6 +11914,13 @@ ${currentPersonality}
             e.preventDefault();
             console.log("🛒 打开商店");
             openShop();
+        });
+
+        // 聊天按钮
+        $container.find(".chat-btn").on("click touchend", function(e) {
+            e.preventDefault();
+            console.log("💬 与宠物聊天");
+            handleChatButtonClick();
         });
 
         // 设置按钮

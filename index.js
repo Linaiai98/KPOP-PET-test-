@@ -47,7 +47,10 @@ jQuery(async () => {
     const TOGGLE_ID = "#virtual-pet-enabled-toggle";
     
     // DOM 元素引用
-    let overlay, mainView, petView, settingsView;
+    let overlay, mainView, petView, settingsView, chatView;
+
+    // 聊天功能变量
+    let chatHistory = [];
     let petContainer;
 
     // 弹窗状态管理
@@ -3785,8 +3788,16 @@ ${currentPersonality}
         switchView(settingsView);
         renderSettings();
     }
-    
-    // ----------------------------------------------------------------- 
+
+    /**
+     * 显示聊天视图
+     */
+    function showChatView() {
+        switchView(chatView);
+        renderChatView();
+    }
+
+    // -----------------------------------------------------------------
     // 4. UI 渲染逻辑
     // -----------------------------------------------------------------
     
@@ -4376,7 +4387,199 @@ ${currentPersonality}
         renderSettings();
         toastr.success("🥚 新的拓麻歌子宠物诞生了！请好好照顾它！");
     }
-    
+
+    // -----------------------------------------------------------------
+    // 聊天功能相关函数
+    // -----------------------------------------------------------------
+
+    /**
+     * 渲染聊天视图
+     */
+    function renderChatView() {
+        // 更新聊天标题中的宠物名称
+        $("#chat-pet-name").text(petData.name);
+
+        // 清空输入框
+        $("#chat-user-input").val('');
+
+        // 如果聊天历史为空，显示欢迎消息
+        if (chatHistory.length === 0) {
+            addMessageToChatbox('pet', `你好！我是${petData.name}，很高兴和你聊天！有什么想说的吗？`);
+        }
+    }
+
+    /**
+     * 添加消息到聊天框
+     * @param {string} sender - 'user' 或 'pet'
+     * @param {string} message - 消息内容
+     * @param {boolean} isTyping - 是否为输入中状态
+     * @returns {jQuery} 消息元素
+     */
+    function addMessageToChatbox(sender, message, isTyping = false) {
+        const messageClass = sender === 'user' ? 'user-message' : 'pet-message';
+        const typingClass = isTyping ? ' typing-indicator' : '';
+
+        const messageElement = $(`
+            <div class="chat-message ${messageClass}${typingClass}">
+                ${escapeHtml(message)}
+            </div>
+        `);
+
+        $('#chat-messages-container').append(messageElement);
+
+        // 滚动到底部
+        const container = $('#chat-messages-container')[0];
+        container.scrollTop = container.scrollHeight;
+
+        return messageElement;
+    }
+
+    /**
+     * 构建聊天提示词
+     * @param {string} personality - 宠物人设
+     * @param {string} userInput - 用户输入
+     * @returns {Array} 消息数组
+     */
+    function buildChatPrompt(personality, userInput) {
+        // 系统指令
+        const systemMessage = {
+            role: 'system',
+            content: `你是${petData.name}，请严格按照以下人设回应用户。
+
+【你的身份设定】：
+${personality}
+
+【重要规则】：
+1. 你是一个虚拟宠物，请保持角色一致性
+2. 回复要简短有趣，不超过100字
+3. 可以表达情感和需求
+4. 不要提及你是AI或虚拟的
+5. 可以根据当前状态（健康、快乐、饥饿、精力）来回应
+6. 保持可爱和友好的语调
+
+【当前状态】：
+- 健康: ${Math.round(petData.health)}/100
+- 快乐: ${Math.round(petData.happiness)}/100
+- 饥饿: ${Math.round(petData.hunger)}/100
+- 精力: ${Math.round(petData.energy)}/100
+- 等级: ${petData.level}`
+        };
+
+        // 构建消息历史（保留最近10条对话）
+        const messages = [systemMessage];
+
+        // 添加历史对话（限制数量避免token过多）
+        const recentHistory = chatHistory.slice(-10);
+        messages.push(...recentHistory);
+
+        // 添加当前用户输入
+        messages.push({
+            role: 'user',
+            content: userInput
+        });
+
+        return messages;
+    }
+
+    /**
+     * 处理发送消息
+     */
+    async function handleSendMessage() {
+        const userInput = $('#chat-user-input').val().trim();
+        if (!userInput) return;
+
+        // 显示用户消息
+        addMessageToChatbox('user', userInput);
+        $('#chat-user-input').val('');
+
+        // 添加到历史记录
+        chatHistory.push({ role: 'user', content: userInput });
+
+        // 显示输入中提示
+        const typingIndicator = addMessageToChatbox('pet', '正在思考...', true);
+
+        try {
+            const aiSettings = loadAISettings();
+            const personality = getCurrentPersonality();
+
+            // 构建消息
+            const messages = buildChatPrompt(personality, userInput);
+
+            // 调用AI API
+            const aiResponse = await callCustomAPIForChat(messages, aiSettings);
+
+            // 移除输入中提示
+            typingIndicator.remove();
+
+            // 显示AI回复
+            addMessageToChatbox('pet', aiResponse);
+
+            // 添加到历史记录
+            chatHistory.push({ role: 'assistant', content: aiResponse });
+
+            // 限制历史记录长度
+            if (chatHistory.length > 20) {
+                chatHistory = chatHistory.slice(-20);
+            }
+
+        } catch (error) {
+            console.error(`[${extensionName}] Chat AI call failed:`, error);
+            typingIndicator.remove();
+            addMessageToChatbox('pet', "我好像有点累了，听不清你说什么...");
+        }
+    }
+
+    /**
+     * 为聊天功能调用自定义API
+     * @param {Array} messages - 消息数组
+     * @param {Object} settings - API设置
+     * @returns {Promise<string>} AI回复
+     */
+    async function callCustomAPIForChat(messages, settings) {
+        console.log(`[${extensionName}] 调用聊天API: ${settings.apiType}`);
+
+        // 智能构建请求URL
+        let apiUrl = settings.apiUrl;
+        if (!apiUrl.includes('/chat/completions')) {
+            if (apiUrl.endsWith('/')) {
+                apiUrl = apiUrl + 'chat/completions';
+            } else if (apiUrl.endsWith('/v1')) {
+                apiUrl = apiUrl + '/chat/completions';
+            } else {
+                apiUrl = apiUrl + '/v1/chat/completions';
+            }
+        }
+
+        const requestBody = {
+            model: settings.apiModel || 'gpt-3.5-turbo',
+            messages: messages,
+            max_tokens: 150, // 聊天回复不需要太长
+            temperature: 0.8, // 让回复更有趣一些
+            stream: false
+        };
+
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${settings.apiKey}`
+            },
+            body: JSON.stringify(requestBody)
+        });
+
+        if (!response.ok) {
+            throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        if (data.choices && data.choices[0] && data.choices[0].message) {
+            return data.choices[0].message.content.trim();
+        } else {
+            throw new Error('API返回格式错误');
+        }
+    }
+
     /**
      * 安全地转义HTML字符串，防止XSS
      */
@@ -5179,6 +5382,7 @@ ${currentPersonality}
             mainView = $("#pet-main-view");
             petView = $("#pet-detail-view");
             settingsView = $("#pet-settings-view");
+            chatView = $("#pet-chat-view");
             petContainer = $("#pet-status-container");
         }
 
@@ -5238,6 +5442,11 @@ ${currentPersonality}
         });
 
         // 视图切换按钮
+        $("#goto-chat-btn").on("click touchend", (e) => {
+            e.preventDefault();
+            showChatView();
+        });
+
         $("#goto-pet-detail-btn").on("click touchend", (e) => {
             e.preventDefault();
             showPetView();
@@ -5263,6 +5472,20 @@ ${currentPersonality}
         $("#reset-pet-btn").on("click touchend", (e) => {
             e.preventDefault();
             resetPet();
+        });
+
+        // 聊天相关按钮
+        $("#chat-send-btn").on("click touchend", (e) => {
+            e.preventDefault();
+            handleSendMessage();
+        });
+
+        // 聊天输入框回车事件
+        $("#chat-user-input").on("keypress", (e) => {
+            if (e.which === 13 && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage();
+            }
         });
 
         // 6. 初始状态

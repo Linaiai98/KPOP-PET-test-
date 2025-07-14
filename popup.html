@@ -31,6 +31,9 @@
                     
                     <!-- 导航按钮 -->
                     <div class="pet-nav-buttons">
+                        <button id="goto-chat-btn" class="pet-button">
+                            💬 聊天
+                        </button>
                         <button id="goto-pet-detail-btn" class="pet-button">
                             📊 详细信息
                         </button>
@@ -96,7 +99,30 @@
                     </div>
                 </div>
             </div>
-            
+
+            <!-- 聊天视图 -->
+            <div id="pet-chat-view" class="pet-view" style="display: none;">
+                <div class="pet-section">
+                    <h3>💬 与 <span id="chat-pet-name"></span> 聊天</h3>
+
+                    <!-- 聊天消息容器 -->
+                    <div id="chat-messages-container" class="chat-messages-container">
+                        <!-- 聊天消息会通过JavaScript动态添加到这里 -->
+                    </div>
+
+                    <!-- 输入区域 -->
+                    <div class="chat-input-container">
+                        <textarea id="chat-user-input" placeholder="说点什么..." rows="3"></textarea>
+                        <button id="chat-send-btn" class="pet-button">发送</button>
+                    </div>
+
+                    <!-- 返回按钮 -->
+                    <div class="pet-nav-buttons">
+                        <button class="pet-button back-to-main-btn">← 返回</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- 设置视图 -->
             <div id="pet-settings-view" class="pet-view">
                 <div class="pet-section">

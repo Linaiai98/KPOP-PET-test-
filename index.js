@@ -1,4 +1,4 @@
-// 虚拟宠物系统 - SillyTavern插件 v2.1 (Refactored & Unified)
+// 虚拟宠物系统 - SillyTavern插件 v2.2 (Fixed)
 console.log("🐾 虚拟宠物系统脚本开始加载...");
 
 jQuery(async () => {
@@ -8,22 +8,15 @@ jQuery(async () => {
     // 1. 定义常量和状态变量
     // -----------------------------------------------------------------
     const extensionName = "virtual-pet-system";
-    const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
-    
-    // 存储键
-    const STORAGE_KEY_BUTTON_POS = "virtual-pet-button-position";
-    const STORAGE_KEY_ENABLED = "virtual-pet-enabled";
     const STORAGE_KEY_PET_DATA = "virtual-pet-data";
-    const STORAGE_KEY_CUSTOM_AVATAR = "virtual-pet-custom-avatar";
-
-    // DOM IDs
+    const STORAGE_KEY_BUTTON_POS = "virtual-pet-button-position";
     const BUTTON_ID = "virtual-pet-button";
     const OVERLAY_ID = "virtual-pet-popup-overlay";
     const POPUP_ID = "virtual-pet-popup";
 
-    // 弹窗状态管理
     let isPopupOpen = false;
     let petData = {};
+    let chatHistory = [];
 
     // -----------------------------------------------------------------
     // 2. 视图管理器 (View Manager)
@@ -43,26 +36,8 @@ jQuery(async () => {
                     </div>
                 </div>
                 <div class="vpet-section vpet-nav-buttons">
-                    <button id="goto-pet-detail-btn" class="vpet-button vpet-button-secondary">📊 详细</button>
                     <button id="goto-chat-btn" class="vpet-button vpet-button-secondary">💬 聊天</button>
                     <button id="goto-settings-btn" class="vpet-button vpet-button-secondary">⚙️ 设置</button>
-                </div>
-            </div>
-        `,
-        detail: `
-            <div class="vpet-header">
-                <div class="vpet-title">📊 宠物详情</div>
-                <button class="vpet-button vpet-button-secondary back-to-main-btn">&larr; 返回</button>
-            </div>
-            <div class="vpet-body">
-                <div class="vpet-section">
-                    <div class="vpet-info-grid">
-                        <div class="vpet-info-item"><label>名称:</label><span id="detail-pet-name"></span></div>
-                        <div class="vpet-info-item"><label>类型:</label><span id="detail-pet-type"></span></div>
-                        <div class="vpet-info-item"><label>等级:</label><span id="detail-pet-level"></span></div>
-                        <div class="vpet-info-item"><label>经验:</label><span id="detail-pet-exp"></span></div>
-                        <div class="vpet-info-item"><label>创建时间:</label><span id="detail-pet-created"></span></div>
-                    </div>
                 </div>
             </div>
         `,
@@ -128,16 +103,8 @@ jQuery(async () => {
                     renderPetStatus();
                     $('#feed-pet-btn').on('click', feedPet);
                     $('#play-pet-btn').on('click', playWithPet);
-                    $('#goto-pet-detail-btn').on('click', () => this.switchView('detail'));
                     $('#goto-chat-btn').on('click', () => this.switchView('chat'));
                     $('#goto-settings-btn').on('click', () => this.switchView('settings'));
-                    break;
-                case 'detail':
-                    $('#detail-pet-name').text(petData.name);
-                    $('#detail-pet-type').text(petData.type);
-                    $('#detail-pet-level').text(petData.level);
-                    $('#detail-pet-exp').text(`${petData.experience} / ${petData.level * 100}`);
-                    $('#detail-pet-created').text(new Date(petData.created).toLocaleString());
                     break;
                 case 'settings':
                     $('#pet-name-input').val(petData.name);
@@ -158,34 +125,68 @@ jQuery(async () => {
     // -----------------------------------------------------------------
     // 3. 核心功能函数
     // -----------------------------------------------------------------
+
+    function loadPetData() {
+        const defaultData = {
+            name: "小宠物", type: "cat", level: 1, experience: 0,
+            health: 80, happiness: 80, hunger: 80, energy: 80,
+            created: Date.now(), lastUpdateTime: Date.now(),
+        };
+        const savedData = localStorage.getItem(STORAGE_KEY_PET_DATA);
+        petData = savedData ? { ...defaultData, ...JSON.parse(savedData) } : defaultData;
+    }
+
+    function savePetData() {
+        localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(petData));
+        if (isPopupOpen) {
+            renderPetStatus();
+        }
+    }
     
-    let chatHistory = [];
+    function loadAISettings() {
+        const settings = localStorage.getItem('virtual-pet-ai-settings');
+        return settings ? JSON.parse(settings) : {};
+    }
+
+    function getCurrentPersonality() {
+        const type = localStorage.getItem('virtual-pet-personality-type') || 'default';
+        if (type === 'custom') {
+            return localStorage.getItem('virtual-pet-custom-personality') || '一只可爱的虚拟宠物';
+        }
+        const personalities = { 'default': '一只高冷的猫，但内心温柔。', 'cheerful': '一只活泼的小狗。' };
+        return personalities[type] || personalities.default;
+    }
 
     async function callAI(userInput) {
-        // This is a placeholder for the actual AI call.
-        // It uses the existing SillyTavern API if available.
-        if (typeof SillyTavern.send === 'function') {
-            try {
-                const personality = localStorage.getItem('virtual-pet-custom-personality') || "你是一只可爱的虚拟宠物。";
-                const prompt = `${personality}\n\n用户: ${userInput}\n${petData.name}:`;
-                
-                // We can't directly get a return value from SillyTavern's send,
-                // so for this example, we'll simulate a response.
-                // In a real implementation, this would need to listen for the response.
-                console.log("Sending prompt to AI:", prompt);
-                
-                // Simulate AI response
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                return `${petData.name}听到了你说的话！`;
+        const aiSettings = loadAISettings();
+        if (!aiSettings.apiUrl || !aiSettings.apiKey || !aiSettings.apiModel) {
+            toastr.warning('AI未配置，请在扩展设置中填写API信息。');
+            return "（我的主人还没帮我连接到AI大脑...）";
+        }
 
-            } catch (error) {
-                console.error("AI call failed:", error);
-                return "我好像有点累了，听不清你说什么...";
-            }
-        } else {
-            // Fallback for when not in SillyTavern or API is not available
-            await new Promise(resolve => setTimeout(resolve, 500));
-            return "喵~ (AI功能未连接)";
+        const personality = getCurrentPersonality();
+        if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
+        chatHistory.push({ role: 'user', content: userInput });
+
+        const messages = [
+            { role: 'system', content: `你是一只名叫'${petData.name}'的虚拟宠物，你的性格是：${personality}。请用这个身份和用户对话，回答要简短可爱。` },
+            ...chatHistory
+        ];
+
+        try {
+            const response = await fetch(aiSettings.apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${aiSettings.apiKey}` },
+                body: JSON.stringify({ model: aiSettings.apiModel, messages: messages, max_tokens: 100 })
+            });
+            if (!response.ok) throw new Error(`API Error: ${response.status}`);
+            const data = await response.json();
+            const aiResponse = data.choices[0]?.message?.content.trim() || "我不知道该说什么了...";
+            chatHistory.push({ role: 'assistant', content: aiResponse });
+            return aiResponse;
+        } catch (error) {
+            console.error('AI API Error:', error);
+            return "我好像有点累了，听不清你说什么...";
         }
     }
 
@@ -204,58 +205,22 @@ jQuery(async () => {
         addMessageToChatbox('user', userInput);
         input.val('');
         
-        // Add typing indicator
         const typingIndicator = $('<div class="vpet-chat-message vpet-message-pet typing-indicator"><span>.</span><span>.</span><span>.</span></div>');
         $('#vpet-chat-messages').append(typingIndicator);
         $('#vpet-chat-messages').scrollTop($('#vpet-chat-messages')[0].scrollHeight);
 
         const aiResponse = await callAI(userInput);
-        
-        // Remove typing indicator
         typingIndicator.remove();
-
         addMessageToChatbox('pet', aiResponse);
     }
 
-    function loadAISettings() {
-        const settings = localStorage.getItem('virtual-pet-ai-settings');
-        return settings ? JSON.parse(settings) : {};
-    }
-
-    function getCurrentPersonality() {
-        const type = localStorage.getItem('virtual-pet-personality-type') || 'default';
-        if (type === 'custom') {
-            return localStorage.getItem('virtual-pet-custom-personality') || '一只可爱的虚拟宠物';
-        }
-        // Simplified PRESET_PERSONALITIES for this example
-        const personalities = { 'default': '一只高冷的猫' };
-        return personalities[type];
-    }
-
-    function savePetData() {
-        localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(petData));
-        renderPetStatus(); // Always re-render on data change
-    }
-
     function renderPetStatus() {
-        if (!isPopupOpen) return;
         const container = $('#vpet-status-container');
         if (!container.length) return;
-
         const EMOJIS = { cat: '🐱', dog: '🐶', dragon: '🐉', rabbit: '🐰', bird: '🐦' };
         container.html(`
-            <div class="vpet-avatar">
-                <span class="vpet-emoji">${EMOJIS[petData.type] || '🐾'}</span>
-                <div class="vpet-name">${petData.name}</div>
-                <div class="vpet-level">Lv. ${petData.level}</div>
-            </div>
-            <div class="vpet-stats">
-                ${createStatBar('health', '❤️', petData.health)}
-                ${createStatBar('happiness', '😊', petData.happiness)}
-                ${createStatBar('hunger', '🍖', petData.hunger)}
-                ${createStatBar('energy', '⚡️', petData.energy)}
-            </div>
-        `);
+            <div class="vpet-avatar"><span class="vpet-emoji">${EMOJIS[petData.type] || '🐾'}</span><div class="vpet-name">${petData.name}</div><div class="vpet-level">Lv. ${petData.level}</div></div>
+            <div class="vpet-stats">${createStatBar('health', '❤️', petData.health)}${createStatBar('happiness', '😊', petData.happiness)}${createStatBar('hunger', '🍖', petData.hunger)}${createStatBar('energy', '⚡️', petData.energy)}</div>`);
     }
 
     function createStatBar(id, label, value) {
@@ -280,15 +245,14 @@ jQuery(async () => {
         petData.name = $('#pet-name-input').val();
         petData.type = $('#pet-type-select').val();
         savePetData();
-        toastr.success('设置已���存!');
+        toastr.success('设置已保存!');
         UIManager.switchView('main');
     }
 
     function resetPet() {
         if (confirm('确定要重置你的宠物吗？此操作不可撤销！')) {
             localStorage.removeItem(STORAGE_KEY_PET_DATA);
-            loadPetData();
-            savePetData();
+            init(); // Re-initialize to get default data
             toastr.success('宠物已重置!');
             UIManager.switchView('main');
         }
@@ -309,27 +273,19 @@ jQuery(async () => {
         let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
         element.on('mousedown', function(e) {
             e.preventDefault();
-            pos3 = e.clientX;
-            pos4 = e.clientY;
-            $(document).on('mouseup', closeDragElement);
-            $(document).on('mousemove', elementDrag);
+            pos3 = e.clientX; pos4 = e.clientY;
+            $(document).on('mouseup', closeDragElement).on('mousemove', elementDrag);
             $(this).addClass('dragging');
         });
-
         function elementDrag(e) {
-            e.preventDefault();
-            pos1 = pos3 - e.clientX;
-            pos2 = pos4 - e.clientY;
-            pos3 = e.clientX;
-            pos4 = e.clientY;
+            pos1 = pos3 - e.clientX; pos2 = pos4 - e.clientY;
+            pos3 = e.clientX; pos4 = e.clientY;
             let newTop = Math.max(0, Math.min(element.offset().top - pos2, window.innerHeight - element.outerHeight()));
             let newLeft = Math.max(0, Math.min(element.offset().left - pos1, window.innerWidth - element.outerWidth()));
             element.css({ top: newTop + 'px', left: newLeft + 'px' });
         }
-
         function closeDragElement() {
-            $(document).off('mouseup', closeDragElement);
-            $(document).off('mousemove', elementDrag);
+            $(document).off('mouseup', closeDragElement).off('mousemove', elementDrag);
             element.removeClass('dragging');
             localStorage.setItem(STORAGE_KEY_BUTTON_POS, JSON.stringify({ top: element.css('top'), left: element.css('left') }));
         }
@@ -339,41 +295,31 @@ jQuery(async () => {
     // 4. 初始化
     // -----------------------------------------------------------------
     function init() {
-        // 加载数据
         loadPetData();
 
-        // 注入HTML
         $('body').append(`<div id="${OVERLAY_ID}" class="vpet-overlay"><div id="${POPUP_ID}" class="vpet-popup-container"></div></div>`);
         $('body').append(`<div id="${BUTTON_ID}">🐾</div>`);
         
         const floatingButton = $(`#${BUTTON_ID}`);
-        
-        // 恢复按钮位置
         const savedPos = localStorage.getItem(STORAGE_KEY_BUTTON_POS);
-        if (savedPos) {
-            floatingButton.css(JSON.parse(savedPos));
-        } else {
-            floatingButton.css({ top: '200px', left: '20px' });
-        }
+        if (savedPos) floatingButton.css(JSON.parse(savedPos));
+        else floatingButton.css({ top: '200px', left: '20px' });
 
-        // 绑定事件
         makeDraggable(floatingButton);
         floatingButton.on('click', (e) => {
-            // 防止拖动结束时触发点击
             if ($(e.currentTarget).is('.dragging')) return;
             togglePopup(!isPopupOpen);
         });
 
-        // 启动状态衰减循环
         setInterval(() => {
             const diffSeconds = (Date.now() - petData.lastUpdateTime) / 1000;
-            if (diffSeconds > 300) { // 5分钟
+            if (diffSeconds > 300) {
                 petData.hunger = Math.max(0, petData.hunger - 2);
                 petData.happiness = Math.max(0, petData.happiness - 1);
                 petData.lastUpdateTime = Date.now();
                 savePetData();
             }
-        }, 60000); // 每分钟检查一次
+        }, 60000);
     }
 
     init();

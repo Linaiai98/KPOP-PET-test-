@@ -1208,3 +1208,32 @@
         transform: translateY(0);
     }
 }
+
+/* --- 聊天按钮状态样式 --- */
+#goto-chat-btn.api-not-configured {
+    opacity: 0.6;
+    position: relative;
+}
+
+#goto-chat-btn.api-not-configured::after {
+    content: "⚙️";
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    font-size: 0.7em;
+    background: #ff6b6b;
+    color: white;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+}

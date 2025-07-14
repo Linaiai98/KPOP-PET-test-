@@ -1746,6 +1746,9 @@ jQuery(async () => {
         saveAISettingsToSync(settings);
 
         console.log(`[${extensionName}] AI设置已保存并同步:`, settings);
+
+        // 更新UI状态
+        updateUIAfterAPICheck();
     }
 
     /**
@@ -1822,11 +1825,18 @@ jQuery(async () => {
                 }
 
                 console.log(`[${extensionName}] AI设置已加载:`, settings);
+
+                // 更新UI状态
+                setTimeout(() => updateUIAfterAPICheck(), 100);
+
                 return settings;
             }
         } catch (error) {
             console.error(`[${extensionName}] 加载AI设置失败:`, error);
         }
+
+        // 即使加载失败也要更新UI状态
+        setTimeout(() => updateUIAfterAPICheck(), 100);
         return {};
     }
 
@@ -2767,6 +2777,35 @@ ${currentPersonality}
             $("#virtual-pet-custom-personality-container").show();
         } else {
             $("#virtual-pet-custom-personality-container").hide();
+        }
+    }
+
+    /**
+     * 根据API配置更新UI显示状态
+     */
+    function updateUIAfterAPICheck() {
+        const chatButton = $('#goto-chat-btn');
+        const settings = loadAISettings();
+        const hasFullConfig = settings.apiType && settings.apiUrl && settings.apiKey;
+
+        console.log(`[${extensionName}] API配置检查:`, {
+            apiType: settings.apiType || '未设置',
+            apiUrl: settings.apiUrl || '未设置',
+            apiKey: settings.apiKey ? '已设置' : '未设置',
+            hasFullConfig: hasFullConfig
+        });
+
+        // 聊天按钮始终显示，但根据配置状态调整样式和行为
+        chatButton.show();
+
+        if (hasFullConfig) {
+            // API配置完整 - 正常样式
+            chatButton.removeClass('api-not-configured').attr('title', '与宠物聊天');
+            console.log(`[${extensionName}] 聊天按钮已启用 - API配置完整`);
+        } else {
+            // API配置不完整 - 添加视觉提示
+            chatButton.addClass('api-not-configured').attr('title', '点击配置AI后即可聊天');
+            console.log(`[${extensionName}] 聊天按钮显示但需要配置 - API配置不完整`);
         }
     }
 
@@ -5444,7 +5483,29 @@ ${personality}
         // 视图切换按钮
         $("#goto-chat-btn").on("click touchend", (e) => {
             e.preventDefault();
-            showChatView();
+
+            // 检查API配置状态
+            const settings = loadAISettings();
+            const hasFullConfig = settings.apiType && settings.apiUrl && settings.apiKey;
+
+            if (hasFullConfig) {
+                // API配置完整，正常进入聊天
+                showChatView();
+            } else {
+                // API配置不完整，引导用户配置
+                toastr.warning('请先在设置中配置AI API才能使用聊天功能', '⚙️ 需要配置AI', {
+                    timeOut: 4000,
+                    onclick: function() {
+                        // 点击通知时自动跳转到设置页面
+                        showSettingsView();
+                    }
+                });
+
+                // 可选：直接跳转到设置页面
+                setTimeout(() => {
+                    showSettingsView();
+                }, 1000);
+            }
         });
 
         $("#goto-pet-detail-btn").on("click touchend", (e) => {
@@ -5559,6 +5620,11 @@ ${personality}
 
         // 10. 设置卸载检测
         setupUnloadDetection();
+
+        // 11. 初始化UI状态检查
+        setTimeout(() => {
+            updateUIAfterAPICheck();
+        }, 500); // 延迟500ms确保DOM完全加载
 
         console.log(`[${extensionName}] Extension loaded successfully.`);
     }

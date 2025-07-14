@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>虚拟宠物对话框演示</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #FFE5F1 0%, #E5F9F0 50%, #E5F4FF 100%);
+            min-height: 100vh;
+        }
+        
+        .demo-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        
+        .demo-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #FF9EC7;
+        }
+        
+        .demo-btn {
+            background: linear-gradient(135deg, #FF9EC7, #FF7FB3);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            margin: 8px;
+            transition: all 0.2s ease;
+        }
+        
+        .demo-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(255, 158, 199, 0.3);
+        }
+        
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .feature-list li {
+            padding: 8px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .feature-list li::before {
+            content: "✨";
+            font-size: 16px;
+        }
+        
+        .code-block {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 16px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            margin: 16px 0;
+        }
+        
+        .preview-area {
+            border: 2px dashed #FF9EC7;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            background: rgba(255, 158, 199, 0.05);
+        }
+    </style>
+    
+    <!-- 加载jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <!-- 加载对话框样式 -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="demo-container">
+        <h1>💬 虚拟宠物对话框系统演示</h1>
+        
+        <div class="demo-section">
+            <h2>🎯 功能特色</h2>
+            <ul class="feature-list">
+                <li>现代化的聊天界面设计</li>
+                <li>可拖动的浮动对话框</li>
+                <li>AI智能回复（基于宠物人设）</li>
+                <li>快速操作按钮（喂食、玩耍、睡觉、拥抱）</li>
+                <li>实时状态显示</li>
+                <li>最小化和关闭功能</li>
+                <li>移动端适配</li>
+            </ul>
+        </div>
+        
+        <div class="demo-section">
+            <h2>🚀 快速体验</h2>
+            <p>点击下面的按钮来体验对话框功能：</p>
+            
+            <div class="preview-area">
+                <button id="show-dialog-btn" class="demo-btn">💬 打开对话框</button>
+                <button id="demo-ai-chat-btn" class="demo-btn">🤖 模拟AI对话</button>
+                <button id="demo-quick-actions-btn" class="demo-btn">⚡ 测试快速操作</button>
+            </div>
+        </div>
+        
+        <div class="demo-section">
+            <h2>🔧 集成方式</h2>
+            <p>在虚拟宠物系统中，对话框可以通过以下方式打开：</p>
+            
+            <div class="code-block">
+// 1. 在主弹窗中点击"💬 对话"按钮
+$("#open-chat-dialog-btn").on("click", function() {
+    showChatDialog();
+});
+
+// 2. 直接调用函数
+showChatDialog();
+
+// 3. 添加聊天消息
+addChatMessage('user', '你好！');
+addChatMessage('pet', '你好主人！我很开心见到你！🐾');
+            </div>
+        </div>
+        
+        <div class="demo-section">
+            <h2>💡 使用技巧</h2>
+            <ul class="feature-list">
+                <li>拖动对话框标题栏可以移动位置</li>
+                <li>点击快速操作按钮可以快速与宠物互动</li>
+                <li>按回车键可以快速发送消息</li>
+                <li>最小化后可以继续接收消息通知</li>
+                <li>AI会根据宠物当前状态和人设来回复</li>
+            </ul>
+        </div>
+        
+        <div class="demo-section">
+            <h2>📱 界面预览</h2>
+            <p>对话框采用现代化设计，包含以下元素：</p>
+            <ul class="feature-list">
+                <li>渐变色标题栏（可拖动）</li>
+                <li>宠物头像和在线状态</li>
+                <li>消息气泡（用户/宠物区分）</li>
+                <li>圆形输入框和发送按钮</li>
+                <li>快速操作按钮组</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // 模拟扩展名
+        const extensionName = 'virtual-pet-system';
+        
+        // 模拟宠物数据
+        let mockPetData = {
+            health: 85,
+            happiness: 90,
+            hunger: 30,
+            energy: 70
+        };
+        
+        // 模拟人设
+        const mockPersonalities = {
+            default: "高冷但温柔的猫咪，偶尔会撒娇",
+            cheerful: "活泼热情的小狗，总是充满活力",
+            elegant: "优雅古典的龙，说话文雅有礼",
+            shy: "害羞轻声的兔子，说话轻声细语",
+            smart: "机智幽默的鸟儿，喜欢开玩笑"
+        };
+        
+        let currentPersonality = 'default';
+        
+        // 模拟函数
+        function getCurrentPersonality() {
+            return mockPersonalities[currentPersonality] || mockPersonalities.default;
+        }
+        
+        function loadPetData() {
+            return mockPetData;
+        }
+        
+        async function callAIAPI(prompt) {
+            // 模拟AI回复
+            const responses = [
+                "喵~ 主人你好！我今天心情很好呢！🐾",
+                "我有点饿了，可以给我一些小鱼干吗？🐟",
+                "陪我玩一会儿吧，我想和你一起玩耍！🎮",
+                "我感觉有点累了，想要休息一下... 😴",
+                "主人你真好！我很喜欢和你聊天！💕",
+                "今天天气真不错，我们出去走走吧！☀️",
+                "我学会了一个新技能，想要展示给你看！✨"
+            ];
+            
+            // 模拟网络延迟
+            await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+            
+            return responses[Math.floor(Math.random() * responses.length)];
+        }
+        
+        // 页面加载完成后绑定事件
+        $(document).ready(function() {
+            console.log('💬 对话框演示页面加载完成');
+            
+            // 显示对话框按钮
+            $('#show-dialog-btn').on('click', function() {
+                if ($('#pet-chat-dialog').length === 0) {
+                    createChatDialog();
+                }
+                showChatDialog();
+            });
+            
+            // 模拟AI对话按钮
+            $('#demo-ai-chat-btn').on('click', function() {
+                if ($('#pet-chat-dialog').length === 0) {
+                    createChatDialog();
+                    showChatDialog();
+                }
+                
+                // 添加用户消息
+                addChatMessage('user', '你好，我的小宠物！');
+                
+                // 延迟添加AI回复
+                setTimeout(() => {
+                    handleAIChat('你好，我的小宠物！');
+                }, 500);
+            });
+            
+            // 测试快速操作按钮
+            $('#demo-quick-actions-btn').on('click', function() {
+                if ($('#pet-chat-dialog').length === 0) {
+                    createChatDialog();
+                    showChatDialog();
+                }
+                
+                // 模拟快速操作
+                setTimeout(() => handleQuickAction('feed'), 500);
+                setTimeout(() => handleQuickAction('play'), 1500);
+                setTimeout(() => handleQuickAction('hug'), 2500);
+            });
+        });
+    </script>
+    
+    <!-- 加载对话框JavaScript -->
+    <script src="index.js"></script>
+</body>
+</html>

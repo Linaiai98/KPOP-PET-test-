@@ -47,7 +47,7 @@ jQuery(async () => {
     const TOGGLE_ID = "#virtual-pet-enabled-toggle";
     
     // DOM 元素引用
-    let overlay, mainView, petView, settingsView;
+    let overlay, mainView, petView, settingsView, conversationDialog;
     let petContainer;
 
     // 弹窗状态管理
@@ -3382,10 +3382,299 @@ ${currentPersonality}
         }
     }
     
-    // ----------------------------------------------------------------- 
-    // 3. 弹窗和视图管理
     // -----------------------------------------------------------------
-    
+    // 3. 对话框系统
+    // -----------------------------------------------------------------
+
+    /**
+     * 创建快速对话框
+     */
+    function createChatDialog() {
+        const chatDialogHtml = `
+            <div id="pet-chat-dialog" class="pet-chat-dialog" style="display: none;">
+                <div class="pet-chat-header">
+                    <div class="pet-chat-title">
+                        <span class="pet-avatar">🐾</span>
+                        <span class="pet-name">我的宠物</span>
+                        <span class="pet-status" id="pet-chat-status">在线</span>
+                    </div>
+                    <div class="pet-chat-controls">
+                        <button class="pet-chat-btn" id="pet-chat-minimize" title="最小化">−</button>
+                        <button class="pet-chat-btn" id="pet-chat-close" title="关闭">×</button>
+                    </div>
+                </div>
+
+                <div class="pet-chat-messages" id="pet-chat-messages">
+                    <div class="pet-message pet-message-system">
+                        <div class="pet-message-content">
+                            <span class="pet-message-text">你好！我是你的虚拟宠物，有什么想聊的吗？ 🐾</span>
+                            <span class="pet-message-time">${new Date().toLocaleTimeString()}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pet-chat-input-area">
+                    <div class="pet-chat-input-container">
+                        <input type="text" id="pet-chat-input" class="pet-chat-input"
+                               placeholder="输入消息..." maxlength="500">
+                        <button id="pet-chat-send" class="pet-chat-send-btn" title="发送">
+                            <span class="pet-chat-send-icon">📤</span>
+                        </button>
+                    </div>
+                    <div class="pet-chat-quick-actions">
+                        <button class="pet-quick-btn" data-action="feed">🍎 喂食</button>
+                        <button class="pet-quick-btn" data-action="play">🎮 玩耍</button>
+                        <button class="pet-quick-btn" data-action="sleep">😴 睡觉</button>
+                        <button class="pet-quick-btn" data-action="hug">🤗 拥抱</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // 移除现有的对话框
+        $('#pet-chat-dialog').remove();
+
+        // 添加到页面
+        $('body').append(chatDialogHtml);
+
+        // 绑定事件
+        bindChatDialogEvents();
+
+        console.log(`[${extensionName}] 对话框已创建`);
+    }
+
+    /**
+     * 绑定对话框事件
+     */
+    function bindChatDialogEvents() {
+        const $dialog = $('#pet-chat-dialog');
+        const $input = $('#pet-chat-input');
+        const $sendBtn = $('#pet-chat-send');
+        const $messages = $('#pet-chat-messages');
+
+        // 发送消息
+        function sendMessage() {
+            const message = $input.val().trim();
+            if (!message) return;
+
+            // 添加用户消息
+            addChatMessage('user', message);
+            $input.val('');
+
+            // 发送到AI处理
+            handleAIChat(message);
+        }
+
+        // 发送按钮点击
+        $sendBtn.on('click', sendMessage);
+
+        // 回车发送
+        $input.on('keypress', function(e) {
+            if (e.which === 13) {
+                sendMessage();
+            }
+        });
+
+        // 快速操作按钮
+        $('.pet-quick-btn').on('click', function() {
+            const action = $(this).data('action');
+            handleQuickAction(action);
+        });
+
+        // 最小化按钮
+        $('#pet-chat-minimize').on('click', function() {
+            $dialog.toggleClass('minimized');
+        });
+
+        // 关闭按钮
+        $('#pet-chat-close').on('click', function() {
+            $dialog.hide();
+        });
+
+        // 使对话框可拖动
+        makeChatDialogDraggable($dialog);
+    }
+
+    /**
+     * 添加聊天消息
+     */
+    function addChatMessage(type, content, timestamp = null) {
+        const $messages = $('#pet-chat-messages');
+        const time = timestamp || new Date().toLocaleTimeString();
+
+        const messageClass = type === 'user' ? 'pet-message-user' : 'pet-message-pet';
+        const avatar = type === 'user' ? '👤' : '🐾';
+
+        const messageHtml = `
+            <div class="pet-message ${messageClass}">
+                <div class="pet-message-avatar">${avatar}</div>
+                <div class="pet-message-content">
+                    <span class="pet-message-text">${content}</span>
+                    <span class="pet-message-time">${time}</span>
+                </div>
+            </div>
+        `;
+
+        $messages.append(messageHtml);
+
+        // 滚动到底部
+        $messages.scrollTop($messages[0].scrollHeight);
+    }
+
+    /**
+     * 处理快速操作
+     */
+    function handleQuickAction(action) {
+        const actions = {
+            feed: { text: '喂食', emoji: '🍎', response: '谢谢你的美食！我感觉好多了！' },
+            play: { text: '玩耍', emoji: '🎮', response: '哇！这个游戏好有趣，我们再玩一会儿吧！' },
+            sleep: { text: '睡觉', emoji: '😴', response: '好困啊...让我休息一下，晚安~ zzz' },
+            hug: { text: '拥抱', emoji: '🤗', response: '好温暖的拥抱！我感受到了你的爱！' }
+        };
+
+        const actionData = actions[action];
+        if (actionData) {
+            // 添加用户操作消息
+            addChatMessage('user', `${actionData.emoji} ${actionData.text}`);
+
+            // 延迟添加宠物回应
+            setTimeout(() => {
+                addChatMessage('pet', actionData.response);
+
+                // 执行实际的游戏逻辑（如果存在相应函数）
+                const actionFunction = window[action + 'Pet'] || window['handle' + action.charAt(0).toUpperCase() + action.slice(1)];
+                if (typeof actionFunction === 'function') {
+                    actionFunction();
+                }
+            }, 500);
+        }
+    }
+
+    /**
+     * 处理AI聊天
+     */
+    async function handleAIChat(message) {
+        try {
+            // 显示正在输入状态
+            $('#pet-chat-status').text('正在输入...');
+
+            // 构建对话提示
+            const prompt = buildChatPrompt(message);
+
+            // 调用AI API
+            const response = await callAIAPI(prompt);
+
+            if (response && response.trim()) {
+                addChatMessage('pet', response);
+            } else {
+                addChatMessage('pet', '抱歉，我现在有点累，稍后再聊吧~ 😴');
+            }
+
+        } catch (error) {
+            console.error('AI聊天错误:', error);
+            addChatMessage('pet', '哎呀，我的脑子有点卡住了，你能再说一遍吗？ 🤔');
+        } finally {
+            $('#pet-chat-status').text('在线');
+        }
+    }
+
+    /**
+     * 构建聊天提示
+     */
+    function buildChatPrompt(userMessage) {
+        const personality = getCurrentPersonality();
+        const petData = loadPetData();
+
+        return `你是一个可爱的虚拟宠物，性格特点：${personality}
+
+当前状态：
+- 健康: ${petData.health || 100}
+- 快乐: ${petData.happiness || 100}
+- 饥饿: ${petData.hunger || 0}
+- 精力: ${petData.energy || 100}
+
+用户说: "${userMessage}"
+
+请以宠物的身份回应，保持简短有趣，不超过50字。`;
+    }
+
+    /**
+     * 使对话框可拖动
+     */
+    function makeChatDialogDraggable($dialog) {
+        const $header = $dialog.find('.pet-chat-header');
+        let isDragging = false;
+        let startX, startY, startLeft, startTop;
+
+        $header.on('mousedown', function(e) {
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            startLeft = parseInt($dialog.css('left'), 10) || 0;
+            startTop = parseInt($dialog.css('top'), 10) || 0;
+
+            $(document).on('mousemove.chatdrag', function(e) {
+                if (!isDragging) return;
+
+                const deltaX = e.clientX - startX;
+                const deltaY = e.clientY - startY;
+
+                $dialog.css({
+                    left: startLeft + deltaX + 'px',
+                    top: startTop + deltaY + 'px'
+                });
+            });
+
+            $(document).on('mouseup.chatdrag', function() {
+                isDragging = false;
+                $(document).off('.chatdrag');
+            });
+        });
+    }
+
+    /**
+     * 显示对话框
+     */
+    function showChatDialog() {
+        let $dialog = $('#pet-chat-dialog');
+
+        if ($dialog.length === 0) {
+            createChatDialog();
+            $dialog = $('#pet-chat-dialog');
+        }
+
+        $dialog.show().removeClass('minimized');
+
+        // 居中显示
+        const windowWidth = $(window).width();
+        const windowHeight = $(window).height();
+        const dialogWidth = 320;
+        const dialogHeight = 480;
+
+        $dialog.css({
+            left: Math.max(20, (windowWidth - dialogWidth) / 2) + 'px',
+            top: Math.max(20, (windowHeight - dialogHeight) / 2) + 'px'
+        });
+
+        // 聚焦输入框
+        setTimeout(() => {
+            $('#pet-chat-input').focus();
+        }, 100);
+
+        console.log(`[${extensionName}] 对话框已显示`);
+    }
+
+    /**
+     * 隐藏对话框
+     */
+    function hideChatDialog() {
+        $('#pet-chat-dialog').hide();
+    }
+
+    // -----------------------------------------------------------------
+    // 4. 弹窗和视图管理
+    // -----------------------------------------------------------------
+
     /**
      * 打开弹窗并显示主视图
      */
@@ -5235,6 +5524,12 @@ ${currentPersonality}
         $("#sleep-pet-btn").on("click touchend", (e) => {
             e.preventDefault();
             petSleep();
+        });
+
+        // 对话按钮
+        $("#open-chat-dialog-btn").on("click touchend", (e) => {
+            e.preventDefault();
+            showChatDialog();
         });
 
         // 视图切换按钮

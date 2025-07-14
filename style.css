@@ -102,7 +102,7 @@
                 0 0 0 1px rgba(0,0,0,0.5) !important;
 }
 
-/* 确保拖动时的样式优先级最高 */
+/* 确保拖动时的样式优先级最�� */
 #virtual-pet-button[style*="grabbing"] {
     cursor: grabbing !important;
 }
@@ -544,7 +544,7 @@
         font-size: 1em;
     }
 
-    /* 确保所有交互元素都有足够的触摸区域 */
+    /* 确保所有���互元素都有足够的触摸区域 */
     .pet-actions {
         gap: 8px;
         flex-direction: column;
@@ -1102,5 +1102,323 @@
     }
     to {
         transform: rotate(360deg);
+    }
+}
+
+/* --- 对话框样式 --- */
+#conversation-dialog {
+    background-color: rgba(255, 255, 255, 0.7);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-small);
+    padding: 12px;
+    margin-bottom: 16px;
+    box-shadow: var(--box-shadow-light);
+}
+
+#conversation-dialog h4 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: var(--text-color);
+    font-size: 1em;
+    text-align: center;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 8px;
+}
+
+#chat-container {
+    height: 150px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-small);
+    padding: 10px;
+    background-color: #fff;
+    margin-bottom: 10px;
+}
+
+#input-container {
+    display: flex;
+    gap: 8px;
+}
+
+#user-input {
+    flex-grow: 1;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-small);
+    padding: 8px;
+    font-family: var(--font-family);
+    resize: none;
+}
+
+#send-button {
+    background-color: var(--primary-accent-color);
+    color: white;
+    border: none;
+    border-radius: var(--border-radius-small);
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+#send-button:hover {
+    background-color: var(--primary-accent-hover-color);
+}
+
+/* ================================================================= */
+/* 宠物对话框样式 */
+/* ================================================================= */
+
+.pet-chat-dialog {
+    position: fixed;
+    width: 320px;
+    height: 480px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    z-index: 10000;
+    font-family: var(--font-family);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+}
+
+.pet-chat-dialog.minimized {
+    height: 50px;
+}
+
+.pet-chat-dialog.minimized .pet-chat-messages,
+.pet-chat-dialog.minimized .pet-chat-input-area {
+    display: none;
+}
+
+/* 对话框头部 */
+.pet-chat-header {
+    background: linear-gradient(135deg, var(--primary-accent-color), var(--primary-accent-hover-color));
+    color: white;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: move;
+    user-select: none;
+}
+
+.pet-chat-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.pet-chat-title .pet-avatar {
+    font-size: 18px;
+}
+
+.pet-name {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.pet-status {
+    font-size: 12px;
+    opacity: 0.8;
+    background: rgba(255,255,255,0.2);
+    padding: 2px 6px;
+    border-radius: 10px;
+}
+
+.pet-chat-controls {
+    display: flex;
+    gap: 4px;
+}
+
+.pet-chat-btn {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: background 0.2s ease;
+}
+
+.pet-chat-btn:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+/* 消息区域 */
+.pet-chat-messages {
+    flex: 1;
+    padding: 16px;
+    overflow-y: auto;
+    background: #f8f9fa;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.pet-message {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+.pet-message-user {
+    flex-direction: row-reverse;
+}
+
+.pet-message-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--secondary-accent-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.pet-message-user .pet-message-avatar {
+    background: var(--primary-accent-color);
+    color: white;
+}
+
+.pet-message-content {
+    max-width: 70%;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.pet-message-text {
+    background: white;
+    padding: 8px 12px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.4;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.pet-message-user .pet-message-text {
+    background: var(--primary-accent-color);
+    color: white;
+}
+
+.pet-message-time {
+    font-size: 11px;
+    color: var(--text-muted-color);
+    align-self: flex-end;
+}
+
+.pet-message-user .pet-message-time {
+    align-self: flex-start;
+}
+
+.pet-message-system .pet-message-text {
+    background: var(--info-color);
+    color: white;
+    border: 1px solid var(--tertiary-accent-color);
+}
+
+/* 输入区域 */
+.pet-chat-input-area {
+    padding: 16px;
+    background: white;
+    border-top: 1px solid var(--border-color);
+}
+
+.pet-chat-input-container {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.pet-chat-input {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s ease;
+    font-family: var(--font-family);
+}
+
+.pet-chat-input:focus {
+    border-color: var(--primary-accent-color);
+}
+
+.pet-chat-send-btn {
+    width: 40px;
+    height: 40px;
+    background: var(--primary-accent-color);
+    border: none;
+    border-radius: 50%;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease;
+}
+
+.pet-chat-send-btn:hover {
+    background: var(--primary-accent-hover-color);
+}
+
+.pet-chat-send-icon {
+    font-size: 16px;
+}
+
+/* 快速操作按钮 */
+.pet-chat-quick-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.pet-quick-btn {
+    background: #f8f9fa;
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-color);
+}
+
+.pet-quick-btn:hover {
+    background: var(--secondary-accent-color);
+    transform: translateY(-1px);
+    color: white;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .pet-chat-dialog {
+        width: 280px;
+        height: 400px;
+    }
+
+    .pet-chat-messages {
+        padding: 12px;
+    }
+
+    .pet-chat-input-area {
+        padding: 12px;
+    }
+
+    .pet-quick-btn {
+        font-size: 11px;
+        padding: 5px 8px;
     }
 }

@@ -1,0 +1,217 @@
+/* 虚拟宠物系统 - 组件样式 */
+
+/* --- 浮动按钮 --- */
+#virtual-pet-button {
+    position: fixed;
+    z-index: 10000; /* Lowered z-index, !important removed */
+    cursor: grab;
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(145deg, var(--pet-accent-primary), var(--pet-accent-primary-hover));
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 24px;
+    box-shadow: var(--pet-shadow),
+                inset 0 2px 4px rgba(255,255,255,0.3),
+                0 0 0 2px rgba(255, 158, 199, 0.2);
+    transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+
+#virtual-pet-button:active,
+#virtual-pet-button.dragging {
+    cursor: grabbing;
+    opacity: 0.8;
+    transform: scale(1.05);
+}
+
+#virtual-pet-button:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.4),
+                inset 0 2px 3px rgba(255,255,255,0.08),
+                0 0 10px var(--pet-accent-primary);
+}
+
+/* --- 通用按钮 --- */
+.pet-button {
+    background-color: var(--pet-accent-primary);
+    color: var(--pet-text-primary);
+    border: none;
+    padding: 12px 20px;
+    border-radius: var(--pet-border-radius-sm);
+    cursor: pointer;
+    font-size: 0.9em;
+    font-weight: 500;
+    transition: background-color 0.2s, transform 0.1s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    justify-content: center;
+    min-width: 120px;
+    user-select: none;
+}
+
+.pet-button:hover {
+    background-color: var(--pet-accent-primary-hover);
+    transform: translateY(-1px);
+}
+
+.pet-button:active {
+    transform: translateY(0);
+}
+
+.pet-button:disabled {
+    background-color: var(--pet-border-color);
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.pet-button.success { background-color: var(--pet-color-success); }
+.pet-button.warning { background-color: var(--pet-color-warning); }
+.pet-button.danger { background-color: var(--pet-color-danger); }
+
+.back-to-main-btn {
+    background-color: var(--pet-border-color);
+}
+.back-to-main-btn:hover {
+    background-color: var(--pet-text-secondary);
+    color: white;
+}
+
+/* --- 状态条 --- */
+.pet-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.stat-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.stat-bar label {
+    min-width: 50px;
+    font-size: 0.9em;
+    color: var(--pet-text-secondary);
+}
+
+.progress-bar {
+    flex-grow: 1;
+    height: 20px;
+    background-color: var(--pet-border-color);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    border-radius: 10px;
+    transition: width 0.3s ease;
+}
+
+.progress-fill.health { background: linear-gradient(90deg, var(--pet-stat-health), #5cbf8a); }
+.progress-fill.happiness { background: linear-gradient(90deg, var(--pet-stat-happiness), #ffc947); }
+.progress-fill.hunger { background: linear-gradient(90deg, var(--pet-stat-hunger), #ff6b6b); }
+.progress-fill.energy { background: linear-gradient(90deg, var(--pet-stat-energy), #8fa4d3); }
+
+.stat-bar span {
+    min-width: 50px;
+    text-align: right;
+    font-size: 0.85em;
+    color: var(--pet-text-secondary);
+}
+
+/* --- 设置输入框 --- */
+.setting-item input[type="text"],
+.setting-item select {
+    background-color: var(--pet-section-bg);
+    color: var(--pet-text-primary);
+    border: 1px solid var(--pet-border-color);
+    padding: 10px 12px;
+    border-radius: var(--pet-border-radius-sm);
+    font-family: var(--pet-font-family);
+    font-size: 0.9em;
+}
+
+.setting-item input[type="text"]:focus,
+.setting-item select:focus {
+    outline: none;
+    border-color: var(--pet-accent-primary);
+    box-shadow: 0 0 0 2px rgba(114, 137, 218, 0.2);
+}
+
+.setting-item input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--pet-accent-primary);
+}
+
+/* --- 对话框 --- */
+#conversation-dialog {
+    background-color: rgba(255, 255, 255, 0.7);
+    border: 1px solid var(--pet-border-color);
+    border-radius: var(--pet-border-radius-md);
+    padding: 12px;
+    margin-bottom: 16px;
+    box-shadow: var(--pet-shadow-light);
+}
+
+#chat-container {
+    height: 150px;
+    overflow-y: auto;
+    border: 1px solid var(--pet-border-color);
+    border-radius: var(--pet-border-radius-md);
+    padding: 10px;
+    background-color: #fff;
+    margin-bottom: 10px;
+}
+
+#input-container {
+    display: flex;
+    gap: 8px;
+}
+
+#user-input {
+    flex-grow: 1;
+    border: 1px solid var(--pet-border-color);
+    border-radius: var(--pet-border-radius-md);
+    padding: 8px;
+    font-family: var(--pet-font-family);
+    resize: none;
+}
+
+#send-button {
+    background-color: var(--pet-accent-primary);
+    color: white;
+    border: none;
+    border-radius: var(--pet-border-radius-md);
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+#send-button:hover {
+    background-color: var(--pet-accent-primary-hover);
+}
+
+/* --- 移动端优化 --- */
+@media (max-width: 767px) {
+    .pet-button {
+        min-width: 80px;
+        padding: 10px 14px;
+        font-size: 0.85em;
+    }
+    #virtual-pet-button {
+        width: 52px;
+        height: 52px;
+        font-size: 26px;
+    }
+}

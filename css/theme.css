@@ -1,0 +1,54 @@
+/* 虚拟宠物系统 - 主题样式 */
+
+:root {
+    /* 糖果色主色调 */
+    --pet-bg-gradient: linear-gradient(135deg, #FFE5F1 0%, #E5F9F0 50%, #E5F4FF 100%);
+    --pet-bg-solid: #FFF8FC;
+    --pet-section-bg: transparent;
+    --pet-text-primary: #2D3748;
+    --pet-text-secondary: #718096;
+    --pet-text-light: #A0AEC0;
+
+    /* 糖果色强调色 */
+    --pet-accent-primary: #FF9EC7;
+    --pet-accent-primary-hover: #FF7FB3;
+    --pet-accent-secondary: #A8E6CF;
+    --pet-accent-tertiary: #87CEEB;
+
+    /* 状态色 */
+    --pet-color-success: #98FB98;
+    --pet-color-warning: #FFD93D;
+    --pet-color-danger: #FF9EC7;
+    --pet-color-info: #87CEEB;
+
+    /* 边框和阴影 */
+    --pet-border-color: #E2E8F0;
+    --pet-border-accent: #FF9EC7;
+    --pet-shadow: 0 8px 16px rgba(255, 158, 199, 0.15);
+    --pet-shadow-light: 0 4px 8px rgba(255, 158, 199, 0.1);
+
+    /* 字体和圆角 */
+    --pet-font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    --pet-border-radius-lg: 12px;
+    --pet-border-radius-md: 8px;
+    --pet-border-radius-sm: 6px;
+
+    /* 状态条颜色 */
+    --pet-stat-health: #FF9EC7;
+    --pet-stat-happiness: #FFD93D;
+    --pet-stat-hunger: #FFB6C1;
+    --pet-stat-energy: #A8E6CF;
+    --pet-stat-exp: #87CEEB;
+
+    /* Firebase 云端备份UI颜色 */
+    --firebase-primary: #4285f4;
+    --firebase-primary-hover: #3367d6;
+    --firebase-success: #34a853;
+    --firebase-success-hover: #2d8f47;
+    --firebase-warning: #fbbc04;
+    --firebase-warning-hover: #f9ab00;
+    --firebase-danger: #ea4335;
+    --firebase-danger-hover: #d33b2c;
+    --firebase-info: #17a2b8;
+    --firebase-info-hover: #138496;
+}

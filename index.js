@@ -5449,6 +5449,19 @@ ${currentPersonality}
                                             <div class="pet-level">Lv.1</div>
                                         </div>
                                         <p>宠物系统正在开发中...</p>
+
+                                        <!-- 简化版导航按钮 -->
+                                        <div class="pet-nav-buttons" style="margin-top: 20px;">
+                                            <button id="open-chat-dialog-btn" class="pet-button" style="background: #FF9EC7; color: white; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; margin: 5px; font-size: 14px;">
+                                                💬 对话
+                                            </button>
+                                            <button id="goto-pet-detail-btn" class="pet-button" style="background: #A8E6CF; color: white; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; margin: 5px; font-size: 14px;">
+                                                📊 详细信息
+                                            </button>
+                                            <button id="goto-settings-btn" class="pet-button" style="background: #87CEEB; color: white; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; margin: 5px; font-size: 14px;">
+                                                ⚙️ 设置
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -14053,3 +14066,82 @@ ${currentPersonality}
     console.log("🐾 虚拟宠物系统脚本已加载完成");
     console.log("🎲 智能初始化系统：首次打开随机化到50以下，后续自然衰减到100");
 });
+
+// 测试对话框功能
+window.testChatDialog = function() {
+    console.log("💬 开始测试对话框功能...");
+
+    // 1. 检查对话框是否存在
+    let chatDialog = $('#pet-chat-dialog');
+    console.log("对话框存在:", chatDialog.length > 0);
+
+    // 2. 如果不存在，创建对话框
+    if (chatDialog.length === 0) {
+        console.log("创建对话框...");
+        createChatDialog();
+        chatDialog = $('#pet-chat-dialog');
+        console.log("对话框创建成功:", chatDialog.length > 0);
+    }
+
+    // 3. 显示对话框
+    console.log("显示对话框...");
+    showChatDialog();
+
+    // 4. 测试添加消息
+    setTimeout(() => {
+        console.log("添加测试消息...");
+        addChatMessage('system', '对话框测试开始！');
+        addChatMessage('user', '你好，我的小宠物！');
+        addChatMessage('pet', '你好主人！我很开心见到你！🐾');
+    }, 500);
+
+    // 5. 测试快速操作
+    setTimeout(() => {
+        console.log("测试快速操作...");
+        handleQuickAction('hug');
+    }, 1500);
+
+    console.log("💬 对话框测试完成！");
+};
+
+// 快速打开对话框
+window.openChat = function() {
+    console.log("💬 快速打开对话框...");
+
+    if ($('#pet-chat-dialog').length === 0) {
+        createChatDialog();
+    }
+    showChatDialog();
+
+    console.log("💬 对话框已打开！");
+};
+
+// 测试对话框按钮是否存在
+window.checkChatButton = function() {
+    console.log("🔍 检查对话按钮...");
+
+    const chatBtn = $('#open-chat-dialog-btn');
+    console.log("对话按钮存在:", chatBtn.length > 0);
+
+    if (chatBtn.length > 0) {
+        console.log("按钮文本:", chatBtn.text());
+        console.log("按钮可见:", chatBtn.is(':visible'));
+        console.log("按钮位置:", chatBtn.offset());
+    }
+
+    // 检查弹窗是否存在
+    const popup = $('#virtual-pet-popup-overlay');
+    console.log("弹窗存在:", popup.length > 0);
+
+    if (popup.length > 0) {
+        console.log("弹窗可见:", popup.is(':visible'));
+        console.log("弹窗内容:", popup.find('#open-chat-dialog-btn').length > 0 ? "包含对话按钮" : "不包含对话按钮");
+    }
+
+    return chatBtn.length > 0;
+};
+
+console.log("💬 对话框测试函数已添加:");
+console.log("   - testChatDialog() // 完整测试对话框功能");
+console.log("   - openChat() // 快速打开对话框");
+console.log("   - checkChatButton() // 检查对话按钮是否存在");

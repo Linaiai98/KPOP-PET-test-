@@ -1,0 +1,299 @@
+/*
+ * 虚拟宠物系统 - 样式表 v2.0
+ *
+ * 组织结构:
+ * 1. 主题变量 (Colors, Fonts, Sizes)
+ * 2. 核心布局 (Overlay, Popup Container)
+ * 3. 通用组件 (Buttons, Forms, Stat Bars)
+ * 4. 特定视图 (Main, Details, Settings)
+ * 5. Firebase UI
+ * 6. 动画和过渡
+ * 7. 响应式设计 (Media Queries)
+ */
+
+/* 1. 主题变量 */
+:root {
+    /* 主色调 */
+    --vpet-bg-gradient: linear-gradient(135deg, #FFE5F1 0%, #E5F9F0 50%, #E5F4FF 100%);
+    --vpet-text-primary: #2D3748;
+    --vpet-text-secondary: #718096;
+    --vpet-accent-primary: #FF9EC7;
+    --vpet-accent-primary-hover: #FF7FB3;
+    --vpet-border-color: #E2E8F0;
+
+    /* 状态色 */
+    --vpet-color-success: #98FB98;
+    --vpet-color-warning: #FFD93D;
+    --vpet-color-danger: #FF6B6B;
+    --vpet-color-info: #87CEEB;
+
+    /* 尺寸和字体 */
+    --vpet-font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    --vpet-border-radius-lg: 16px;
+    --vpet-border-radius-md: 12px;
+    --vpet-border-radius-sm: 8px;
+    --vpet-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+/* 2. 核心布局 */
+#virtual-pet-button {
+    position: fixed;
+    z-index: 10000; /* Reduced z-index, no !important */
+    cursor: grab;
+    width: 50px;
+    height: 50px;
+    background: var(--vpet-accent-primary);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 26px;
+    box-shadow: var(--vpet-shadow);
+    border: 2px solid white;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    user-select: none;
+}
+
+#virtual-pet-button:active,
+#virtual-pet-button.dragging {
+    cursor: grabbing;
+    transform: scale(1.1);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+}
+
+.vpet-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 10001;
+    display: none; /* Managed by JS */
+    align-items: center;
+    justify-content: center;
+    padding: 15px;
+    box-sizing: border-box;
+}
+
+.vpet-popup-container {
+    width: 100%;
+    max-width: 360px;
+    background: var(--vpet-bg-gradient);
+    font-family: var(--vpet-font-family);
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--vpet-border-radius-lg);
+    box-shadow: var(--vpet-shadow);
+    overflow: hidden;
+    animation: vpet-pop-in 0.3s ease-out;
+}
+
+.vpet-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--vpet-border-color);
+    cursor: grab;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.vpet-header:active {
+    cursor: grabbing;
+}
+
+.vpet-title {
+    font-weight: bold;
+    color: var(--vpet-accent-primary);
+    font-size: 1.1em;
+}
+
+.vpet-body {
+    padding: 16px;
+    overflow-y: auto;
+    max-height: 450px;
+}
+
+/* 3. 通用组件 */
+.vpet-section {
+    padding: 16px;
+    border-radius: var(--vpet-border-radius-md);
+    background: rgba(255, 255, 255, 0.5);
+    margin-bottom: 16px;
+}
+.vpet-section:last-child {
+    margin-bottom: 0;
+}
+
+.vpet-button {
+    background-color: var(--vpet-accent-primary);
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: var(--vpet-border-radius-sm);
+    cursor: pointer;
+    font-size: 0.95em;
+    font-weight: 500;
+    transition: background-color 0.2s, transform 0.1s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
+    user-select: none;
+}
+.vpet-button:hover {
+    background-color: var(--vpet-accent-primary-hover);
+    transform: translateY(-2px);
+}
+.vpet-button:active {
+    transform: translateY(0);
+}
+.vpet-button.vpet-button-secondary {
+    background-color: #f0f0f0;
+    color: var(--vpet-text-primary);
+}
+.vpet-button.vpet-button-secondary:hover {
+    background-color: #e0e0e0;
+}
+.vpet-button.vpet-button-success { background-color: var(--vpet-color-success); }
+.vpet-button.vpet-button-danger { background-color: var(--vpet-color-danger); }
+
+.vpet-close-button {
+    background: transparent;
+    border: none;
+    color: var(--vpet-text-secondary);
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 8px;
+}
+
+.vpet-stat-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+.vpet-stat-bar label {
+    min-width: 30px;
+    font-size: 1.2em;
+}
+.vpet-progress-bar {
+    flex-grow: 1;
+    height: 18px;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 9px;
+    overflow: hidden;
+}
+.vpet-progress-fill {
+    height: 100%;
+    border-radius: 9px;
+    transition: width 0.4s ease;
+    background: var(--vpet-accent-primary);
+}
+.vpet-stat-bar span {
+    min-width: 40px;
+    text-align: right;
+    font-size: 0.9em;
+    font-weight: 500;
+    color: var(--vpet-text-secondary);
+}
+
+/* 4. 特定视图 */
+.vpet-avatar { text-align: center; }
+.vpet-emoji { font-size: 4em; margin-bottom: 10px; display: block; }
+.vpet-name { font-size: 1.5em; font-weight: bold; }
+.vpet-level { font-size: 1.1em; color: var(--vpet-accent-primary); }
+
+.vpet-actions, .vpet-nav-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+    justify-content: center;
+}
+
+.vpet-info-grid { display: grid; gap: 8px; }
+.vpet-info-item { display: flex; justify-content: space-between; padding: 8px; background: rgba(255,255,255,0.3); border-radius: var(--vpet-border-radius-sm); }
+
+.vpet-settings-container .vpet-setting-item { margin-bottom: 12px; }
+.vpet-settings-container label { display: block; margin-bottom: 4px; font-weight: 500; }
+.vpet-settings-container input, .vpet-settings-container select {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: var(--vpet-border-radius-sm);
+    border: 1px solid var(--vpet-border-color);
+    box-sizing: border-box;
+}
+
+/* 5. 聊天视图 */
+.vpet-chat-body {
+    display: flex;
+    flex-direction: column;
+    height: 420px; /* 固定高度以允许滚动 */
+}
+.vpet-chat-messages {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: var(--vpet-border-radius-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.vpet-chat-message {
+    padding: 8px 12px;
+    border-radius: 18px;
+    max-width: 80%;
+    line-height: 1.4;
+}
+.vpet-message-pet {
+    background-color: white;
+    color: var(--vpet-text-primary);
+    align-self: flex-start;
+    border-bottom-left-radius: 4px;
+}
+.vpet-message-user {
+    background-color: var(--vpet-accent-primary);
+    color: white;
+    align-self: flex-end;
+    border-bottom-right-radius: 4px;
+}
+.vpet-chat-input-container {
+    display: flex;
+    gap: 10px;
+    padding-top: 16px;
+    border-top: 1px solid var(--vpet-border-color);
+}
+#vpet-chat-input {
+    flex-grow: 1;
+    border: 1px solid var(--vpet-border-color);
+    border-radius: 20px;
+    padding: 8px 14px;
+}
+.typing-indicator span {
+    display: inline-block;
+    animation: vpet-blink 1.4s infinite both;
+}
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+/* 6. 动画 */
+@keyframes vpet-pop-in {
+    from { opacity: 0; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes vpet-blink {
+    0% { opacity: 0.2; }
+    20% { opacity: 1; }
+    100% { opacity: 0.2; }
+}
+
+/* 7. 响应式设计 */
+@media (max-width: 767px) {
+    .vpet-popup-container { max-width: 100%; }
+    .vpet-actions, .vpet-nav-buttons { flex-direction: column; }
+}

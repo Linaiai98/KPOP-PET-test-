@@ -1,262 +1,380 @@
-// 虚拟宠物系统 - v2.1 (Refactored & Fixed)
-// All modules are combined into a single file to ensure compatibility.
+// 虚拟宠物系统 - SillyTavern插件 v2.1 (Refactored & Unified)
+console.log("🐾 虚拟宠物系统脚本开始加载...");
 
 jQuery(async () => {
-    console.log("🐾 虚拟宠物系统脚本开始加载 (v2.1 Fixed)...");
+    console.log("🐾 jQuery ready, 开始初始化...");
 
     // -----------------------------------------------------------------
-    // Module: config.js
+    // 1. 定义常量和状态变量
     // -----------------------------------------------------------------
     const extensionName = "virtual-pet-system";
-    const extensionPath = `extensions/third-party/${extensionName}`;
+    const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
+    
+    // 存储键
+    const STORAGE_KEY_BUTTON_POS = "virtual-pet-button-position";
+    const STORAGE_KEY_ENABLED = "virtual-pet-enabled";
+    const STORAGE_KEY_PET_DATA = "virtual-pet-data";
+    const STORAGE_KEY_CUSTOM_AVATAR = "virtual-pet-custom-avatar";
 
-    const STORAGE_KEYS = {
-        BUTTON_POS: "virtual-pet-button-position",
-        ENABLED: "virtual-pet-enabled",
-        PET_DATA: "virtual-pet-data",
-        CUSTOM_AVATAR: "virtual-pet-custom-avatar",
-        AI_SETTINGS: "virtual-pet-ai-settings",
-        PERSONALITY_TYPE: "virtual-pet-personality-type",
-        CUSTOM_PERSONALITY: "virtual-pet-custom-personality",
-    };
+    // DOM IDs
+    const BUTTON_ID = "virtual-pet-button";
+    const OVERLAY_ID = "virtual-pet-popup-overlay";
+    const POPUP_ID = "virtual-pet-popup";
 
-    const DOM_IDS = {
-        button: "virtual-pet-button",
-        overlay: "virtual-pet-popup-overlay",
-        popup: "virtual-pet-popup",
-        closeButton: "virtual-pet-popup-close-button",
-    };
-
-    const PRESET_PERSONALITIES = {
-        'default': "一只高冷但内心温柔的猫...",
-        'cheerful': "一只活泼可爱的小狗...",
-        // ... other personalities
-    };
-
-    // -----------------------------------------------------------------
-    // Module: pet.js
-    // -----------------------------------------------------------------
+    // 弹窗状态管理
+    let isPopupOpen = false;
     let petData = {};
 
-    function loadPetData() {
-        const defaultData = {
-            name: "小宠物", type: "cat", level: 1, experience: 0, health: 80,
-            happiness: 80, hunger: 80, energy: 80, created: Date.now(), lastUpdateTime: Date.now(),
-        };
-        const savedData = localStorage.getItem(STORAGE_KEYS.PET_DATA);
-        petData = savedData ? { ...defaultData, ...JSON.parse(savedData) } : defaultData;
-        petData.personality = getCurrentPersonality();
-        return petData;
-    }
+    // -----------------------------------------------------------------
+    // 2. 视图管理器 (View Manager)
+    // -----------------------------------------------------------------
+    const viewTemplates = {
+        main: `
+            <div class="vpet-header">
+                <div class="vpet-title">🐾 虚拟宠物</div>
+                <button id="vpet-close-btn" class="vpet-close-button">&times;</button>
+            </div>
+            <div class="vpet-body">
+                <div class="vpet-section" id="vpet-status-container"></div>
+                <div class="vpet-section">
+                    <div class="vpet-actions">
+                        <button id="feed-pet-btn" class="vpet-button vpet-button-success">🍖 喂食</button>
+                        <button id="play-pet-btn" class="vpet-button vpet-button-warning">🎾 玩耍</button>
+                    </div>
+                </div>
+                <div class="vpet-section vpet-nav-buttons">
+                    <button id="goto-pet-detail-btn" class="vpet-button vpet-button-secondary">📊 详细</button>
+                    <button id="goto-chat-btn" class="vpet-button vpet-button-secondary">💬 聊天</button>
+                    <button id="goto-settings-btn" class="vpet-button vpet-button-secondary">⚙️ 设置</button>
+                </div>
+            </div>
+        `,
+        detail: `
+            <div class="vpet-header">
+                <div class="vpet-title">📊 宠物详情</div>
+                <button class="vpet-button vpet-button-secondary back-to-main-btn">&larr; 返回</button>
+            </div>
+            <div class="vpet-body">
+                <div class="vpet-section">
+                    <div class="vpet-info-grid">
+                        <div class="vpet-info-item"><label>名称:</label><span id="detail-pet-name"></span></div>
+                        <div class="vpet-info-item"><label>类型:</label><span id="detail-pet-type"></span></div>
+                        <div class="vpet-info-item"><label>等级:</label><span id="detail-pet-level"></span></div>
+                        <div class="vpet-info-item"><label>经验:</label><span id="detail-pet-exp"></span></div>
+                        <div class="vpet-info-item"><label>创建时间:</label><span id="detail-pet-created"></span></div>
+                    </div>
+                </div>
+            </div>
+        `,
+        settings: `
+            <div class="vpet-header">
+                <div class="vpet-title">⚙️ 设置</div>
+                <button class="vpet-button vpet-button-secondary back-to-main-btn">&larr; 返回</button>
+            </div>
+            <div class="vpet-body">
+                <div class="vpet-section vpet-settings-container">
+                    <div class="vpet-setting-item">
+                        <label for="pet-name-input">宠物名称:</label>
+                        <input type="text" id="pet-name-input" placeholder="输入宠物名称" maxlength="20">
+                    </div>
+                    <div class="vpet-setting-item">
+                        <label for="pet-type-select">宠物类型:</label>
+                        <select id="pet-type-select">
+                            <option value="cat">🐱 猫咪</option>
+                            <option value="dog">🐶 小狗</option>
+                            <option value="dragon">🐉 龙</option>
+                            <option value="rabbit">🐰 兔子</option>
+                            <option value="bird">🐦 小鸟</option>
+                        </select>
+                    </div>
+                    <div class="vpet-actions">
+                        <button id="save-settings-btn" class="vpet-button vpet-button-success">💾 保存</button>
+                        <button id="reset-pet-btn" class="vpet-button vpet-button-danger">🔄 重置</button>
+                    </div>
+                </div>
+            </div>
+        `,
+        chat: `
+            <div class="vpet-header">
+                <div class="vpet-title">与 ${petData.name} 聊天</div>
+                <button class="vpet-button vpet-button-secondary back-to-main-btn">&larr; 返回</button>
+            </div>
+            <div class="vpet-body vpet-chat-body">
+                <div id="vpet-chat-messages" class="vpet-chat-messages">
+                    <div class="vpet-chat-message vpet-message-pet">你好！想和我说什么呀？</div>
+                </div>
+                <div class="vpet-chat-input-container">
+                    <input type="text" id="vpet-chat-input" placeholder="输入消息...">
+                    <button id="vpet-chat-send-btn" class="vpet-button">发送</button>
+                </div>
+            </div>
+        `
+    };
 
-    function savePetData() {
-        localStorage.setItem(STORAGE_KEYS.PET_DATA, JSON.stringify(petData));
-    }
+    const UIManager = {
+        switchView(viewName) {
+            const popup = $(`#${POPUP_ID}`);
+            if (popup.length && viewTemplates[viewName]) {
+                popup.html(viewTemplates[viewName]);
+                this.bindViewEvents(viewName);
+            }
+        },
+        bindViewEvents(viewName) {
+            $(`#${POPUP_ID} .back-to-main-btn`).on('click', () => this.switchView('main'));
+            $(`#${POPUP_ID} #vpet-close-btn`).on('click', () => togglePopup(false));
 
-    function updatePetData(updates) {
-        petData = { ...petData, ...updates };
-        savePetData();
-        document.dispatchEvent(new CustomEvent('petDataUpdated', { detail: petData }));
-    }
+            switch (viewName) {
+                case 'main':
+                    renderPetStatus();
+                    $('#feed-pet-btn').on('click', feedPet);
+                    $('#play-pet-btn').on('click', playWithPet);
+                    $('#goto-pet-detail-btn').on('click', () => this.switchView('detail'));
+                    $('#goto-chat-btn').on('click', () => this.switchView('chat'));
+                    $('#goto-settings-btn').on('click', () => this.switchView('settings'));
+                    break;
+                case 'detail':
+                    $('#detail-pet-name').text(petData.name);
+                    $('#detail-pet-type').text(petData.type);
+                    $('#detail-pet-level').text(petData.level);
+                    $('#detail-pet-exp').text(`${petData.experience} / ${petData.level * 100}`);
+                    $('#detail-pet-created').text(new Date(petData.created).toLocaleString());
+                    break;
+                case 'settings':
+                    $('#pet-name-input').val(petData.name);
+                    $('#pet-type-select').val(petData.type);
+                    $('#save-settings-btn').on('click', saveSettings);
+                    $('#reset-pet-btn').on('click', resetPet);
+                    break;
+                case 'chat':
+                    $('#vpet-chat-send-btn').on('click', handleSendMessage);
+                    $('#vpet-chat-input').on('keypress', (e) => {
+                        if (e.which === 13) handleSendMessage();
+                    });
+                    break;
+            }
+        }
+    };
+
+    // -----------------------------------------------------------------
+    // 3. 核心功能函数
+    // -----------------------------------------------------------------
     
-    function resetPetData() {
-        const created = Date.now();
-        petData = {
-            ...petData, name: "小宠物", level: 1, experience: 0, health: 100,
-            happiness: 100, hunger: 100, energy: 100, created: created, lastUpdateTime: created,
-        };
-        savePetData();
-        document.dispatchEvent(new CustomEvent('petDataUpdated', { detail: petData }));
+    let chatHistory = [];
+
+    async function callAI(userInput) {
+        // This is a placeholder for the actual AI call.
+        // It uses the existing SillyTavern API if available.
+        if (typeof SillyTavern.send === 'function') {
+            try {
+                const personality = localStorage.getItem('virtual-pet-custom-personality') || "你是一只可爱的虚拟宠物。";
+                const prompt = `${personality}\n\n用户: ${userInput}\n${petData.name}:`;
+                
+                // We can't directly get a return value from SillyTavern's send,
+                // so for this example, we'll simulate a response.
+                // In a real implementation, this would need to listen for the response.
+                console.log("Sending prompt to AI:", prompt);
+                
+                // Simulate AI response
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                return `${petData.name}听到了你说的话！`;
+
+            } catch (error) {
+                console.error("AI call failed:", error);
+                return "我好像有点累了，听不清你说什么...";
+            }
+        } else {
+            // Fallback for when not in SillyTavern or API is not available
+            await new Promise(resolve => setTimeout(resolve, 500));
+            return "喵~ (AI功能未连接)";
+        }
+    }
+
+    function addMessageToChatbox(sender, message) {
+        const messageClass = sender === 'user' ? 'vpet-message-user' : 'vpet-message-pet';
+        const chatbox = $('#vpet-chat-messages');
+        chatbox.append(`<div class="vpet-chat-message ${messageClass}">${message}</div>`);
+        chatbox.scrollTop(chatbox[0].scrollHeight);
+    }
+
+    async function handleSendMessage() {
+        const input = $('#vpet-chat-input');
+        const userInput = input.val().trim();
+        if (!userInput) return;
+
+        addMessageToChatbox('user', userInput);
+        input.val('');
+        
+        // Add typing indicator
+        const typingIndicator = $('<div class="vpet-chat-message vpet-message-pet typing-indicator"><span>.</span><span>.</span><span>.</span></div>');
+        $('#vpet-chat-messages').append(typingIndicator);
+        $('#vpet-chat-messages').scrollTop($('#vpet-chat-messages')[0].scrollHeight);
+
+        const aiResponse = await callAI(userInput);
+        
+        // Remove typing indicator
+        typingIndicator.remove();
+
+        addMessageToChatbox('pet', aiResponse);
+    }
+
+    function loadAISettings() {
+        const settings = localStorage.getItem('virtual-pet-ai-settings');
+        return settings ? JSON.parse(settings) : {};
     }
 
     function getCurrentPersonality() {
-        const selectedType = localStorage.getItem(STORAGE_KEYS.PERSONALITY_TYPE) || 'default';
-        if (selectedType === 'custom') {
-            return localStorage.getItem(STORAGE_KEYS.CUSTOM_PERSONALITY) || "一个可爱的虚拟宠物。";
+        const type = localStorage.getItem('virtual-pet-personality-type') || 'default';
+        if (type === 'custom') {
+            return localStorage.getItem('virtual-pet-custom-personality') || '一只可爱的虚拟宠物';
         }
-        return PRESET_PERSONALITIES[selectedType] || PRESET_PERSONALITIES.default;
+        // Simplified PRESET_PERSONALITIES for this example
+        const personalities = { 'default': '一只高冷的猫' };
+        return personalities[type];
     }
 
-
-    // -----------------------------------------------------------------
-    // Module: settings.js
-    // -----------------------------------------------------------------
-    let settings = {};
-    
-    function loadSettings() {
-        const pet = { name: petData.name, type: petData.type };
-        const ai = localStorage.getItem(STORAGE_KEYS.AI_SETTINGS) ? JSON.parse(localStorage.getItem(STORAGE_KEYS.AI_SETTINGS)) : {};
-        settings = { pet, ai };
-        return settings;
-    }
-
-    function savePetSettings(petConfig) {
-        settings.pet = { ...settings.pet, ...petConfig };
-        updatePetData({ name: settings.pet.name, type: settings.pet.type });
-    }
-
-
-    // -----------------------------------------------------------------
-    // Module: ui.js
-    // -----------------------------------------------------------------
-    let popupContainer = null;
-
-    async function loadTemplate(viewName) {
-        // CRITICAL FIX: Use the correct full path for fetching templates.
-        const response = await fetch(`${extensionPath}/templates/${viewName}.html`);
-        if (!response.ok) throw new Error(`Failed to load template: ${viewName}`);
-        return response.text();
-    }
-
-    async function switchView(viewName) {
-        if (!popupContainer) popupContainer = document.getElementById(DOM_IDS.popup);
-        try {
-            popupContainer.innerHTML = await loadTemplate(viewName);
-            document.dispatchEvent(new CustomEvent('viewChanged', { detail: { viewName } }));
-        } catch (error) {
-            console.error(error);
-            popupContainer.innerHTML = `<p>Error loading view: ${viewName}. ${error.message}</p>`;
-        }
+    function savePetData() {
+        localStorage.setItem(STORAGE_KEY_PET_DATA, JSON.stringify(petData));
+        renderPetStatus(); // Always re-render on data change
     }
 
     function renderPetStatus() {
-        const container = document.getElementById('pet-status-container');
-        if (!container) return;
+        if (!isPopupOpen) return;
+        const container = $('#vpet-status-container');
+        if (!container.length) return;
+
         const EMOJIS = { cat: '🐱', dog: '🐶', dragon: '🐉', rabbit: '🐰', bird: '🐦' };
-        container.innerHTML = `
-            <div class="pet-avatar"><span class="pet-emoji">${EMOJIS[petData.type] || '🐾'}</span>
-                <div class="pet-name">${petData.name}</div><div class="pet-level">Lv. ${petData.level}</div></div>
-            <div class="pet-stats">
+        container.html(`
+            <div class="vpet-avatar">
+                <span class="vpet-emoji">${EMOJIS[petData.type] || '🐾'}</span>
+                <div class="vpet-name">${petData.name}</div>
+                <div class="vpet-level">Lv. ${petData.level}</div>
+            </div>
+            <div class="vpet-stats">
                 ${createStatBar('health', '❤️', petData.health)}
                 ${createStatBar('happiness', '😊', petData.happiness)}
                 ${createStatBar('hunger', '🍖', petData.hunger)}
                 ${createStatBar('energy', '⚡️', petData.energy)}
-            </div>`;
+            </div>
+        `);
     }
 
     function createStatBar(id, label, value) {
-        return `<div class="stat-bar"><label>${label}</label><div class="progress-bar"><div class="progress-fill ${id}" style="width: ${value}%;"></div></div><span>${value}%</span></div>`;
+        return `<div class="vpet-stat-bar"><label>${label}</label><div class="vpet-progress-bar"><div class="vpet-progress-fill" style="width: ${value}%;"></div></div><span>${value}%</span></div>`;
+    }
+
+    function feedPet() {
+        petData.hunger = Math.min(100, petData.hunger + 15);
+        petData.happiness = Math.min(100, petData.happiness + 5);
+        savePetData();
+        toastr.success(`${petData.name} 吃得很开心！`);
+    }
+
+    function playWithPet() {
+        petData.happiness = Math.min(100, petData.happiness + 15);
+        petData.energy = Math.max(0, petData.energy - 10);
+        savePetData();
+        toastr.info(`你和 ${petData.name} 一起玩耍。`);
+    }
+    
+    function saveSettings() {
+        petData.name = $('#pet-name-input').val();
+        petData.type = $('#pet-type-select').val();
+        savePetData();
+        toastr.success('设置已���存!');
+        UIManager.switchView('main');
+    }
+
+    function resetPet() {
+        if (confirm('确定要重置你的宠物吗？此操作不可撤销！')) {
+            localStorage.removeItem(STORAGE_KEY_PET_DATA);
+            loadPetData();
+            savePetData();
+            toastr.success('宠物已重置!');
+            UIManager.switchView('main');
+        }
     }
 
     function togglePopup(show) {
-        const overlay = document.getElementById(DOM_IDS.overlay);
-        if (overlay) {
-            overlay.style.display = show ? 'flex' : 'none';
-            if (show) switchView('main-view');
+        const overlay = $(`#${OVERLAY_ID}`);
+        isPopupOpen = show;
+        if (show) {
+            overlay.fadeIn(200);
+            UIManager.switchView('main');
+        } else {
+            overlay.fadeOut(200);
         }
     }
 
     function makeDraggable(element) {
         let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-        element.onmousedown = e => {
+        element.on('mousedown', function(e) {
             e.preventDefault();
-            pos3 = e.clientX; pos4 = e.clientY;
-            document.onmouseup = () => {
-                document.onmouseup = null; document.onmousemove = null;
-                element.classList.remove('dragging');
-                localStorage.setItem(STORAGE_KEYS.BUTTON_POS, JSON.stringify({top: element.style.top, left: element.style.left}));
-            };
-            document.onmousemove = ev => {
-                ev.preventDefault();
-                pos1 = pos3 - ev.clientX; pos2 = pos4 - ev.clientY;
-                pos3 = ev.clientX; pos4 = ev.clientY;
-                let newTop = Math.max(0, Math.min(element.offsetTop - pos2, window.innerHeight - element.offsetHeight));
-                let newLeft = Math.max(0, Math.min(element.offsetLeft - pos1, window.innerWidth - element.offsetWidth));
-                element.style.top = newTop + "px"; element.style.left = newLeft + "px";
-            };
-            element.classList.add('dragging');
-        };
+            pos3 = e.clientX;
+            pos4 = e.clientY;
+            $(document).on('mouseup', closeDragElement);
+            $(document).on('mousemove', elementDrag);
+            $(this).addClass('dragging');
+        });
+
+        function elementDrag(e) {
+            e.preventDefault();
+            pos1 = pos3 - e.clientX;
+            pos2 = pos4 - e.clientY;
+            pos3 = e.clientX;
+            pos4 = e.clientY;
+            let newTop = Math.max(0, Math.min(element.offset().top - pos2, window.innerHeight - element.outerHeight()));
+            let newLeft = Math.max(0, Math.min(element.offset().left - pos1, window.innerWidth - element.outerWidth()));
+            element.css({ top: newTop + 'px', left: newLeft + 'px' });
+        }
+
+        function closeDragElement() {
+            $(document).off('mouseup', closeDragElement);
+            $(document).off('mousemove', elementDrag);
+            element.removeClass('dragging');
+            localStorage.setItem(STORAGE_KEY_BUTTON_POS, JSON.stringify({ top: element.css('top'), left: element.css('left') }));
+        }
     }
 
     // -----------------------------------------------------------------
-    // Module: main.js (as an initializer class)
+    // 4. 初始化
     // -----------------------------------------------------------------
-    class VirtualPetSystem {
-        constructor() {
-            this.isPopupOpen = false;
-            this.floatingButton = null;
+    function init() {
+        // 加载数据
+        loadPetData();
+
+        // 注入HTML
+        $('body').append(`<div id="${OVERLAY_ID}" class="vpet-overlay"><div id="${POPUP_ID}" class="vpet-popup-container"></div></div>`);
+        $('body').append(`<div id="${BUTTON_ID}">🐾</div>`);
+        
+        const floatingButton = $(`#${BUTTON_ID}`);
+        
+        // 恢复按钮位置
+        const savedPos = localStorage.getItem(STORAGE_KEY_BUTTON_POS);
+        if (savedPos) {
+            floatingButton.css(JSON.parse(savedPos));
+        } else {
+            floatingButton.css({ top: '200px', left: '20px' });
         }
 
-        init() {
-            console.log("🚀 Initializing Virtual Pet System...");
-            loadPetData();
-            loadSettings();
-            this.createFloatingButton();
-            this.createPopup();
-            this.bindCoreEvents();
-            this.startPetUpdateLoop();
-            console.log("✅ Virtual Pet System Initialized");
-        }
+        // 绑定事件
+        makeDraggable(floatingButton);
+        floatingButton.on('click', (e) => {
+            // 防止拖动结束时触发点击
+            if ($(e.currentTarget).is('.dragging')) return;
+            togglePopup(!isPopupOpen);
+        });
 
-        createFloatingButton() {
-            this.floatingButton = document.createElement('div');
-            this.floatingButton.id = DOM_IDS.button;
-            this.floatingButton.innerHTML = '🐾';
-            document.body.appendChild(this.floatingButton);
-            const savedPos = localStorage.getItem(STORAGE_KEYS.BUTTON_POS);
-            if (savedPos) Object.assign(this.floatingButton.style, JSON.parse(savedPos));
-            else Object.assign(this.floatingButton.style, { top: '200px', left: '20px' });
-            makeDraggable(this.floatingButton);
-        }
-
-        createPopup() {
-            const overlay = document.createElement('div');
-            overlay.id = DOM_IDS.overlay;
-            overlay.className = 'virtual-pet-popup-overlay';
-            overlay.innerHTML = `<div id="${DOM_IDS.popup}" class="pet-popup-container"></div>`;
-            document.body.appendChild(overlay);
-        }
-
-        bindCoreEvents() {
-            this.floatingButton.addEventListener('click', () => {
-                this.isPopupOpen = !this.isPopupOpen;
-                togglePopup(this.isPopupOpen);
-            });
-            document.addEventListener('viewChanged', e => this.bindViewEvents(e.detail.viewName));
-            document.addEventListener('petDataUpdated', () => this.isPopupOpen && renderPetStatus());
-        }
-
-        bindViewEvents(viewName) {
-            const closeButton = document.getElementById(DOM_IDS.closeButton);
-            if (closeButton) closeButton.onclick = () => { this.isPopupOpen = false; togglePopup(false); };
-            document.querySelectorAll('.back-to-main-btn').forEach(btn => btn.onclick = () => switchView('main-view'));
-
-            if (viewName === 'main-view') {
-                renderPetStatus();
-                document.getElementById('feed-pet-btn').onclick = () => updatePetData({ hunger: Math.min(100, petData.hunger + 15) });
-                document.getElementById('play-pet-btn').onclick = () => updatePetData({ happiness: Math.min(100, petData.happiness + 15) });
-                document.getElementById('goto-settings-btn').onclick = () => switchView('settings-view');
-                document.getElementById('goto-pet-detail-btn').onclick = () => switchView('detail-view');
-            } else if (viewName === 'settings-view') {
-                const nameInput = document.getElementById('pet-name-input');
-                const typeSelect = document.getElementById('pet-type-select');
-                nameInput.value = settings.pet.name;
-                typeSelect.value = settings.pet.type;
-                document.getElementById('save-settings-btn').onclick = () => {
-                    savePetSettings({ name: nameInput.value, type: typeSelect.value });
-                    alert('Settings Saved!');
-                };
-                document.getElementById('reset-pet-btn').onclick = () => {
-                    if (confirm('Are you sure?')) resetPetData();
-                };
+        // 启动状态衰减循环
+        setInterval(() => {
+            const diffSeconds = (Date.now() - petData.lastUpdateTime) / 1000;
+            if (diffSeconds > 300) { // 5分钟
+                petData.hunger = Math.max(0, petData.hunger - 2);
+                petData.happiness = Math.max(0, petData.happiness - 1);
+                petData.lastUpdateTime = Date.now();
+                savePetData();
             }
-        }
-
-        startPetUpdateLoop() {
-            setInterval(() => {
-                const diffSeconds = (Date.now() - petData.lastUpdateTime) / 1000;
-                if (diffSeconds > 60) {
-                    updatePetData({
-                        hunger: Math.max(0, petData.hunger - 1),
-                        happiness: Math.max(0, petData.happiness - 1),
-                        lastUpdateTime: Date.now(),
-                    });
-                }
-            }, 60000);
-        }
+        }, 60000); // 每分钟检查一次
     }
 
-    // Start the system
-    const app = new VirtualPetSystem();
-    app.init();
+    init();
 });

@@ -3825,30 +3825,54 @@ ${currentPersonality}
     function initializeChatInterface() {
         console.log(`[${extensionName}] 初始化聊天界面...`);
 
+        // 检查聊天视图是否存在
+        const chatViewElement = $('#pet-chat-view');
+        console.log(`[${extensionName}] 聊天视图元素存在: ${chatViewElement.length > 0}`);
+
+        // 检查聊天容器是否存在
+        const chatContainer = $('#chat-messages-container');
+        console.log(`[${extensionName}] 聊天容器元素存在: ${chatContainer.length > 0}`);
+
         // 检查API配置
         const config = getAIConfiguration();
+        console.log(`[${extensionName}] API配置状态: ${config.isConfigured ? '已配置' : '未配置'}`);
 
         if (!config.isConfigured) {
+            console.log(`[${extensionName}] 显示配置提示...`);
             // 显示配置提示在聊天界面内
             showChatConfigurationHint();
         } else {
+            console.log(`[${extensionName}] 显示正常聊天界面...`);
             // 配置完整，显示正常聊天界面
             showNormalChatInterface();
         }
 
+        console.log(`[${extensionName}] 绑定聊天事件...`);
         // 绑定聊天相关事件（总是绑定）
         bindChatEvents();
 
         chatInitialized = true;
+        console.log(`[${extensionName}] 聊天界面初始化完成`);
     }
 
     /**
      * 显示聊天配置提示
      */
     function showChatConfigurationHint() {
+        console.log(`[${extensionName}] 开始显示聊天配置提示...`);
+
         // 清空聊天容器
         const container = $('#chat-messages-container');
+        console.log(`[${extensionName}] 聊天容器查找结果: ${container.length > 0 ? '找到' : '未找到'}`);
+
+        if (container.length === 0) {
+            console.error(`[${extensionName}] 错误: 找不到聊天消息容器 #chat-messages-container`);
+            return;
+        }
+
         container.empty();
+        console.log(`[${extensionName}] 聊天容器已清空`);
+
 
         // 添加配置提示
         const configHint = `
@@ -3889,15 +3913,28 @@ ${currentPersonality}
         `;
 
         container.html(configHint);
+        console.log(`[${extensionName}] 配置提示HTML已添加`);
 
         // 绑定去配置按钮事件
-        $('#goto-settings-from-chat-view').on('click', function() {
+        const configButton = $('#goto-settings-from-chat-view');
+        console.log(`[${extensionName}] 配置按钮查找结果: ${configButton.length > 0 ? '找到' : '未找到'}`);
+
+        configButton.on('click', function() {
+            console.log(`[${extensionName}] 配置按钮被点击，跳转到设置视图`);
             showSettingsView();
         });
 
         // 禁用聊天输入
-        $('#chat-input').prop('disabled', true).attr('placeholder', '请先配置AI API...');
-        $('#send-chat-btn').prop('disabled', true);
+        const chatInput = $('#chat-input');
+        const sendButton = $('#send-chat-btn');
+
+        console.log(`[${extensionName}] 聊天输入框查找结果: ${chatInput.length > 0 ? '找到' : '未找到'}`);
+        console.log(`[${extensionName}] 发送按钮查找结果: ${sendButton.length > 0 ? '找到' : '未找到'}`);
+
+        chatInput.prop('disabled', true).attr('placeholder', '请先配置AI API...');
+        sendButton.prop('disabled', true);
+
+        console.log(`[${extensionName}] 聊天配置提示显示完成`);
     }
 
     /**

@@ -14963,6 +14963,46 @@ ${currentPersonality}
         toastr.info('随机化标记已重置', '', { timeOut: 2000 });
     };
 
-    console.log("🐾 虚拟宠物系统脚本已加载完成");
-    console.log("🎲 智能初始化系统：首次打开随机化到50以下，后续自然衰减到100");
+    /**
+     * 插件主初始化函数
+     */
+    async function init() {
+        console.log(`[${extensionName}] 🚀 主初始化流程开始...`);
+
+        // 确保旧版数据被清理
+        cleanupOldCharacterData();
+
+        // 1. 加载本地数据
+        loadPetData();
+        loadCustomAvatar();
+        loadAISettings(); // 加载AI设置
+
+        // 2. 创建UI元素
+        createFloatingButton();
+        createPopup(); // 这会创建所有视图
+
+        // 3. 渲染和绑定事件
+        renderPetStatus();
+        bindUIEvents();
+        bindFirebaseEvents(); // 绑定Firebase事件
+        bindChatEvents(); // 绑定聊天事件
+
+        // 4. 启动核心循环
+        startPetLifeCycle();
+
+        // 5. 更新UI状态
+        updateChatButtonVisibility();
+        updateFloatingButtonAvatar();
+
+        // 6. 检查并应用开关状态
+        const isEnabled = localStorage.getItem(STORAGE_KEY_ENABLED) !== 'false';
+        $(TOGGLE_ID).prop('checked', isEnabled);
+        togglePlugin(isEnabled);
+
+
+        console.log(`[${extensionName}] ✅ 主初始化完成!`);
+    }
+
+    // 启动插件
+    init();
 });

@@ -11738,6 +11738,23 @@ ${currentPersonality}
                     </button>
                 </div>
 
+                <!-- 聊天视图 (隐藏) -->
+                <div id="pet-chat-view" class="pet-view" style="display: none;">
+                    <div class="pet-section">
+                        <h3>💬 与 <span id="chat-pet-name"></span> 聊天</h3>
+                        <div id="chat-messages-container" class="chat-messages-container">
+                            <!-- 聊天消息会通过JavaScript动态添加到这里 -->
+                        </div>
+                        <div class="chat-input-container">
+                            <textarea id="chat-user-input" placeholder="说点什么..." rows="3"></textarea>
+                            <button id="chat-send-btn" class="pet-button">发送</button>
+                        </div>
+                        <div class="pet-nav-buttons">
+                            <button class="pet-button back-to-main-btn">← 返回</button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 底部信息 -->
                 <div class="pet-info-section" style="
                     text-align: center !important;
@@ -12038,6 +12055,23 @@ ${currentPersonality}
                         <span style="font-size: 1.1em !important;">⚙️</span>
                         <span>设置</span>
                     </button>
+                </div>
+
+                <!-- 聊天视图 (隐藏) -->
+                <div id="pet-chat-view" class="pet-view" style="display: none;">
+                    <div class="pet-section">
+                        <h3>💬 与 <span id="chat-pet-name"></span> 聊天</h3>
+                        <div id="chat-messages-container" class="chat-messages-container">
+                            <!-- 聊天消息会通过JavaScript动态添加到这里 -->
+                        </div>
+                        <div class="chat-input-container">
+                            <textarea id="chat-user-input" placeholder="说点什么..." rows="3"></textarea>
+                            <button id="chat-send-btn" class="pet-button">发送</button>
+                        </div>
+                        <div class="pet-nav-buttons">
+                            <button class="pet-button back-to-main-btn">← 返回</button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- 底部信息 -->

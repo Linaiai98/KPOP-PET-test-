@@ -3764,27 +3764,19 @@ ${currentPersonality}
     /**
      * 切换到指定视图
      */
-    function switchView(viewToShow) {
-        console.log(`[${extensionName}] 切换视图，目标视图:`, viewToShow);
-        console.log(`[${extensionName}] 视图变量状态:`, {
-            mainView: mainView ? mainView.length : 'undefined',
-            petView: petView ? petView.length : 'undefined',
-            settingsView: settingsView ? settingsView.length : 'undefined',
-            chatView: chatView ? chatView.length : 'undefined'
-        });
-
-        // 隐藏所有视图
-        if (mainView) mainView.hide();
-        if (petView) petView.hide();
-        if (settingsView) settingsView.hide();
-        if (chatView) chatView.hide();
+    function switchView(viewIdToShow) {
+        console.log(`[${extensionName}] 切换视图，目标视图: #${viewIdToShow}`);
+        
+        // 隐藏所有 .pet-view 元素
+        $('.pet-view').hide();
 
         // 显示目标视图
-        if (viewToShow && viewToShow.length > 0) {
-            viewToShow.show();
-            console.log(`[${extensionName}] 目标视图已显示`);
+        const $view = $(`#${viewIdToShow}`);
+        if ($view.length > 0) {
+            $view.show();
+            console.log(`[${extensionName}] 视图 #${viewIdToShow} 已显示`);
         } else {
-            console.error(`[${extensionName}] 错误: 目标视图不存在或为空`);
+            console.error(`[${extensionName}] 错误: 视图 #${viewIdToShow} 不存在`);
         }
     }
     
@@ -3792,7 +3784,7 @@ ${currentPersonality}
      * 显示主视图
      */
     function showMainView() {
-        switchView(mainView);
+        switchView('pet-main-view');
         renderPetStatus();
     }
     
@@ -3800,7 +3792,7 @@ ${currentPersonality}
      * 显示宠物详情视图
      */
     function showPetView() {
-        switchView(petView);
+        switchView('pet-detail-view');
         renderPetDetails();
     }
     
@@ -3808,7 +3800,7 @@ ${currentPersonality}
      * 显示设置视图
      */
     function showSettingsView() {
-        switchView(settingsView);
+        switchView('pet-settings-view');
         renderSettings();
     }
 
@@ -3817,10 +3809,8 @@ ${currentPersonality}
      */
     function showChatView() {
         console.log(`[${extensionName}] 开始显示聊天视图...`);
-        console.log(`[${extensionName}] chatView 变量:`, chatView);
-
         try {
-            switchView(chatView);
+            switchView('pet-chat-view');
             console.log(`[${extensionName}] switchView 执行完成`);
 
             initializeChatInterface();

@@ -3984,6 +3984,17 @@ ${currentPersonality}
     }
 
     /**
+     * 构建聊天Prompt
+     * @param {string} userInput - 用户的输入
+     * @returns {string} - 构建好的Prompt
+     */
+    function buildChatPrompt(userInput) {
+        const currentPersonality = getCurrentPersonality();
+        const prompt = `你是${petData.name}，你的设定是：${currentPersonality}。用户对你说了：“${userInput}”。请根据你的设定，用简短、可爱、自然的语言回复。`;
+        return prompt;
+    }
+
+    /**
      * 处理发送消息
      */
     async function handleSendMessage() {
@@ -3995,14 +4006,11 @@ ${currentPersonality}
         // 检查API配置
         const config = getAIConfiguration();
         if (!config.isConfigured) {
-            // 如果未配置API，显示提示
-            addMessageToChat('user', message);
-            addMessageToChat('pet', '抱歉，我还不能和你聊天。请先配置AI API，然后重新进入聊天界面。点击上方的"⚙️ 去配置"按钮进行设置。');
-            input.val('');
+            addMessageToChat('pet', '抱歉，我还不能和你聊天。请先在设置中配置AI API。');
             return;
         }
 
-        // 清空输入框
+        // 清空输入框并禁用发送按钮
         input.val('');
         $('#send-chat-btn').prop('disabled', true);
 
@@ -4011,12 +4019,15 @@ ${currentPersonality}
 
         // 设置AI响应状态
         isAIResponding = true;
+        addMessageToChat('pet', '...'); // Typing indicator
 
         try {
-            // 调用AI API获取回复
-            const aiResponse = await getAIResponse(message);
+            // 构建prompt并调用AI
+            const prompt = buildChatPrompt(message);
+            const aiResponse = await callAIAPI(prompt);
 
-            // 添加AI回复到界面
+            // 移除"..."加载提示并添加AI回复
+            $('.chat-message.pet-message').last().remove();
             addMessageToChat('pet', aiResponse);
 
             // 保存聊天历史
@@ -4024,10 +4035,13 @@ ${currentPersonality}
 
         } catch (error) {
             console.error(`[${extensionName}] AI回复失败:`, error);
+            // 移除"..."加载提示并添加错误消息
+            $('.chat-message.pet-message').last().remove();
             addMessageToChat('pet', '抱歉，我现在无法回复。请检查AI配置是否正确。');
         } finally {
             isAIResponding = false;
-            $('#send-chat-btn').prop('disabled', false);
+            // 根据输入框内容决定是否启用发送按钮
+            $('#send-chat-btn').prop('disabled', input.val().trim().length === 0);
         }
     }
 
@@ -4035,14 +4049,19 @@ ${currentPersonality}
      * 添加消息到聊天界面
      */
     function addMessageToChat(sender, message) {
-        const timestamp = new Date().toLocaleTimeString();
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const isUser = sender === 'user';
+
+        // 如果是AI的加载提示"..."，使用特殊样式
+        const messageContent = message === '...' ?
+            '<div class="typing-indicator"><span></span><span></span><span></span></div>' :
+            escapeHtml(message);
 
         const messageHtml = `
             <div class="chat-message ${isUser ? 'user-message' : 'pet-message'}">
-                <div class="message-avatar">${isUser ? '👤' : '🐾'}</div>
+                <div class="message-avatar">${isUser ? '👤' : getPetEmoji()}</div>
                 <div class="message-content">
-                    <div class="message-text">${escapeHtml(message)}</div>
+                    <div class="message-text">${messageContent}</div>
                     <div class="message-timestamp">${timestamp}</div>
                 </div>
             </div>
@@ -4054,37 +4073,19 @@ ${currentPersonality}
         // 滚动到底部
         container.scrollTop(container[0].scrollHeight);
 
-        // 添加到聊天历史
-        chatHistory.push({
-            sender: sender,
-            message: message,
-            timestamp: Date.now()
-        });
+        // 仅在不是加载提示时保存历史记录
+        if (message !== '...') {
+            chatHistory.push({
+                sender: sender,
+                message: message,
+                timestamp: Date.now()
+            });
 
-        // 限制历史记录长度
-        if (chatHistory.length > 50) {
-            chatHistory = chatHistory.slice(-50);
+            // 限制历史记录长度
+            if (chatHistory.length > 50) {
+                chatHistory = chatHistory.slice(-50);
+            }
         }
-    }
-
-    /**
-     * 获取AI回复
-     */
-    async function getAIResponse(userMessage) {
-        // 获取AI配置
-        const aiConfig = getAIConfiguration();
-
-        if (!aiConfig.isConfigured) {
-            throw new Error('AI配置不完整');
-        }
-
-        // 构建消息历史
-        const messages = buildChatMessages(userMessage);
-
-        // 调用AI API
-        const response = await callAIAPI(aiConfig, messages);
-
-        return response;
     }
 
     /**
@@ -4093,91 +4094,21 @@ ${currentPersonality}
     function getAIConfiguration() {
         // 从扩展设置中获取AI配置
         try {
-            const settings = localStorage.getItem(`${extensionName}-ai-settings`);
+            const settings = JSON.parse(localStorage.getItem(`${extensionName}-ai-settings`));
             if (settings) {
-                const parsed = JSON.parse(settings);
                 return {
-                    type: parsed.apiType || '',
-                    url: parsed.apiUrl || '',
-                    key: parsed.apiKey || '',
-                    model: parsed.apiModel || '',
-                    isConfigured: parsed.apiType && parsed.apiUrl && parsed.apiKey
+                    type: settings.apiType || '',
+                    url: settings.apiUrl || '',
+                    key: settings.apiKey || '',
+                    model: settings.apiModel || '',
+                    isConfigured: settings.apiType && settings.apiUrl && settings.apiKey
                 };
             }
         } catch (error) {
             console.error(`[${extensionName}] 获取AI配置失败:`, error);
         }
 
-        return {
-            type: '',
-            url: '',
-            key: '',
-            model: '',
-            isConfigured: false
-        };
-    }
-
-    /**
-     * 构建聊天消息
-     */
-    function buildChatMessages(userMessage) {
-        const petPersonality = localStorage.getItem('virtual-pet-personality') || '';
-        const petName = petData.name || '小宠物';
-
-        // 系统提示词
-        const systemPrompt = petPersonality ||
-            `你是一只名叫${petName}的虚拟宠物。你很可爱、友善，喜欢和主人聊天。请用简短、可爱的语言回复，不要太长。`;
-
-        const messages = [
-            { role: 'system', content: systemPrompt }
-        ];
-
-        // 添加最近的聊天历史（最多10条）
-        const recentHistory = chatHistory.slice(-10);
-        recentHistory.forEach(item => {
-            messages.push({
-                role: item.sender === 'user' ? 'user' : 'assistant',
-                content: item.message
-            });
-        });
-
-        // 添加当前用户消息
-        messages.push({ role: 'user', content: userMessage });
-
-        return messages;
-    }
-
-    /**
-     * 调用AI API
-     */
-    async function callAIAPI(config, messages) {
-        const requestBody = {
-            model: config.model || 'gpt-3.5-turbo',
-            messages: messages,
-            max_tokens: 150,
-            temperature: 0.7
-        };
-
-        const response = await fetch(config.url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${config.key}`
-            },
-            body: JSON.stringify(requestBody)
-        });
-
-        if (!response.ok) {
-            throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
-        }
-
-        const data = await response.json();
-
-        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-            throw new Error('API返回格式错误');
-        }
-
-        return data.choices[0].message.content.trim();
+        return { isConfigured: false };
     }
 
     /**
@@ -4189,17 +4120,18 @@ ${currentPersonality}
             if (saved) {
                 chatHistory = JSON.parse(saved);
 
-                // 渲染历史消息
+                // 渲���历史消息
                 const container = $('#chat-messages-container');
+                // 清空除了欢迎消息之外的所有消息
                 container.find('.chat-message').not('.chat-welcome-message .chat-message').remove();
 
                 chatHistory.forEach(item => {
-                    const timestamp = new Date(item.timestamp).toLocaleTimeString();
+                    const timestamp = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                     const isUser = item.sender === 'user';
 
                     const messageHtml = `
                         <div class="chat-message ${isUser ? 'user-message' : 'pet-message'}">
-                            <div class="message-avatar">${isUser ? '👤' : '🐾'}</div>
+                            <div class="message-avatar">${isUser ? '👤' : getPetEmoji()}</div>
                             <div class="message-content">
                                 <div class="message-text">${escapeHtml(item.message)}</div>
                                 <div class="message-timestamp">${timestamp}</div>
@@ -4234,6 +4166,7 @@ ${currentPersonality}
      * 转义HTML字符
      */
     function escapeHtml(text) {
+        if (typeof text !== 'string') return '';
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;

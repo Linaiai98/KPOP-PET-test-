@@ -3765,14 +3765,27 @@ ${currentPersonality}
      * 切换到指定视图
      */
     function switchView(viewToShow) {
+        console.log(`[${extensionName}] 切换视图，目标视图:`, viewToShow);
+        console.log(`[${extensionName}] 视图变量状态:`, {
+            mainView: mainView ? mainView.length : 'undefined',
+            petView: petView ? petView.length : 'undefined',
+            settingsView: settingsView ? settingsView.length : 'undefined',
+            chatView: chatView ? chatView.length : 'undefined'
+        });
+
         // 隐藏所有视图
-        mainView.hide();
-        petView.hide();
-        settingsView.hide();
-        chatView.hide();
+        if (mainView) mainView.hide();
+        if (petView) petView.hide();
+        if (settingsView) settingsView.hide();
+        if (chatView) chatView.hide();
 
         // 显示目标视图
-        viewToShow.show();
+        if (viewToShow && viewToShow.length > 0) {
+            viewToShow.show();
+            console.log(`[${extensionName}] 目标视图已显示`);
+        } else {
+            console.error(`[${extensionName}] 错误: 目标视图不存在或为空`);
+        }
     }
     
     /**
@@ -3803,8 +3816,18 @@ ${currentPersonality}
      * 显示聊天视图
      */
     function showChatView() {
-        switchView(chatView);
-        initializeChatInterface();
+        console.log(`[${extensionName}] 开始显示聊天视图...`);
+        console.log(`[${extensionName}] chatView 变量:`, chatView);
+
+        try {
+            switchView(chatView);
+            console.log(`[${extensionName}] switchView 执行完成`);
+
+            initializeChatInterface();
+            console.log(`[${extensionName}] initializeChatInterface 执行完成`);
+        } catch (error) {
+            console.error(`[${extensionName}] showChatView 执行失败:`, error);
+        }
     }
 
     /**
@@ -12111,7 +12134,26 @@ ${currentPersonality}
         $container.find(".chat-btn").on("click touchend", function(e) {
             e.preventDefault();
             console.log("💬 与宠物聊天");
-            handleChatButtonClick();
+            console.log(`[${extensionName}] 聊天按钮被点击，开始处理...`);
+            try {
+                handleChatButtonClick();
+                console.log(`[${extensionName}] handleChatButtonClick 执行完成`);
+            } catch (error) {
+                console.error(`[${extensionName}] handleChatButtonClick 执行失败:`, error);
+            }
+        });
+
+        // 聊天按钮
+        $container.find(".chat-btn").on("click touchend", function(e) {
+            e.preventDefault();
+            console.log("💬 与宠物聊天");
+            console.log(`[${extensionName}] 聊天按钮被点击，开始处理...`);
+            try {
+                handleChatButtonClick();
+                console.log(`[${extensionName}] handleChatButtonClick 执行完成`);
+            } catch (error) {
+                console.error(`[${extensionName}] handleChatButtonClick 执行失败:`, error);
+            }
         });
 
         // 设置按钮
@@ -12126,6 +12168,17 @@ ${currentPersonality}
             e.preventDefault();
             editPetName();
         });
+
+        // 验证聊天按钮是否正确绑定
+        const chatButtons = $container.find(".chat-btn");
+        console.log(`[${extensionName}] 聊天按钮绑定验证: 找到 ${chatButtons.length} 个聊天按钮`);
+
+        if (chatButtons.length > 0) {
+            chatButtons.each(function(index) {
+                const events = $._data(this, 'events');
+                console.log(`[${extensionName}] 聊天按钮 ${index + 1} 事件:`, events ? Object.keys(events) : '无事件');
+            });
+        }
 
         console.log(`[${extensionName}] Unified UI events bound successfully`);
     }

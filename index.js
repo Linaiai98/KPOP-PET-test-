@@ -3807,14 +3807,14 @@ ${currentPersonality}
     // showChatView函数已被移除，现在使用openChatModal()替代
 
     /**
-     * 测试聊天模态弹窗功能
+     * 测试聊天模态弹窗功能 - 更新为商店风格版本
      */
     window.testChatModal = function() {
-        console.log(`[${extensionName}] 🧪 测试聊天模态弹窗功能...`);
+        console.log(`[${extensionName}] 🧪 测试新版聊天模态弹窗功能...`);
 
         try {
             // 测试打开聊天模态弹窗
-            console.log(`[${extensionName}] 1. 测试打开聊天模态弹窗...`);
+            console.log(`[${extensionName}] 1. 测试打开商店风格聊天模态弹窗...`);
             openChatModal();
 
             // 检查模态弹窗是否创建成功
@@ -3824,6 +3824,7 @@ ${currentPersonality}
                 const input = $('#chat-modal-input');
                 const sendBtn = $('#chat-modal-send-btn');
                 const messages = $('#chat-modal-messages');
+                const closeBtn = $('#chat-modal-close-btn');
 
                 console.log(`[${extensionName}] 2. 检查DOM元素...`);
                 console.log(`   - 模态弹窗遮罩: ${modal.length > 0 ? '✅' : '❌'}`);
@@ -3831,23 +3832,43 @@ ${currentPersonality}
                 console.log(`   - 输入框: ${input.length > 0 ? '✅' : '❌'}`);
                 console.log(`   - 发送按钮: ${sendBtn.length > 0 ? '✅' : '❌'}`);
                 console.log(`   - 消息容器: ${messages.length > 0 ? '✅' : '❌'}`);
+                console.log(`   - 关闭按钮: ${closeBtn.length > 0 ? '✅' : '❌'}`);
+
+                // 检查样式应用
+                console.log(`[${extensionName}] 3. 检查商店风格样式...`);
+                const modalBg = modal.css('background-color');
+                const containerBg = container.css('background');
+                console.log(`   - 遮罩背景: ${modalBg.includes('rgba') ? '✅' : '❌'}`);
+                console.log(`   - 容器渐变: ${containerBg.includes('gradient') || containerBg.includes('linear') ? '✅' : '❌'}`);
+                console.log(`   - z-index: ${modal.css('z-index') === '1000001' ? '✅' : '❌'}`);
 
                 // 检查API配置
                 const config = getAIConfiguration();
-                console.log(`[${extensionName}] 3. 检查API配置...`);
+                console.log(`[${extensionName}] 4. 检查API配置...`);
                 console.log(`   - API类型: ${config.type || '未配置'}`);
                 console.log(`   - API URL: ${config.url || '未配置'}`);
                 console.log(`   - API密钥: ${config.key ? '已配置' : '未配置'}`);
                 console.log(`   - 配置完整: ${config.isConfigured ? '✅' : '❌'}`);
 
-                // 测试输入框聚焦
+                // 测试交互功能
+                console.log(`[${extensionName}] 5. 测试交互功能...`);
                 if (input.length > 0) {
                     input.focus();
-                    console.log(`[${extensionName}] 4. 输入框聚焦测试: ✅`);
+                    console.log(`   - 输入框聚焦: ✅`);
                 }
 
-                console.log(`[${extensionName}] 🎉 聊天模态弹窗测试完成！`);
+                // 测试添加消息功能
+                console.log(`[${extensionName}] 6. 测试消息添加功能...`);
+                addMessageToChat('user', '这是一条测试消息');
+                addMessageToChat('pet', '这是宠物的回复消息');
+
+                const messageCount = messages.children().length;
+                console.log(`   - 消息数量: ${messageCount} (应该 >= 3，包括欢迎消息)`);
+
+                console.log(`[${extensionName}] 🎉 新版聊天模态弹窗测试完成！`);
                 console.log(`[${extensionName}] 💡 提示: 现在可以尝试在聊天框中输入消息进行测试`);
+                console.log(`[${extensionName}] 🎨 新特性: 商店风格的渐变背景和内联样式`);
+                console.log(`[${extensionName}] 🔧 测试关闭: 点击关闭按钮或外部区域关闭弹窗`);
 
             }, 100);
 
@@ -4139,89 +4160,394 @@ ${currentPersonality}
     }
 
     /**
-     * 添加消息到聊天窗口
+     * 添加消息到聊天窗口 - 适配新的商店风格模态弹窗
      * @param {string} sender 'user' 或 'pet'
      * @param {string} message 消息内容
      */
     function addMessageToChat(sender, message) {
         const container = $('#chat-modal-messages');
-        if (container.length === 0) return;
+        if (container.length === 0) {
+            console.log(`[${extensionName}] 聊天消息容器不存在，无法添加消息`);
+            return;
+        }
+
+        // 检测移动端 - 学习商店的响应式设计
+        const isMobile = window.innerWidth <= 767;
+        const isSmallMobile = window.innerWidth <= 480;
 
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const isUser = sender === 'user';
         const avatar = isUser ? '👤' : getPetEmoji();
 
+        // 响应式尺寸参数
+        const avatarSize = isSmallMobile ? '32px' : isMobile ? '36px' : '40px';
+        const avatarFontSize = isSmallMobile ? '16px' : isMobile ? '18px' : '20px';
+        const messagePadding = isSmallMobile ? '8px 12px' : isMobile ? '10px 14px' : '12px 16px';
+        const messageBorderRadius = isSmallMobile ? '14px' : isMobile ? '16px' : '18px';
+        const messageMaxWidth = isSmallMobile ? '85%' : isMobile ? '80%' : '70%';
+        const messageFontSize = isMobile ? '0.9em' : '1em';
+
+        // 处理打字指示器
         const messageContent = message === '...'
-            ? '<div class="typing-indicator"><span></span><span></span><span></span></div>'
+            ? `<div style="
+                display: flex !important;
+                align-items: center !important;
+                gap: 4px !important;
+                padding: 8px 0 !important;
+            ">
+                <span style="
+                    width: 8px !important;
+                    height: 8px !important;
+                    background: #A0AEC0 !important;
+                    border-radius: 50% !important;
+                    animation: typingBounce 1.4s infinite ease-in-out !important;
+                    animation-delay: 0s !important;
+                "></span>
+                <span style="
+                    width: 8px !important;
+                    height: 8px !important;
+                    background: #A0AEC0 !important;
+                    border-radius: 50% !important;
+                    animation: typingBounce 1.4s infinite ease-in-out !important;
+                    animation-delay: 0.2s !important;
+                "></span>
+                <span style="
+                    width: 8px !important;
+                    height: 8px !important;
+                    background: #A0AEC0 !important;
+                    border-radius: 50% !important;
+                    animation: typingBounce 1.4s infinite ease-in-out !important;
+                    animation-delay: 0.4s !important;
+                "></span>
+            </div>`
             : escapeHtml(message);
 
+        // 学习商店风格的消息HTML结构
         const messageHtml = `
-            <div class="chat-message ${isUser ? 'user-message' : 'pet-message'}">
-                <div class="message-avatar">${avatar}</div>
-                <div class="message-content">
-                    <div class="message-text">${messageContent}</div>
-                    <div class="message-timestamp">${timestamp}</div>
+            <div style="
+                display: flex !important;
+                gap: 12px !important;
+                align-items: flex-start !important;
+                ${isUser ? 'flex-direction: row-reverse !important;' : ''}
+                animation: messageSlideIn 0.3s ease-out !important;
+            ">
+                <div style="
+                    width: ${avatarSize} !important;
+                    height: ${avatarSize} !important;
+                    border-radius: 50% !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    font-size: ${avatarFontSize} !important;
+                    background: linear-gradient(145deg, ${isUser ? '#FF9EC7, #FF7FB3' : '#A8E6CF, #87CEEB'}) !important;
+                    border: 2px solid white !important;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+                    flex-shrink: 0 !important;
+                ">${avatar}</div>
+                <div style="
+                    max-width: ${messageMaxWidth} !important;
+                    background: ${isUser ? 'linear-gradient(135deg, #87CEEB, #A8E6CF)' : 'white'} !important;
+                    border-radius: ${messageBorderRadius} !important;
+                    padding: ${messagePadding} !important;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+                    border: 1px solid ${isUser ? 'rgba(135,206,235,0.3)' : 'rgba(168,230,207,0.3)'} !important;
+                    color: ${isUser ? 'white' : '#2D3748'} !important;
+                    position: relative !important;
+                ">
+                    <div style="
+                        margin: 0 !important;
+                        line-height: 1.4 !important;
+                        word-wrap: break-word !important;
+                        font-size: ${messageFontSize} !important;
+                    ">${messageContent}</div>
+                    ${message !== '...' ? `<div style="
+                        font-size: 0.75em !important;
+                        color: ${isUser ? 'rgba(255, 255, 255, 0.8)' : '#A0AEC0'} !important;
+                        margin-top: 4px !important;
+                        text-align: right !important;
+                    ">${timestamp}</div>` : ''}
                 </div>
             </div>
         `;
 
         container.append(messageHtml);
+
+        // 滚动到底部
         container.scrollTop(container[0].scrollHeight);
 
+        // 保存聊天历史（不保存打字指示器）
         if (message !== '...') {
             chatHistory.push({ sender, message, timestamp: Date.now() });
             if (chatHistory.length > 50) chatHistory.shift();
         }
+
+        console.log(`[${extensionName}] 已添加${isUser ? '用户' : '宠物'}消息: ${message.substring(0, 20)}...`);
     }
 
     /**
-     * 打开独立的聊天模态弹窗
+     * 打开独立的聊天模态弹窗 - 学习商店设计模式
      */
     function openChatModal() {
+        console.log(`[${extensionName}] 打开聊天模态弹窗...`);
+
         // 确保只有一个聊天弹窗
         $('#chat-modal-overlay').remove();
 
-        const modalHtml = `
-            <div id="chat-modal-overlay" class="chat-modal-overlay">
-                <div id="chat-modal-container" class="chat-modal-container">
-                    <div class="chat-modal-header">
-                        <h3>与 ${escapeHtml(petData.name)} 聊天</h3>
-                        <button id="chat-modal-close-btn" class="chat-modal-close-btn">&times;</button>
+        // 检测移动端 - 学习商店的响应式设计
+        const isMobile = window.innerWidth <= 767;
+        const isSmallMobile = window.innerWidth <= 480;
+
+        // 根据屏幕尺寸调整样式参数
+        const overlayPadding = isSmallMobile ? '5px' : isMobile ? '10px' : '20px';
+        const containerMaxWidth = isMobile ? '100%' : '500px';
+        const containerHeight = isSmallMobile ? 'calc(100vh - 20px)' : isMobile ? 'calc(100vh - 40px)' : '600px';
+        const containerMaxHeight = isSmallMobile ? 'calc(100vh - 20px)' : isMobile ? 'calc(100vh - 40px)' : '80vh';
+        const borderRadius = isSmallMobile ? '8px' : isMobile ? '12px' : '15px';
+        const headerPadding = isMobile ? '12px 16px' : '16px 20px';
+        const messagesPadding = isSmallMobile ? '12px' : isMobile ? '16px' : '20px';
+        const inputAreaPadding = isSmallMobile ? '10px 12px' : isMobile ? '12px 16px' : '16px 20px';
+
+        // 学习商店模态弹窗的设计，使用内联样式确保优先级
+        const chatModal = $(`
+            <div id="chat-modal-overlay" style="
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100vw !important;
+                height: 100vh !important;
+                background-color: rgba(0, 0, 0, 0.8) !important;
+                z-index: 1000001 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                padding: ${overlayPadding} !important;
+                box-sizing: border-box !important;
+            ">
+                <div id="chat-modal-container" style="
+                    background: linear-gradient(135deg, #FF9EC7 0%, #A8E6CF 50%, #87CEEB 100%) !important;
+                    border-radius: ${borderRadius} !important;
+                    padding: 0 !important;
+                    max-width: ${containerMaxWidth} !important;
+                    width: 100% !important;
+                    height: ${containerHeight} !important;
+                    max-height: ${containerMaxHeight} !important;
+                    overflow: hidden !important;
+                    color: white !important;
+                    box-shadow: 0 20px 40px rgba(0,0,0,0.3) !important;
+                    display: flex !important;
+                    flex-direction: column !important;
+                ">
+                    <!-- 标题栏 -->
+                    <div style="
+                        padding: ${headerPadding} !important;
+                        background: linear-gradient(145deg, rgba(255,158,199,0.9), rgba(255,158,199,0.7)) !important;
+                        display: flex !important;
+                        justify-content: space-between !important;
+                        align-items: center !important;
+                        border-bottom: 1px solid rgba(255,255,255,0.2) !important;
+                    ">
+                        <h3 style="
+                            margin: 0 !important;
+                            color: white !important;
+                            font-size: 1.2em !important;
+                            font-weight: 600 !important;
+                        ">💬 与 ${escapeHtml(petData.name)} 聊天</h3>
+                        <button id="chat-modal-close-btn" style="
+                            background: transparent !important;
+                            border: none !important;
+                            color: white !important;
+                            font-size: 24px !important;
+                            font-weight: bold !important;
+                            cursor: pointer !important;
+                            padding: 4px 8px !important;
+                            border-radius: 4px !important;
+                            min-width: 32px !important;
+                            height: 32px !important;
+                            display: flex !important;
+                            align-items: center !important;
+                            justify-content: center !important;
+                            transition: all 0.2s ease !important;
+                        ">&times;</button>
                     </div>
-                    <div id="chat-modal-messages" class="chat-modal-messages">
+
+                    <!-- 消息区域 -->
+                    <div id="chat-modal-messages" style="
+                        flex: 1 !important;
+                        padding: ${messagesPadding} !important;
+                        overflow-y: auto !important;
+                        background: linear-gradient(135deg, rgba(248,249,255,0.9) 0%, rgba(255,248,252,0.9) 50%, rgba(240,248,255,0.9) 100%) !important;
+                        display: flex !important;
+                        flex-direction: column !important;
+                        gap: ${isMobile ? '12px' : '16px'} !important;
+                    ">
                         <!-- 欢迎消息 -->
-                        <div class="chat-message pet-message">
-                            <div class="message-avatar">${getPetEmoji()}</div>
-                            <div class="message-content">
-                                <div class="message-text">你好！有什么想对我说的吗？</div>
+                        <div style="
+                            display: flex !important;
+                            gap: 12px !important;
+                            align-items: flex-start !important;
+                        ">
+                            <div style="
+                                width: 40px !important;
+                                height: 40px !important;
+                                border-radius: 50% !important;
+                                display: flex !important;
+                                align-items: center !important;
+                                justify-content: center !important;
+                                font-size: 20px !important;
+                                background: linear-gradient(145deg, #A8E6CF, #87CEEB) !important;
+                                border: 2px solid white !important;
+                                box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+                                flex-shrink: 0 !important;
+                            ">${getPetEmoji()}</div>
+                            <div style="
+                                max-width: 70% !important;
+                                background: white !important;
+                                border-radius: 18px !important;
+                                padding: 12px 16px !important;
+                                box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+                                border: 1px solid rgba(168,230,207,0.3) !important;
+                                color: #2D3748 !important;
+                            ">
+                                <div style="margin: 0 !important; line-height: 1.4 !important; word-wrap: break-word !important;">
+                                    你好！有什么想对我说的吗？
+                                </div>
                             </div>
                         </div>
                     </div>
-                    <div class="chat-modal-input-area">
-                        <input type="text" id="chat-modal-input" placeholder="输入消息..." maxlength="500">
-                        <button id="chat-modal-send-btn" class="pet-button success">发送</button>
+
+                    <!-- 输入区域 -->
+                    <div style="
+                        padding: ${inputAreaPadding} !important;
+                        background: rgba(255,255,255,0.9) !important;
+                        border-top: 1px solid rgba(255,255,255,0.2) !important;
+                        display: flex !important;
+                        gap: ${isMobile ? '10px' : '12px'} !important;
+                        align-items: center !important;
+                        box-shadow: 0 -2px 8px rgba(0,0,0,0.05) !important;
+                    ">
+                        <input type="text" id="chat-modal-input" placeholder="输入消息..." maxlength="500" style="
+                            flex: 1 !important;
+                            padding: ${isSmallMobile ? '8px 12px' : isMobile ? '10px 14px' : '12px 16px'} !important;
+                            border: 1px solid rgba(255,158,199,0.3) !important;
+                            border-radius: ${isSmallMobile ? '18px' : isMobile ? '20px' : '25px'} !important;
+                            font-size: ${isMobile ? '16px' : '0.9em'} !important;
+                            background: white !important;
+                            color: #2D3748 !important;
+                            outline: none !important;
+                            transition: all 0.3s ease !important;
+                        ">
+                        <button id="chat-modal-send-btn" style="
+                            padding: ${isSmallMobile ? '8px 14px' : isMobile ? '10px 16px' : '12px 20px'} !important;
+                            background: linear-gradient(145deg, #FF9EC7, #FF7FB3) !important;
+                            color: white !important;
+                            border: none !important;
+                            border-radius: ${isSmallMobile ? '18px' : isMobile ? '20px' : '25px'} !important;
+                            font-size: ${isSmallMobile ? '0.8em' : isMobile ? '0.85em' : '0.9em'} !important;
+                            font-weight: 600 !important;
+                            cursor: pointer !important;
+                            min-width: ${isSmallMobile ? '60px' : isMobile ? '70px' : '80px'} !important;
+                            display: flex !important;
+                            align-items: center !important;
+                            justify-content: center !important;
+                            gap: 6px !important;
+                            transition: all 0.2s ease !important;
+                        ">发送</button>
                     </div>
                 </div>
             </div>
-        `;
+        `);
 
-        $('body').append(modalHtml);
-        loadChatHistory(); // 加载历史记录到新窗口
+        $('body').append(chatModal);
 
-        // 绑定事件
-        $('#chat-modal-close-btn, #chat-modal-overlay').on('click', function(e) {
+        // 加载历史记录
+        loadChatHistory();
+
+        // 绑定事件 - 学习商店的事件绑定方式
+        // 关闭按钮事件
+        $('#chat-modal-close-btn').on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            closeChatModal();
+        });
+
+        // 点击外部关闭 - 学习商店的实现
+        chatModal.on('click', function(e) {
             if (e.target === this) {
-                $('#chat-modal-overlay').remove();
+                closeChatModal();
             }
         });
+
+        // 阻止内容区域点击冒泡
         $('#chat-modal-container').on('click', e => e.stopPropagation());
+
+        // 发送按钮事件
         $('#chat-modal-send-btn').on('click', handleSendMessage);
+
+        // 输入框回车事件
         $('#chat-modal-input').on('keypress', function(e) {
             if (e.which === 13 && !e.shiftKey) {
                 e.preventDefault();
                 handleSendMessage();
             }
         });
+
+        // 输入框聚焦和样式
+        $('#chat-modal-input').on('focus', function() {
+            $(this).css({
+                'border-color': '#FF9EC7',
+                'box-shadow': '0 0 0 3px rgba(255, 158, 199, 0.2)'
+            });
+        }).on('blur', function() {
+            $(this).css({
+                'border-color': 'rgba(255,158,199,0.3)',
+                'box-shadow': 'none'
+            });
+        });
+
+        // 发送按钮悬停效果
+        $('#chat-modal-send-btn').on('mouseenter', function() {
+            if (!$(this).prop('disabled')) {
+                $(this).css({
+                    'background': 'linear-gradient(145deg, #FF7FB3, #FF6BA3)',
+                    'transform': 'translateY(-1px)',
+                    'box-shadow': '0 4px 12px rgba(255, 158, 199, 0.4)'
+                });
+            }
+        }).on('mouseleave', function() {
+            $(this).css({
+                'background': 'linear-gradient(145deg, #FF9EC7, #FF7FB3)',
+                'transform': 'translateY(0)',
+                'box-shadow': 'none'
+            });
+        });
+
+        // 关闭按钮悬停效果
+        $('#chat-modal-close-btn').on('mouseenter', function() {
+            $(this).css({
+                'background': 'rgba(255, 255, 255, 0.2)',
+                'transform': 'scale(1.1)'
+            });
+        }).on('mouseleave', function() {
+            $(this).css({
+                'background': 'transparent',
+                'transform': 'scale(1)'
+            });
+        });
+
+        // 聚焦到输入框
+        setTimeout(() => {
+            $('#chat-modal-input').focus();
+        }, 100);
+
+        console.log(`[${extensionName}] 聊天模态弹窗已打开`);
+    }
+
+    /**
+     * 关闭聊天模态弹窗 - 学习商店的关闭方式
+     */
+    function closeChatModal() {
+        console.log(`[${extensionName}] 关闭聊天模态弹窗`);
+        $('#chat-modal-overlay').remove();
     }
 
     /**

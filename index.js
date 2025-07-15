@@ -2081,9 +2081,15 @@ jQuery(async () => {
      */
     async function callCustomAPI(prompt, settings, timeout = 30000) {
         console.log(`[${extensionName}] 调用自定义API: ${settings.apiType}，超时时间: ${timeout}ms`);
+        const relayBaseUrl = 'http://154.12.38.33:3000/relay';
 
-        // 智能构建请求URL - 用户只需填写到/v1，自动添加端点
-        let apiUrl = settings.apiUrl;
+        // 智能构建请求URL
+        let originalApiUrl = settings.apiUrl;
+        
+        // ���用查询参数模式通过中继服务器转发
+        const targetUrl = encodeURIComponent(originalApiUrl);
+        let apiUrl = `${relayBaseUrl}?target=${targetUrl}`;
+        console.log(`📡 (callCustomAPI) 正在通过中继发送请求: ${apiUrl}`);
 
         // 移除末尾斜杠
         apiUrl = apiUrl.replace(/\/+$/, '');
@@ -13247,20 +13253,89 @@ ${currentPersonality}
     };
 
     /**
+     * 带重试机制的fetch函数，用于处理网络连接问题
+     * @param {string} url - 请求URL
+     * @param {object} options - fetch选项
+     * @param {number} maxRetries - 最大重试次数
+     * @returns {Promise<Response>} fetch响应
+     */
+    async function fetchWithRetry(url, options = {}, maxRetries = 2) {
+        let lastError;
+
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                if (attempt > 0) {
+                    console.log(`🔄 重试第 ${attempt} 次: ${url}`);
+                    // 重试前等待一段时间，避免立即重试
+                    await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+                }
+
+                const response = await fetch(url, options);
+                return response;
+
+            } catch (error) {
+                lastError = error;
+
+                // 检查是否是网络连接问题
+                if (error.message.includes('Failed to fetch') ||
+                    error.message.includes('ERR_CONNECTION_RESET') ||
+                    error.message.includes('ERR_NETWORK') ||
+                    error.message.includes('ERR_INTERNET_DISCONNECTED')) {
+
+                    console.log(`🌐 网络连接问题 (尝试 ${attempt + 1}/${maxRetries + 1}): ${error.message}`);
+
+                    if (attempt < maxRetries) {
+                        continue; // 继续重试
+                    }
+                } else {
+                    // 非网络问题，直接抛出错误
+                    throw error;
+                }
+            }
+        }
+
+        // 所有重试都失败了
+        throw lastError;
+    }
+
+    /**
+     * 检测网络连接状态
+     * @returns {Promise<boolean>} 是否有网络连接
+     */
+    async function checkNetworkConnection() {
+        try {
+            // 尝试访问一个可靠的测试端点
+            const response = await fetch('https://httpbin.org/get', {
+                method: 'GET',
+                signal: AbortSignal.timeout(3000)
+            });
+            return response.ok;
+        } catch (error) {
+            console.log(`🌐 网络连接检测失败: ${error.message}`);
+            return false;
+        }
+    }
+
+    /**
      * 通用第三方API模型获取器 - 支持任意第三方API
      */
     window.getThirdPartyModels = async function() {
         console.log("🌐 通用第三方API模型获取器启动...");
 
-        const apiUrl = $('#ai-url-input').val();
+        const originalApiUrl = $('#ai-url-input').val();
         const apiKey = $('#ai-key-input').val();
+        const relayBaseUrl = 'http://154.12.38.33:3000/relay';
 
-        if (!apiUrl) {
+        if (!originalApiUrl) {
             console.log("❌ 请先配置API URL");
             return [];
         }
 
-        console.log(`🔗 API URL: ${apiUrl}`);
+        // 使用查询参数模式通过中继服务器转发
+        const targetUrl = encodeURIComponent(originalApiUrl);
+        let-api-url-with-proxy = `${relayBaseUrl}?target=${targetUrl}`;
+        
+        console.log(`📡 正在通过中继探测API: ${let-api-url-with-proxy}`);
         console.log(`🔑 API Key: ${apiKey ? '已设置' : '未设置'}`);
 
         // 智能检测API服务类型
@@ -13378,11 +13453,12 @@ ${currentPersonality}
                 try {
                     console.log(`🔍 测试: ${endpoint} (${authMethod.name})`);
 
-                    const response = await fetch(endpoint, {
+                    // 添加网络连接检测和重试机制
+                    const response = await fetchWithRetry(endpoint, {
                         method: 'GET',
                         headers: authMethod.headers,
                         signal: AbortSignal.timeout(8000) // 8秒超时
-                    });
+                    }, 2); // 最多重试2次
 
                     if (response.ok) {
                         const data = await response.json();

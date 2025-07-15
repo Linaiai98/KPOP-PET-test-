@@ -3804,28 +3804,73 @@ ${currentPersonality}
         renderSettings();
     }
 
-    /**
-     * 显示聊天视图
-     */
-    function showChatView() {
-        console.log(`[${extensionName}] 开始显示聊天视图...`);
-        try {
-            switchView('pet-chat-view');
-            console.log(`[${extensionName}] switchView 执行完成`);
+    // showChatView函数已被移除，现在使用openChatModal()替代
 
-            initializeChatInterface();
-            console.log(`[${extensionName}] initializeChatInterface 执行完成`);
+    /**
+     * 测试聊天模态弹窗功能
+     */
+    window.testChatModal = function() {
+        console.log(`[${extensionName}] 🧪 测试聊天模态弹窗功能...`);
+
+        try {
+            // 测试打开聊天模态弹窗
+            console.log(`[${extensionName}] 1. 测试打开聊天模态弹窗...`);
+            openChatModal();
+
+            // 检查模态弹窗是否创建成功
+            setTimeout(() => {
+                const modal = $('#chat-modal-overlay');
+                const container = $('#chat-modal-container');
+                const input = $('#chat-modal-input');
+                const sendBtn = $('#chat-modal-send-btn');
+                const messages = $('#chat-modal-messages');
+
+                console.log(`[${extensionName}] 2. 检查DOM元素...`);
+                console.log(`   - 模态弹窗遮罩: ${modal.length > 0 ? '✅' : '❌'}`);
+                console.log(`   - 弹窗容器: ${container.length > 0 ? '✅' : '❌'}`);
+                console.log(`   - 输入框: ${input.length > 0 ? '✅' : '❌'}`);
+                console.log(`   - 发送按钮: ${sendBtn.length > 0 ? '✅' : '❌'}`);
+                console.log(`   - 消息容器: ${messages.length > 0 ? '✅' : '❌'}`);
+
+                // 检查API配置
+                const config = getAIConfiguration();
+                console.log(`[${extensionName}] 3. 检查API配置...`);
+                console.log(`   - API类型: ${config.type || '未配置'}`);
+                console.log(`   - API URL: ${config.url || '未配置'}`);
+                console.log(`   - API密钥: ${config.key ? '已配置' : '未配置'}`);
+                console.log(`   - 配置完整: ${config.isConfigured ? '✅' : '❌'}`);
+
+                // 测试输入框聚焦
+                if (input.length > 0) {
+                    input.focus();
+                    console.log(`[${extensionName}] 4. 输入框聚焦测试: ✅`);
+                }
+
+                console.log(`[${extensionName}] 🎉 聊天模态弹窗测试完成！`);
+                console.log(`[${extensionName}] 💡 提示: 现在可以尝试在聊天框中输入消息进行测试`);
+
+            }, 100);
+
         } catch (error) {
-            console.error(`[${extensionName}] showChatView 执行失败:`, error);
+            console.error(`[${extensionName}] ❌ 聊天模态弹窗测试失败:`, error);
         }
-    }
+    };
 
     /**
      * 处理聊天按钮点击
      */
     function handleChatButtonClick() {
-        // 直接显示聊天界面，在界面内处理配置检查
-        showChatView();
+        console.log(`[${extensionName}] 聊天按钮被点击，打开聊天模态弹窗`);
+
+        // 检查API配置
+        const config = getAIConfiguration();
+        if (!config.isConfigured) {
+            toastr.warning('请先在扩展设置中配置AI API信息（类型、URL和密钥）', '聊天功能需要配置', { timeOut: 5000 });
+            return;
+        }
+
+        // 打开独立的聊天模态弹窗
+        openChatModal();
     }
     
     // -----------------------------------------------------------------
@@ -3995,71 +4040,124 @@ ${currentPersonality}
     }
 
     /**
-     * 处理发送消息
+     * 构建与宠物聊天的Prompt
+     * @param {string} userInput 用户的输入消息
+     * @returns {string} 构建好的、用于API请求的Prompt
+     */
+    function buildChatPrompt(userInput) {
+        const personality = getCurrentPersonality();
+        // 优化后的Prompt，更清晰地定义了角色和任务，避免AI混淆
+        const prompt = `你是一只名叫“${petData.name}”的虚拟宠物。你的性格设定是：“${personality}”。现在，你的主人对你说了：“${userInput}”。请严格按照你的性格设定，以宠物的身份和口吻，给主人一个简短、可爱、自然的回复。`;
+        console.log(`[buildChatPrompt] Generated prompt: ${prompt}`);
+        return prompt;
+    }
+
+    /**
+     * 处理发送聊天消息
      */
     async function handleSendMessage() {
-        const input = $('#chat-input');
+        console.log(`[${extensionName}] handleSendMessage 被调用`);
+
+        const input = $('#chat-modal-input');
+        const sendBtn = $('#chat-modal-send-btn');
         const message = input.val().trim();
 
-        if (!message || isAIResponding) return;
-
-        // 检查API配置
-        const config = getAIConfiguration();
-        if (!config.isConfigured) {
-            addMessageToChat('pet', '抱歉，我还不能和你聊天。请先在设置中配置AI API。');
+        // 验证输入
+        if (!message) {
+            console.log(`[${extensionName}] 消息为空，忽略发送`);
             return;
         }
 
+        if (isAIResponding) {
+            console.log(`[${extensionName}] AI正在响应中，忽略新消息`);
+            return;
+        }
+
+        // 验证API配置
+        const config = getAIConfiguration();
+        if (!config.isConfigured) {
+            console.log(`[${extensionName}] API未配置，显示提示消息`);
+            addMessageToChat('pet', '抱歉，我暂时不能和你聊天。请主人先帮我配置好AI API哦！');
+            return;
+        }
+
+        console.log(`[${extensionName}] 开始处理消息: "${message}"`);
+
         // 清空输入框并禁用发送按钮
         input.val('');
-        $('#send-chat-btn').prop('disabled', true);
+        sendBtn.prop('disabled', true);
 
-        // 添加用户消息到界面
+        // 添加用户消息
         addMessageToChat('user', message);
-
-        // 设置AI响应状态
         isAIResponding = true;
-        addMessageToChat('pet', '...'); // Typing indicator
+
+        // 显示打字指示器
+        addMessageToChat('pet', '...');
 
         try {
-            // 构建prompt并调用AI
+            console.log(`[${extensionName}] 构建提示词并调用AI API`);
             const prompt = buildChatPrompt(message);
-            const aiResponse = await callAIAPI(prompt);
+            const aiResponse = await callAIAPI(prompt, 30000); // 30秒超时
 
-            // 移除"..."加载提示并添加AI回复
-            $('.chat-message.pet-message').last().remove();
-            addMessageToChat('pet', aiResponse);
+            // 移除打字指示器
+            $('#chat-modal-messages .chat-message.pet-message').last().remove();
+
+            // 添加AI回复
+            const finalResponse = aiResponse || "嗯...我在想什么呢？";
+            addMessageToChat('pet', finalResponse);
+
+            console.log(`[${extensionName}] AI回复成功: "${finalResponse}"`);
 
             // 保存聊天历史
             saveChatHistory();
 
         } catch (error) {
             console.error(`[${extensionName}] AI回复失败:`, error);
-            // 移除"..."加载提示并添加错误消息
-            $('.chat-message.pet-message').last().remove();
-            addMessageToChat('pet', '抱歉，我现在无法回复。请检查AI配置是否正确。');
+
+            // 移除打字指示器
+            $('#chat-modal-messages .chat-message.pet-message').last().remove();
+
+            // 显示错误消息
+            let errorMessage = '呜...我的脑袋有点乱，稍后再试吧！';
+            if (error.message.includes('timeout')) {
+                errorMessage = '抱歉，我想得太久了...请再试一次吧！';
+            } else if (error.message.includes('API')) {
+                errorMessage = '我的大脑连接出了点问题，请检查API配置哦！';
+            }
+
+            addMessageToChat('pet', errorMessage);
+
         } finally {
             isAIResponding = false;
-            // 根据输入框内容决定是否启用发送按钮
-            $('#send-chat-btn').prop('disabled', input.val().trim().length === 0);
+            sendBtn.prop('disabled', false);
+
+            // 聚焦到输入框
+            input.focus();
+
+            console.log(`[${extensionName}] handleSendMessage 处理完成`);
         }
     }
 
     /**
-     * 添加消息到聊天界面
+     * 添加消息到聊天窗口
+     * @param {string} sender 'user' 或 'pet'
+     * @param {string} message 消息内容
      */
     function addMessageToChat(sender, message) {
+        const container = $('#chat-modal-messages');
+        if (container.length === 0) return;
+
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const isUser = sender === 'user';
+        const avatar = isUser ? '👤' : getPetEmoji();
 
-        // 如果是AI的加载提示"..."，使用特殊样式
-        const messageContent = message === '...' ?
-            '<div class="typing-indicator"><span></span><span></span><span></span></div>' :
-            escapeHtml(message);
+        const messageContent = message === '...'
+            ? '<div class="typing-indicator"><span></span><span></span><span></span></div>'
+            : escapeHtml(message);
 
         const messageHtml = `
             <div class="chat-message ${isUser ? 'user-message' : 'pet-message'}">
-                <div class="message-avatar">${isUser ? '👤' : getPetEmoji()}</div>
+                <div class="message-avatar">${avatar}</div>
                 <div class="message-content">
                     <div class="message-text">${messageContent}</div>
                     <div class="message-timestamp">${timestamp}</div>
@@ -4067,25 +4165,63 @@ ${currentPersonality}
             </div>
         `;
 
-        const container = $('#chat-messages-container');
         container.append(messageHtml);
-
-        // 滚动到底部
         container.scrollTop(container[0].scrollHeight);
 
-        // 仅在不是加载提示时保存历史记录
         if (message !== '...') {
-            chatHistory.push({
-                sender: sender,
-                message: message,
-                timestamp: Date.now()
-            });
-
-            // 限制历史记录长度
-            if (chatHistory.length > 50) {
-                chatHistory = chatHistory.slice(-50);
-            }
+            chatHistory.push({ sender, message, timestamp: Date.now() });
+            if (chatHistory.length > 50) chatHistory.shift();
         }
+    }
+
+    /**
+     * 打开独立的聊天模态弹窗
+     */
+    function openChatModal() {
+        // 确保只有一个聊天弹窗
+        $('#chat-modal-overlay').remove();
+
+        const modalHtml = `
+            <div id="chat-modal-overlay" class="chat-modal-overlay">
+                <div id="chat-modal-container" class="chat-modal-container">
+                    <div class="chat-modal-header">
+                        <h3>与 ${escapeHtml(petData.name)} 聊天</h3>
+                        <button id="chat-modal-close-btn" class="chat-modal-close-btn">&times;</button>
+                    </div>
+                    <div id="chat-modal-messages" class="chat-modal-messages">
+                        <!-- 欢迎消息 -->
+                        <div class="chat-message pet-message">
+                            <div class="message-avatar">${getPetEmoji()}</div>
+                            <div class="message-content">
+                                <div class="message-text">你好！有什么想对我说的吗？</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chat-modal-input-area">
+                        <input type="text" id="chat-modal-input" placeholder="输入消息..." maxlength="500">
+                        <button id="chat-modal-send-btn" class="pet-button success">发送</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        $('body').append(modalHtml);
+        loadChatHistory(); // 加载历史记录到新窗口
+
+        // 绑定事件
+        $('#chat-modal-close-btn, #chat-modal-overlay').on('click', function(e) {
+            if (e.target === this) {
+                $('#chat-modal-overlay').remove();
+            }
+        });
+        $('#chat-modal-container').on('click', e => e.stopPropagation());
+        $('#chat-modal-send-btn').on('click', handleSendMessage);
+        $('#chat-modal-input').on('keypress', function(e) {
+            if (e.which === 13 && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage();
+            }
+        });
     }
 
     /**
@@ -12087,7 +12223,7 @@ ${currentPersonality}
             openShop();
         });
 
-        // 聊天按钮
+        // 聊天按钮 (统一UI中的chat-btn类)
         $container.find(".chat-btn").on("click touchend", function(e) {
             e.preventDefault();
             console.log("💬 与宠物聊天");
@@ -12100,11 +12236,11 @@ ${currentPersonality}
             }
         });
 
-        // 聊天按钮
-        $container.find(".chat-btn").on("click touchend", function(e) {
+        // 聊天按钮 (popup.html中的goto-chat-btn ID)
+        $container.find("#goto-chat-btn").on("click touchend", function(e) {
             e.preventDefault();
-            console.log("💬 与宠物聊天");
-            console.log(`[${extensionName}] 聊天按钮被点击，开始处理...`);
+            console.log("💬 与宠物聊天 (popup.html)");
+            console.log(`[${extensionName}] popup.html聊天按钮被点击，开始处理...`);
             try {
                 handleChatButtonClick();
                 console.log(`[${extensionName}] handleChatButtonClick 执行完成`);

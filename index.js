@@ -365,7 +365,10 @@ jQuery(async () => {
         happiness: '#FFD93D',    // 快乐 - 柠檬黄
         hunger: '#FF9F43',       // 饱食 - 蜜桃橙
         energy: '#74B9FF',       // 精力 - 天空蓝
-        experience: '#A29BFE'    // 经验 - 薰衣草紫
+        experience: '#A29BFE',   // 经验 - 薰衣草紫
+
+        // 额外按钮色
+        info: '#17A2B8'          // 信息蓝 - 用于聊天按钮
     };
     
     // 宠物数据结构 - 智能初始化系统
@@ -3808,15 +3811,7 @@ ${currentPersonality}
      * 处理聊天按钮点击
      */
     function handleChatButtonClick() {
-        const config = getAIConfiguration();
-
-        if (!config.isConfigured) {
-            // 显示配置提示
-            showAPIConfigurationPrompt();
-            return;
-        }
-
-        // 如果配置完整，正常进入聊天界面
+        // 直接显示聊天界面，在界面内处理配置检查
         showChatView();
     }
     
@@ -3828,17 +3823,92 @@ ${currentPersonality}
      * 初始化聊天界面
      */
     function initializeChatInterface() {
-        if (chatInitialized) return;
-
         console.log(`[${extensionName}] 初始化聊天界面...`);
 
-        // 绑定聊天相关事件
+        // 检查API配置
+        const config = getAIConfiguration();
+
+        if (!config.isConfigured) {
+            // 显示配置提示在聊天界面内
+            showChatConfigurationHint();
+        } else {
+            // 配置完整，显示正常聊天界面
+            showNormalChatInterface();
+        }
+
+        // 绑定聊天相关事件（总是绑定）
         bindChatEvents();
+
+        chatInitialized = true;
+    }
+
+    /**
+     * 显示聊天配置提示
+     */
+    function showChatConfigurationHint() {
+        // 清空聊天容器
+        const container = $('#chat-messages-container');
+        container.empty();
+
+        // 添加配置提示
+        const configHint = `
+            <div class="chat-config-hint" style="text-align: center; padding: 20px;">
+                <div style="font-size: 3em; margin-bottom: 15px;">🤖</div>
+                <h3 style="color: var(--primary-accent-color); margin-bottom: 15px;">需要配置AI API</h3>
+                <p style="margin-bottom: 15px; line-height: 1.5;">
+                    要与宠物聊天，需要先配置AI API。<br>
+                </p>
+                <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: left;">
+                    <div style="font-weight: bold; color: #007bff; margin-bottom: 10px;">📋 配置步骤：</div>
+                    <ol style="margin: 0; padding-left: 20px; line-height: 1.6;">
+                        <li>点击右上角的 <strong>扩展</strong> 按钮 (🧩)</li>
+                        <li>找到 <strong>🐾 虚拟宠物系统</strong> 设置</li>
+                        <li>在 <strong>🤖 AI API 配置</strong> 部分填写：
+                            <ul style="margin-top: 5px;">
+                                <li>选择API类型（如OpenAI、Claude等）</li>
+                                <li>填写API URL</li>
+                                <li>填写API密钥</li>
+                            </ul>
+                        </li>
+                        <li>点击 <strong>🔗 测试连接</strong> 验证配置</li>
+                    </ol>
+                </div>
+                <div style="background: #fff3cd; padding: 12px; border-radius: 6px; margin-bottom: 20px; text-align: left; border-left: 4px solid #ffc107;">
+                    <div style="font-weight: bold; color: #856404; margin-bottom: 8px;">💡 常用API推荐：</div>
+                    <div style="font-size: 0.9em; color: #856404; line-height: 1.5;">
+                        • <strong>OpenAI</strong>：https://api.openai.com/v1<br>
+                        • <strong>本地Ollama</strong>：http://localhost:11434/v1<br>
+                        • <strong>LM Studio</strong>：http://localhost:1234/v1<br>
+                        • <strong>第三方代理</strong>：根据提供商文档配置
+                    </div>
+                </div>
+                <button id="goto-settings-from-chat-view" class="pet-button success">
+                    ⚙️ 去配置
+                </button>
+            </div>
+        `;
+
+        container.html(configHint);
+
+        // 绑定去配置按钮事件
+        $('#goto-settings-from-chat-view').on('click', function() {
+            showSettingsView();
+        });
+
+        // 禁用聊天输入
+        $('#chat-input').prop('disabled', true).attr('placeholder', '请先配置AI API...');
+        $('#send-chat-btn').prop('disabled', true);
+    }
+
+    /**
+     * 显示正常聊天界面
+     */
+    function showNormalChatInterface() {
+        // 启用聊天输入
+        $('#chat-input').prop('disabled', false).attr('placeholder', '输入消息...');
 
         // 加载聊天历史
         loadChatHistory();
-
-        chatInitialized = true;
     }
 
     /**
@@ -3871,6 +3941,16 @@ ${currentPersonality}
         const message = input.val().trim();
 
         if (!message || isAIResponding) return;
+
+        // 检查API配置
+        const config = getAIConfiguration();
+        if (!config.isConfigured) {
+            // 如果未配置API，显示提示
+            addMessageToChat('user', message);
+            addMessageToChat('pet', '抱歉，我还不能和你聊天。请先配置AI API，然后重新进入聊天界面。点击上方的"⚙️ 去配置"按钮进行设置。');
+            input.val('');
+            return;
+        }
 
         // 清空输入框
         input.val('');
@@ -4108,6 +4188,80 @@ ${currentPersonality}
         div.textContent = text;
         return div.innerHTML;
     }
+
+    /**
+     * 测试聊天按钮功能
+     */
+    window.testChatButton = function() {
+        console.log('🧪 测试聊天按钮功能...');
+
+        // 1. 检查弹窗是否存在
+        const popup = $('.virtual-pet-popup-overlay');
+        console.log(`弹窗存在: ${popup.length > 0 ? '✅' : '❌'} (数量: ${popup.length})`);
+
+        if (popup.length === 0) {
+            console.log('❌ 请先打开宠物界面');
+            return false;
+        }
+
+        // 2. 检查聊天按钮是否存在
+        const chatBtn = popup.find('.chat-btn');
+        console.log(`聊天按钮存在: ${chatBtn.length > 0 ? '✅' : '❌'} (数量: ${chatBtn.length})`);
+
+        if (chatBtn.length === 0) {
+            console.log('❌ 聊天按钮未找到');
+            return false;
+        }
+
+        // 3. 检查按钮样式
+        const btnStyle = chatBtn.attr('style');
+        console.log(`按钮样式: ${btnStyle ? '✅ 有样式' : '❌ 无样式'}`);
+        if (btnStyle) {
+            console.log(`背景色: ${btnStyle.includes('background') ? '✅' : '❌'}`);
+        }
+
+        // 4. 检查事件绑定
+        const events = $._data(chatBtn[0], 'events');
+        console.log(`事件绑定: ${events ? '✅' : '❌'}`);
+        if (events) {
+            console.log(`- click: ${events.click ? '✅' : '❌'}`);
+            console.log(`- touchend: ${events.touchend ? '✅' : '❌'}`);
+        }
+
+        // 5. 检查函数是否存在
+        console.log(`handleChatButtonClick函数: ${typeof handleChatButtonClick === 'function' ? '✅' : '❌'}`);
+        console.log(`showChatView函数: ${typeof showChatView === 'function' ? '✅' : '❌'}`);
+        console.log(`initializeChatInterface函数: ${typeof initializeChatInterface === 'function' ? '✅' : '❌'}`);
+
+        // 6. 检查API配置状态
+        const config = getAIConfiguration();
+        console.log(`API配置状态: ${config.isConfigured ? '✅ 已配置' : '❌ 未配置'}`);
+
+        // 7. 测试点击
+        console.log('🎯 模拟点击聊天按钮...');
+        try {
+            chatBtn.trigger('click');
+            console.log('✅ 点击事件已触发');
+
+            // 检查是否切换到聊天视图
+            setTimeout(() => {
+                const chatView = $('#pet-chat-view');
+                const isVisible = chatView.is(':visible');
+                console.log(`聊天视图显示: ${isVisible ? '✅' : '❌'}`);
+
+                if (isVisible) {
+                    const configHint = chatView.find('.chat-config-hint');
+                    const hasConfigHint = configHint.length > 0;
+                    console.log(`配置提示显示: ${hasConfigHint ? '✅' : '❌'}`);
+                }
+            }, 100);
+
+        } catch (error) {
+            console.error('❌ 点击事件失败:', error);
+        }
+
+        return true;
+    };
 
     /**
      * 显示API配置提示

@@ -1084,6 +1084,73 @@
     }
 }
 
+/* ===== 聊天界面内配置提示样式 ===== */
+
+/* 聊天界面内的配置提示 */
+.chat-config-hint {
+    background: var(--section-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-small);
+    margin: 10px 0;
+}
+
+.chat-config-hint h3 {
+    margin: 0 0 15px 0;
+    color: var(--primary-accent-color);
+}
+
+.chat-config-hint p {
+    margin: 0 0 15px 0;
+    color: var(--text-color);
+}
+
+.chat-config-hint ol {
+    color: var(--text-color);
+    font-size: 0.9em;
+    line-height: 1.6;
+}
+
+.chat-config-hint ol li {
+    margin-bottom: 8px;
+}
+
+.chat-config-hint ul {
+    margin-top: 5px;
+    margin-bottom: 5px;
+}
+
+.chat-config-hint ul li {
+    margin-bottom: 3px;
+    font-size: 0.9em;
+    color: var(--text-muted-color);
+}
+
+/* 聊天界面内的按钮 */
+#goto-settings-from-chat-view {
+    background: linear-gradient(135deg, var(--success-color), #7ed321);
+    color: white;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(126, 211, 33, 0.3);
+    border: none;
+    padding: 10px 20px;
+    border-radius: var(--border-radius-small);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#goto-settings-from-chat-view:hover {
+    background: linear-gradient(135deg, #7ed321, var(--success-color));
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(126, 211, 33, 0.4);
+}
+
+/* 禁用状态的聊天输入 */
+#chat-input:disabled {
+    background-color: var(--section-bg-color);
+    color: var(--text-light-color);
+    cursor: not-allowed;
+}
+
 /* ===== API配置提示样式 ===== */
 
 /* API配置提示弹窗 */

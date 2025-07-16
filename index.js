@@ -1883,6 +1883,7 @@ jQuery(async () => {
      *
      * 🔧 修复内容：
      * - 修复了 dataSource 未定义错误
+     * - 修复了 targetHeaders 未定义错误
      * - 调整了聊天弹窗高度，与商店弹窗保持一致（70vh）
      * - 清理了未使用的变量
      * - 保持了所有核心功能
@@ -2249,6 +2250,9 @@ jQuery(async () => {
             }
 
             console.log(`[${extensionName}] 🎯 目标API: ${targetApiUrl}`);
+
+            // 4. 构建请求头
+            const targetHeaders = { 'Content-Type': 'application/json' };
 
             // 5. 根据API类型设置认证头
             if (settings.apiType === 'google') {
@@ -4122,25 +4126,8 @@ ${currentPersonality}
         try {
             console.log(`[${extensionName}] 构建提示词并调用AI API`);
 
-            // 首先测试中继服务器连接
-            console.log(`[${extensionName}] 测试中继服务器连接...`);
-            try {
-                const testResponse = await fetch('http://154.12.38.33:3000/health', {
-                    method: 'GET',
-                    signal: AbortSignal.timeout(5000)
-                });
-                if (testResponse.ok) {
-                    console.log(`[${extensionName}] ✅ 中继服务器连接正常`);
-                } else {
-                    console.log(`[${extensionName}] ⚠️ 中继服务器响应异常: ${testResponse.status}`);
-                }
-            } catch (testError) {
-                console.error(`[${extensionName}] ❌ 中继服务器连接失败:`, testError);
-                throw new Error(`中继服务器连接失败: ${testError.message}`);
-            }
-
             const prompt = buildChatPrompt(message);
-            const aiResponse = await callAIAPI(prompt, 60000); // 增加到60秒超时
+            const aiResponse = await callAIAPI(prompt, 60000);
 
             // 移除打字指示器
             $('#chat-modal-messages .chat-message.pet-message').last().remove();

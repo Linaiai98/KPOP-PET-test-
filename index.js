@@ -1901,6 +1901,8 @@ jQuery(async () => {
      * - 修复了 callViaRelay 函数未定义错误
      * - 修复了聊天功能中不必要的中继服务器连接测试导致的超时问题
      * - 修复了API类型切换时不自动填入官方端点的问题（在UI事件监听中添加switch逻辑）
+     * - 修复了第三方模型获取时的CORS错误无限循环问题
+     * - 修复了Google API的URL构建错误（避免重复的v1beta路径）
      * - 实现了真正的直连逻辑，而不是伪装的中继调用
      * - 调整了聊天弹窗高度，与商店弹窗保持一致（70vh）
      * - 添加了聊天历史记录支持，AI能记住之前的对话
@@ -13603,7 +13605,15 @@ ${currentPersonality}
             } catch (error) {
                 lastError = error;
 
-                // 检查是否是网络连接问题
+                // 检查是否是CORS错误（不应该重试）
+                if (error.message.includes('CORS') ||
+                    error.message.includes('Access-Control-Allow-Origin') ||
+                    error.message.includes('preflight')) {
+                    console.log(`🚫 CORS错误，无法重试: ${error.message}`);
+                    throw error;
+                }
+
+                // 检查是否是网络连接问题（可以重试）
                 if (error.message.includes('Failed to fetch') ||
                     error.message.includes('ERR_CONNECTION_RESET') ||
                     error.message.includes('ERR_NETWORK') ||
@@ -13615,7 +13625,8 @@ ${currentPersonality}
                         continue; // 继续重试
                     }
                 } else {
-                    // 非网络问题，直接抛出错误
+                    // 其他错误，直接抛出
+                    console.log(`❌ 其他错误，不重试: ${error.message}`);
                     throw error;
                 }
             }
@@ -13692,30 +13703,43 @@ ${currentPersonality}
         const baseUrl = apiUrl.replace(/\/+$/, ''); // 移除末尾斜杠
         const possibleEndpoints = [];
 
-        // 标准OpenAI兼容端点
-        possibleEndpoints.push(
-            `${baseUrl}/models`,
-            `${baseUrl}/v1/models`,
-            `${baseUrl}/api/models`,
-            `${baseUrl}/api/v1/models`,
-            `${baseUrl}/openai/v1/models`
-        );
-
-        // 其他常见端点格式
-        possibleEndpoints.push(
-            `${baseUrl}/engines`,
-            `${baseUrl}/v1/engines`,
-            `${baseUrl}/model/list`,
-            `${baseUrl}/models/list`,
-            `${baseUrl}/list/models`
-        );
-
-        // 特定服务的端点
-        if (serviceType === 'anthropic_official' || serviceType === 'claude_proxy') {
-            possibleEndpoints.push(`${baseUrl}/v1/models`);
-        }
+        // 根据服务类型构建特定端点
         if (serviceType === 'google_official' || serviceType === 'google_proxy') {
-            possibleEndpoints.push(`${baseUrl}/models`, `${baseUrl}/v1beta/models`);
+            // Google API 特殊处理
+            if (baseUrl.includes('/v1beta')) {
+                // 如果已经包含 v1beta，直接添加 models
+                possibleEndpoints.push(`${baseUrl}/models`);
+            } else {
+                // 如果不包含，添加完整路径
+                possibleEndpoints.push(`${baseUrl}/v1beta/models`);
+            }
+        } else if (serviceType === 'anthropic_official' || serviceType === 'claude_proxy') {
+            // Claude API 端点
+            if (baseUrl.includes('/v1')) {
+                possibleEndpoints.push(`${baseUrl}/models`);
+            } else {
+                possibleEndpoints.push(`${baseUrl}/v1/models`);
+            }
+        } else {
+            // 标准OpenAI兼容端点
+            if (baseUrl.includes('/v1')) {
+                // 如果已经包含 v1，直接添加 models
+                possibleEndpoints.push(`${baseUrl}/models`);
+            } else {
+                // 如果不包含，添加完整路径
+                possibleEndpoints.push(
+                    `${baseUrl}/v1/models`,
+                    `${baseUrl}/models`
+                );
+            }
+
+            // 其他常见端点格式
+            possibleEndpoints.push(
+                `${baseUrl}/engines`,
+                `${baseUrl}/v1/engines`,
+                `${baseUrl}/api/models`,
+                `${baseUrl}/api/v1/models`
+            );
         }
         if (serviceType === 'local_api') {
             possibleEndpoints.push(
@@ -13770,7 +13794,15 @@ ${currentPersonality}
         console.log(`🔐 将尝试 ${authMethods.length} 种认证方式`);
 
         // 遍历所有端点和认证方式的组合
+        let corsErrorDetected = false;
+
         for (const endpoint of possibleEndpoints) {
+            // 如果已经检测到CORS错误，停止尝试
+            if (corsErrorDetected) {
+                console.log(`🚫 检测到CORS限制，跳过剩余端点测试`);
+                break;
+            }
+
             for (const authMethod of authMethods) {
                 try {
                     console.log(`🔍 测试: ${endpoint} (${authMethod.name})`);
@@ -13814,8 +13846,12 @@ ${currentPersonality}
                 } catch (error) {
                     if (error.name === 'TimeoutError') {
                         console.log(`⏰ ${endpoint}: 超时 - ${authMethod.name}`);
-                    } else if (error.message.includes('CORS')) {
+                    } else if (error.message.includes('CORS') ||
+                               error.message.includes('Access-Control-Allow-Origin') ||
+                               error.message.includes('preflight')) {
                         console.log(`🚫 ${endpoint}: CORS限制 - ${authMethod.name}`);
+                        corsErrorDetected = true;
+                        break; // 跳出认证方式循环
                     } else {
                         console.log(`❌ ${endpoint}: ${error.message} - ${authMethod.name}`);
                     }

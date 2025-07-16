@@ -1878,7 +1878,8 @@ jQuery(async () => {
      * - 移动端优化
      *
      * 🧪 保留的测试函数：
-     * - testRelayServer() - 测试中继服务器连接
+     * - testRelayServerSimple() - 简单测试中继服务器连接
+     * - testRelayServer() - 完整测试中继服务器代理功能
      * - checkFloatingButton() - 检查和修复悬浮按钮
      *
      * 🔧 修复内容：
@@ -1943,6 +1944,60 @@ jQuery(async () => {
                 zIndex: styles.zIndex
             });
         }
+    };
+
+    /**
+     * 🔍 检查AI调用函数的实际内容
+     */
+    window.debugAIFunctions = function() {
+        console.log('🔍 检查AI调用函数的实际内容...');
+
+        // 检查 callAIAPI 函数
+        if (typeof callAIAPI === 'function') {
+            console.log('📋 callAIAPI 函数源码:');
+            console.log(callAIAPI.toString());
+        } else {
+            console.log('❌ callAIAPI 函数不存在');
+        }
+
+        // 检查 callCustomAPI 函数
+        if (typeof callCustomAPI === 'function') {
+            console.log('📋 callCustomAPI 函数源码:');
+            console.log(callCustomAPI.toString());
+        } else {
+            console.log('❌ callCustomAPI 函数不存在');
+        }
+
+        // 检查 callAI 函数
+        if (typeof callAI === 'function') {
+            console.log('📋 callAI 函数源码 (前100字符):');
+            console.log(callAI.toString().substring(0, 200) + '...');
+        } else {
+            console.log('❌ callAI 函数不存在');
+        }
+    };
+
+    /**
+     * 🧪 简单测试中继服务器连接
+     */
+    window.testRelayServerSimple = function() {
+        console.log('🧪 简单测试中继服务器连接...');
+
+        const relayServerUrl = 'http://154.12.38.33:3000/health';
+
+        console.log(`🌐 测试URL: ${relayServerUrl}`);
+
+        fetch(relayServerUrl, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        }).then(response => {
+            console.log(`✅ 中继服务器响应: ${response.status}`);
+            return response.text();
+        }).then(data => {
+            console.log(`📦 响应内容:`, data);
+        }).catch(error => {
+            console.error(`❌ 中继服务器连接失败:`, error);
+        });
     };
 
     /**
@@ -2310,6 +2365,13 @@ jQuery(async () => {
                 body: targetRequestBody
             };
 
+            console.log(`[${extensionName}] 📦 中继请求体:`, {
+                targetUrl: targetApiUrl,
+                method: 'POST',
+                headers: targetHeaders,
+                bodySize: JSON.stringify(targetRequestBody).length
+            });
+
             // 8. 设置超时控制
             const controller = new AbortController();
             const timeoutId = setTimeout(() => {
@@ -2340,6 +2402,14 @@ jQuery(async () => {
             }
 
             // 通过中继服务器发送请求
+            console.log(`[${extensionName}] 🌐 发送到中继服务器: ${relayServerUrl}`);
+            console.log(`[${extensionName}] 📋 请求选项:`, {
+                method: fetchOptions.method,
+                headers: fetchOptions.headers,
+                bodyLength: fetchOptions.body.length,
+                hasSignal: !!fetchOptions.signal
+            });
+
             const response = await fetch(relayServerUrl, fetchOptions);
 
             // 10. 处理响应
@@ -2505,7 +2575,7 @@ ${currentPersonality}
                     // 构建Prompt并调用AI
                     const prompt = buildInteractionPrompt(action);
                     console.log(`[${extensionName}] 发送的提示词:`, prompt);
-                    const aiReply = await callAIAPI(prompt, 30000); // 30秒超时
+                    const aiReply = await callAIAPI(prompt, 90000); // 增加到90秒超时
 
                     // 清除加载提示
                     toastr.clear(loadingToast);

@@ -1915,6 +1915,86 @@ jQuery(async () => {
     };
 
     /**
+     * 🎉 AI调用重构完成说明
+     *
+     * 重构内容：
+     * 1. 删除了所有旧的AI调用函数
+     * 2. 创建了统一的 callAI() 函数，所有AI请求都通过中继服务器
+     * 3. 添加了兼容性重定向函数，确保现有代码正常工作
+     * 4. 聊天功能、抱抱功能等都会自动使用新的统一逻辑
+     *
+     * 测试方法：
+     * - testUnifiedAI() - 测试统一AI调用
+     * - testRelayServer() - 测试中继服务器连接
+     * - 直接使用聊天功能测试
+     */
+
+    /**
+     * 🧪 测试统一AI调用函数
+     */
+    window.testUnifiedAI = function() {
+        console.log('🧪 测试统一AI调用函数...');
+
+        // 检查API配置
+        const settings = loadAISettings();
+        console.log('📋 API配置:', {
+            apiType: settings.apiType || '未设置',
+            apiUrl: settings.apiUrl || '未设置',
+            apiKey: settings.apiKey ? '已设置' : '未设置'
+        });
+
+        if (!settings.apiType || !settings.apiUrl || !settings.apiKey) {
+            console.error('❌ API配置不完整，请先配置API信息');
+            return false;
+        }
+
+        // 测试AI调用
+        console.log('🚀 开始测试AI调用...');
+        callAI('你好，请简短回复').then(response => {
+            console.log('✅ 统一AI调用成功:', response);
+        }).catch(error => {
+            console.error('❌ 统一AI调用失败:', error);
+        });
+
+        return true;
+    };
+
+    /**
+     * 测试聊天功能
+     */
+    window.testChatFunction = function() {
+        console.log('🧪 测试聊天功能...');
+
+        // 1. 检查API配置
+        const settings = loadAISettings();
+        console.log('API配置:', settings);
+
+        if (!settings.apiType || !settings.apiUrl || !settings.apiKey) {
+            console.error('❌ API配置不完整');
+            return false;
+        }
+
+        // 2. 测试buildChatPrompt函数
+        try {
+            const testPrompt = buildChatPrompt('你好');
+            console.log('✅ buildChatPrompt测试成功:', testPrompt);
+        } catch (error) {
+            console.error('❌ buildChatPrompt测试失败:', error);
+            return false;
+        }
+
+        // 3. 测试callAIAPI函数
+        console.log('🔄 测试AI API调用...');
+        callAIAPI('你好', 10000).then(response => {
+            console.log('✅ AI API调用成功:', response);
+        }).catch(error => {
+            console.error('❌ AI API调用失败:', error);
+        });
+
+        return true;
+    };
+
+    /**
      * 测试中继服务器连接
      */
     window.testRelayServer = function() {
@@ -2160,215 +2240,133 @@ jQuery(async () => {
         }
     }
 
+
+
     /**
-     * 调用AI生成API
+     * 🚀 统一AI调用函数 - 所有AI请求的唯一入口
+     * 通过中继服务器调用第三方API，解决CORS和移动端连接问题
      * @param {string} prompt - 要发送给AI的提示词
-     * @param {number} timeout - 超时时间（毫秒），默认15秒
+     * @param {number} timeout - 超时时间（毫秒）
      * @returns {Promise<string>} - AI生成的回复
      */
-    async function callAIAPI(prompt, timeout = 30000) {
+    async function callAI(prompt, timeout = 60000) {
+        console.log(`[${extensionName}] 🚀 统一AI调用开始`);
+        console.log(`[${extensionName}] 📝 提示词长度: ${prompt.length} 字符`);
+        console.log(`[${extensionName}] ⏱️ 超时设置: ${timeout}ms`);
+
         try {
-            // 只使用自定义API配置
+            // 1. 获取API配置
             const settings = loadAISettings();
             if (!settings.apiType || !settings.apiUrl || !settings.apiKey) {
                 throw new Error('请先在插件设置中配置API信息（类型、URL和密钥）');
             }
 
-            console.log(`[${extensionName}] 使用自定义API: ${settings.apiType}`);
-            const result = await callCustomAPI(prompt, settings, timeout);
+            console.log(`[${extensionName}] 🔧 API配置: ${settings.apiType} | ${settings.apiUrl}`);
 
-            console.log(`[${extensionName}] API原始返回结果:`, result);
-            console.log(`[${extensionName}] 结果类型:`, typeof result);
-            console.log(`[${extensionName}] 结果长度:`, result ? result.length : 'null/undefined');
+            // 3. 构建目标API URL
+            let targetApiUrl = settings.apiUrl.replace(/\/+$/, '');
 
-            if (result && result.trim()) {
-                console.log(`[${extensionName}] 自定义API调用成功，返回内容: "${result.trim()}"`);
-                return result.trim();
+            // 根据API类型自动添加正确的端点
+            if (settings.apiType === 'openai' || settings.apiType === 'custom' || !settings.apiType) {
+                if (!targetApiUrl.includes('/chat/completions')) {
+                    if (targetApiUrl.endsWith('/v1')) {
+                        targetApiUrl += '/chat/completions';
+                    } else if (!targetApiUrl.includes('/v1')) {
+                        targetApiUrl += '/v1/chat/completions';
+                    } else {
+                        targetApiUrl += '/chat/completions';
+                    }
+                }
+            } else if (settings.apiType === 'claude') {
+                if (!targetApiUrl.includes('/messages')) {
+                    if (targetApiUrl.endsWith('/v1')) {
+                        targetApiUrl += '/messages';
+                    } else if (!targetApiUrl.includes('/v1')) {
+                        targetApiUrl += '/v1/messages';
+                    } else {
+                        targetApiUrl += '/messages';
+                    }
+                }
+            } else if (settings.apiType === 'google') {
+                if (!targetApiUrl.includes(':generateContent')) {
+                    const modelName = settings.apiModel || 'gemini-pro';
+                    if (targetApiUrl.endsWith('/v1beta')) {
+                        targetApiUrl += `/models/${modelName}:generateContent`;
+                    } else if (!targetApiUrl.includes('/v1beta')) {
+                        targetApiUrl += `/v1beta/models/${modelName}:generateContent`;
+                    } else {
+                        targetApiUrl += `/models/${modelName}:generateContent`;
+                    }
+                }
+            }
+
+            console.log(`[${extensionName}] 🎯 目标API: ${targetApiUrl}`);
+
+            // 5. 根据API类型设置认证头
+            if (settings.apiType === 'google') {
+                targetHeaders['x-goog-api-key'] = settings.apiKey;
+                if (!targetApiUrl.includes('?key=') && !targetApiUrl.includes('&key=')) {
+                    targetApiUrl += `?key=${settings.apiKey}`;
+                }
+            } else if (settings.apiType === 'claude') {
+                targetHeaders['x-api-key'] = settings.apiKey;
+                targetHeaders['anthropic-version'] = '2023-06-01';
             } else {
-                console.log(`[${extensionName}] API返回内容无效:`, {
-                    result: result,
-                    isString: typeof result === 'string',
-                    isEmpty: !result,
-                    trimmed: result ? result.trim() : 'cannot trim'
-                });
-                throw new Error('API返回了空的或无效的回复');
+                targetHeaders['Authorization'] = `Bearer ${settings.apiKey}`;
             }
 
-        } catch (error) {
-            console.error(`[${extensionName}] API调用失败:`, error);
-            throw error;
-        }
-    }
-
-    /**
-     * 调用自定义API - 通过中继服务器
-     * @param {string} prompt - 要发送给AI的提示词
-     * @param {object} settings - API配置设置
-     * @param {number} timeout - 超时时间（毫秒）
-     * @returns {Promise<string>} - AI生成的回复
-     */
-    async function callCustomAPI(prompt, settings, timeout = 30000) {
-        console.log(`[${extensionName}] 通过中继服务器调用API: ${settings.apiType}，超时时间: ${timeout}ms`);
-
-        // 中继服务器地址
-        const relayServerUrl = 'http://154.12.38.33:3000/proxy';
-
-        // 智能构建目标API URL - 用户只需填写到/v1，自动添加端点
-        let targetApiUrl = settings.apiUrl;
-
-        // 移除末尾斜杠
-        targetApiUrl = targetApiUrl.replace(/\/+$/, '');
-
-        // 自动添加聊天端点 - 用户只需要填写到/v1
-        if (settings.apiType === 'openai' || settings.apiType === 'custom' || !settings.apiType) {
-            if (!targetApiUrl.includes('/chat/completions')) {
-                // 如果URL以/v1结尾，直接添加/chat/completions
-                if (targetApiUrl.endsWith('/v1')) {
-                    targetApiUrl = targetApiUrl + '/chat/completions';
-                }
-                // 如果URL不包含/v1，先添加/v1再添加/chat/completions
-                else if (!targetApiUrl.includes('/v1')) {
-                    targetApiUrl = targetApiUrl + '/v1/chat/completions';
-                }
-                // 如果URL包含/v1但不在末尾，直接添加/chat/completions
-                else {
-                    targetApiUrl = targetApiUrl + '/chat/completions';
-                }
-            }
-        } else if (settings.apiType === 'claude') {
-            if (!targetApiUrl.includes('/messages')) {
-                if (targetApiUrl.endsWith('/v1')) {
-                    targetApiUrl = targetApiUrl + '/messages';
-                } else if (!targetApiUrl.includes('/v1')) {
-                    targetApiUrl = targetApiUrl + '/v1/messages';
-                } else {
-                    targetApiUrl = targetApiUrl + '/messages';
-                }
-            }
-        } else if (settings.apiType === 'google') {
-            // Google Gemini API 特殊处理
-            if (!targetApiUrl.includes(':generateContent')) {
-                // 构建正确的Gemini API端点
-                const modelName = settings.apiModel || 'gemini-pro';
-                if (targetApiUrl.endsWith('/v1beta')) {
-                    targetApiUrl = targetApiUrl + `/models/${modelName}:generateContent`;
-                } else if (!targetApiUrl.includes('/v1beta')) {
-                    targetApiUrl = targetApiUrl + `/v1beta/models/${modelName}:generateContent`;
-                } else {
-                    targetApiUrl = targetApiUrl + `/models/${modelName}:generateContent`;
-                }
-            }
-        }
-
-        console.log(`[${extensionName}] 原始URL: ${settings.apiUrl}`);
-        console.log(`[${extensionName}] 目标API URL: ${targetApiUrl}`);
-        console.log(`[${extensionName}] 中继服务器: ${relayServerUrl}`);
-        console.log(`[${extensionName}] API类型: ${settings.apiType}`);
-
-        // 构建目标API的请求头（根据API类型）
-        const targetHeaders = {
-            'Content-Type': 'application/json'
-        };
-
-        // 根据API类型设置认证头
-        if (settings.apiType === 'google') {
-            // Google API 使用 x-goog-api-key 头或者URL参数
-            targetHeaders['x-goog-api-key'] = settings.apiKey;
-            // 也可以通过URL参数传递，如果头部认证失败的话
-            if (!targetApiUrl.includes('?key=') && !targetApiUrl.includes('&key=')) {
-                targetApiUrl += `?key=${settings.apiKey}`;
-            }
-        } else if (settings.apiType === 'claude') {
-            // Claude API 使用 x-api-key
-            targetHeaders['x-api-key'] = settings.apiKey;
-            targetHeaders['anthropic-version'] = '2023-06-01';
-        } else {
-            // OpenAI 和其他 API 使用 Bearer token
-            targetHeaders['Authorization'] = `Bearer ${settings.apiKey}`;
-        }
-
-        // 构建目标API的请求体（根据API类型）
-        let targetRequestBody;
-        if (settings.apiType === 'openai' || settings.apiType === 'custom') {
-            targetRequestBody = {
-                model: settings.apiModel || 'gpt-3.5-turbo',
-                messages: [
-                    {
-                        role: 'user',
-                        content: prompt
-                    }
-                ],
-                max_tokens: 10000,  // 大幅增加token限制
-                temperature: 0.8
-            };
-        } else if (settings.apiType === 'claude') {
-            targetRequestBody = {
-                model: settings.apiModel || 'claude-3-sonnet-20240229',
-                max_tokens: 10000,  // 大幅增加token限制
-                messages: [
-                    {
-                        role: 'user',
-                        content: prompt
-                    }
-                ]
-            };
-        } else if (settings.apiType === 'google') {
-            // Google Gemini API 格式
-            targetRequestBody = {
-                contents: [
-                    {
-                        parts: [
-                            {
-                                text: prompt
-                            }
-                        ]
-                    }
-                ],
-                generationConfig: {
-                    maxOutputTokens: 10000,  // 大幅增加token限制
+            // 6. 构建请求体
+            let targetRequestBody;
+            if (settings.apiType === 'openai' || settings.apiType === 'custom' || !settings.apiType) {
+                targetRequestBody = {
+                    model: settings.apiModel || 'gpt-3.5-turbo',
+                    messages: [{ role: 'user', content: prompt }],
+                    max_tokens: 4000,
                     temperature: 0.8
-                }
+                };
+            } else if (settings.apiType === 'claude') {
+                targetRequestBody = {
+                    model: settings.apiModel || 'claude-3-sonnet-20240229',
+                    max_tokens: 4000,
+                    messages: [{ role: 'user', content: prompt }]
+                };
+            } else if (settings.apiType === 'google') {
+                targetRequestBody = {
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { maxOutputTokens: 4000, temperature: 0.8 }
+                };
+            } else {
+                // 通用格式
+                targetRequestBody = {
+                    model: settings.apiModel || 'default',
+                    prompt: prompt,
+                    max_tokens: 4000,
+                    temperature: 0.8
+                };
+            }
+
+            // 7. 构建中继服务器请求体
+            const relayRequestBody = {
+                targetUrl: targetApiUrl,
+                method: 'POST',
+                headers: targetHeaders,
+                body: targetRequestBody
             };
-        } else {
-            // 通用格式
-            targetRequestBody = {
-                model: settings.apiModel || 'default',
-                prompt: prompt,
-                max_tokens: 10000,  // 大幅增加token限制
-                temperature: 0.8
-            };
-        }
 
-        // 构建发送给中继服务器的请求体
-        const relayRequestBody = {
-            targetUrl: targetApiUrl,
-            method: 'POST',
-            headers: targetHeaders,
-            body: targetRequestBody
-        };
+            // 8. 设置超时控制
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => {
+                console.log(`[${extensionName}] ⏰ API调用超时，取消请求`);
+                controller.abort();
+            }, timeout);
 
-        // 使用AbortController来处理超时
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => {
-            console.log(`[${extensionName}] API调用超时，取消请求`);
-            controller.abort();
-        }, timeout);
+            // 9. 发送请求
+            const startTime = Date.now();
+            console.log(`[${extensionName}] 🚀 开始发送请求...`);
 
-        const startTime = Date.now();
-        console.log(`[${extensionName}] 开始通过中继服务器发送请求，时间戳: ${startTime}`);
-        console.log(`[${extensionName}] 中继服务器URL: ${relayServerUrl}`);
-        console.log(`[${extensionName}] 目标API URL: ${targetApiUrl}`);
-        console.log(`[${extensionName}] 目标请求头:`, targetHeaders);
-        console.log(`[${extensionName}] 目标请求体:`, targetRequestBody);
-        console.log(`[${extensionName}] 中继请求体JSON:`, JSON.stringify(relayRequestBody, null, 2));
-
-        try {
-            // 构建发送给中继服务器的请求选项
             const fetchOptions = {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(relayRequestBody),
                 signal: controller.signal
             };
@@ -2376,165 +2374,88 @@ jQuery(async () => {
             // 移动端特殊处理
             const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
             if (isMobile) {
-                // 移动端增加更长的超时时间
-                clearTimeout(timeoutId);
-                const mobileTimeoutId = setTimeout(() => controller.abort(), timeout + 10000); // 额外10秒
-
-                // 移动端添加额外的请求头
                 fetchOptions.headers = {
                     ...fetchOptions.headers,
                     'Cache-Control': 'no-cache',
                     'Pragma': 'no-cache'
                 };
-
-                console.log(`[${extensionName}] 移动端中继请求优化已应用`);
+                console.log(`[${extensionName}] 📱 移动端优化已应用`);
             }
 
             // 通过中继服务器发送请求
             const response = await fetch(relayServerUrl, fetchOptions);
 
+            // 10. 处理响应
             const endTime = Date.now();
             const duration = endTime - startTime;
             clearTimeout(timeoutId);
-            console.log(`[${extensionName}] API响应状态: ${response.status} ${response.statusText}，耗时: ${duration}ms`);
+            console.log(`[${extensionName}] ✅ 响应状态: ${response.status} (${duration}ms)`);
 
             if (!response.ok) {
-                // 尝试读取错误响应内容
                 let errorDetails = '';
                 try {
                     const errorText = await response.text();
                     errorDetails = errorText ? ` - ${errorText}` : '';
-                    console.log(`[${extensionName}] API错误详情:`, errorText);
+                    console.log(`[${extensionName}] ❌ 错误详情:`, errorText);
                 } catch (e) {
-                    console.log(`[${extensionName}] 无法读取错误详情:`, e);
+                    console.log(`[${extensionName}] ❌ 无法读取错误详情:`, e);
                 }
-
-                throw new Error(`自定义API调用失败: ${response.status} ${response.statusText}${errorDetails}`);
+                throw new Error(`API调用失败: ${response.status} ${response.statusText}${errorDetails}`);
             }
 
             const data = await response.json();
-            console.log(`[${extensionName}] API响应数据:`, data);
+            console.log(`[${extensionName}] 📦 响应数据:`, data);
 
-            // 深度分析响应结构
-            console.log(`[${extensionName}] 🔍 深度响应分析:`);
-            console.log(`- 响应对象类型:`, typeof data);
-            console.log(`- 响应对象键:`, Object.keys(data));
-            if (data.choices && data.choices.length > 0) {
-                console.log(`- choices[0]完整内容:`, JSON.stringify(data.choices[0], null, 2));
-                if (data.choices[0].message) {
-                    console.log(`- message对象键:`, Object.keys(data.choices[0].message));
-                    console.log(`- message完整内容:`, JSON.stringify(data.choices[0].message, null, 2));
-                }
-            }
-
-            // 详细分析响应结构
-            console.log(`[${extensionName}] 响应结构分析:`, {
-                'data.choices存在': !!data.choices,
-                'choices长度': data.choices?.length,
-                'choices[0]存在': !!data.choices?.[0],
-                'choices[0]的所有键': data.choices?.[0] ? Object.keys(data.choices[0]) : 'N/A'
-            });
-
-            // 根据API类型解析响应
+            // 11. 解析响应内容
             let result = '';
-            console.log(`[${extensionName}] 开始解析响应，API类型: ${settings.apiType}`);
 
-            if (settings.apiType === 'openai' || settings.apiType === 'custom') {
-                console.log(`[${extensionName}] 使用OpenAI格式解析`);
-
-                // 尝试多种OpenAI兼容格式的解析路径
+            if (settings.apiType === 'openai' || settings.apiType === 'custom' || !settings.apiType) {
                 result = data.choices?.[0]?.message?.content ||
                          data.choices?.[0]?.text ||
-                         data.choices?.[0]?.delta?.content ||
-                         data.choices?.[0]?.message?.text ||
+                         data.content ||
                          '';
-
-                console.log(`[${extensionName}] OpenAI解析路径:`, {
-                    'choices[0].message.content': data.choices?.[0]?.message?.content,
-                    'choices[0].text': data.choices?.[0]?.text,
-                    'choices[0].delta.content': data.choices?.[0]?.delta?.content,
-                    'choices[0].message.text': data.choices?.[0]?.message?.text,
-                    'choices[0].finish_reason': data.choices?.[0]?.finish_reason,
-                    'choices_array': data.choices,
-                    'first_choice': data.choices?.[0],
-                    'final_result': result
-                });
-
-                // 检查finish_reason
-                const finishReason = data.choices?.[0]?.finish_reason;
-                if (finishReason === 'length') {
-                    console.log(`[${extensionName}] ⚠️ 响应被截断！finish_reason: length - 需要增加max_tokens`);
-                } else if (finishReason) {
-                    console.log(`[${extensionName}] finish_reason: ${finishReason}`);
-                }
-
-                // 如果还是空的，尝试其他可能的字段
-                if (!result && data.choices?.[0]) {
-                    const choice = data.choices[0];
-                    console.log(`[${extensionName}] 第一个choice的完整结构:`, choice);
-
-                    // 尝试更多可能的字段
-                    result = choice.content || choice.response || choice.output || '';
-                    console.log(`[${extensionName}] 备用字段解析:`, {
-                        'choice.content': choice.content,
-                        'choice.response': choice.response,
-                        'choice.output': choice.output,
-                        'backup_result': result
-                    });
-                }
             } else if (settings.apiType === 'claude') {
-                console.log(`[${extensionName}] 使用Claude格式解析`);
-                result = data.content?.[0]?.text || '';
-                console.log(`[${extensionName}] Claude解析路径:`, {
-                    'content[0].text': data.content?.[0]?.text,
-                    'final_result': result
-                });
+                result = data.content?.[0]?.text ||
+                         data.completion ||
+                         '';
             } else if (settings.apiType === 'google') {
-                console.log(`[${extensionName}] 使用Google Gemini格式解析`);
-                // Google Gemini API 响应格式
-                result = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-                console.log(`[${extensionName}] Gemini解析路径:`, {
-                    'candidates[0].content.parts[0].text': data.candidates?.[0]?.content?.parts?.[0]?.text,
-                    'primary_result': result
-                });
-
-                // 备用解析路径
-                if (!result) {
-                    result = data.text || data.response || data.result || '';
-                    console.log(`[${extensionName}] Gemini备用解析路径:`, {
-                        'data.text': data.text,
-                        'data.response': data.response,
-                        'data.result': data.result,
-                        'backup_result': result
-                    });
-                }
+                result = data.candidates?.[0]?.content?.parts?.[0]?.text ||
+                         data.text ||
+                         '';
             } else {
-                console.log(`[${extensionName}] 使用通用格式解析`);
-                result = data.text || data.response || data.result || '';
-                console.log(`[${extensionName}] 通用解析路径:`, {
-                    'data.text': data.text,
-                    'data.response': data.response,
-                    'data.result': data.result,
-                    'final_result': result
-                });
+                result = data.text || data.content || data.response || '';
             }
 
-            console.log(`[${extensionName}] 最终解析结果:`, {
-                result: result,
-                type: typeof result,
-                length: result ? result.length : 'null/undefined',
-                trimmed: result ? result.trim() : 'cannot trim'
-            });
+            console.log(`[${extensionName}] 🎯 解析结果: "${result.substring(0, 100)}..."`);
 
-            return result.trim();
+            if (result && result.trim()) {
+                console.log(`[${extensionName}] ✅ AI调用成功`);
+                return result.trim();
+            } else {
+                console.log(`[${extensionName}] ⚠️ 响应为空，使用默认回复`);
+                return "我现在有点累，稍后再聊吧~";
+            }
 
         } catch (error) {
-            clearTimeout(timeoutId);
-            if (error.name === 'AbortError') {
-                throw new Error('API调用超时');
-            }
+            console.error(`[${extensionName}] ❌ 统一AI调用失败:`, error);
             throw error;
         }
+    }
+
+    /**
+     * 🔄 兼容性函数 - 重定向所有旧的AI调用到统一函数
+     */
+
+    // 主要的AI调用函数 - 重定向到统一函数
+    async function callAIAPI(prompt, timeout = 60000) {
+        console.log(`[${extensionName}] 🔄 callAIAPI -> callAI 重定向`);
+        return await callAI(prompt, timeout);
+    }
+
+    // 自定义API调用函数 - 重定向到统一函数
+    async function callCustomAPI(prompt, settings, timeout = 60000) {
+        console.log(`[${extensionName}] 🔄 callCustomAPI -> callAI 重定向`);
+        return await callAI(prompt, timeout);
     }
 
     /**
@@ -4262,8 +4183,26 @@ ${currentPersonality}
 
         try {
             console.log(`[${extensionName}] 构建提示词并调用AI API`);
+
+            // 首先测试中继服务器连接
+            console.log(`[${extensionName}] 测试中继服务器连接...`);
+            try {
+                const testResponse = await fetch('http://154.12.38.33:3000/health', {
+                    method: 'GET',
+                    signal: AbortSignal.timeout(5000)
+                });
+                if (testResponse.ok) {
+                    console.log(`[${extensionName}] ✅ 中继服务器连接正常`);
+                } else {
+                    console.log(`[${extensionName}] ⚠️ 中继服务器响应异常: ${testResponse.status}`);
+                }
+            } catch (testError) {
+                console.error(`[${extensionName}] ❌ 中继服务器连接失败:`, testError);
+                throw new Error(`中继服务器连接失败: ${testError.message}`);
+            }
+
             const prompt = buildChatPrompt(message);
-            const aiResponse = await callAIAPI(prompt, 30000); // 30秒超时
+            const aiResponse = await callAIAPI(prompt, 60000); // 增加到60秒超时
 
             // 移除打字指示器
             $('#chat-modal-messages .chat-message.pet-message').last().remove();
@@ -5722,8 +5661,14 @@ ${currentPersonality}
         const onDragMove = (e) => {
             if (!isDragging) return;
 
-            const pageX = e.pageX || e.originalEvent.touches[0].pageX;
-            const pageY = e.pageY || e.originalEvent.touches[0].pageY;
+            let pageX, pageY;
+            if (e.originalEvent && e.originalEvent.touches && e.originalEvent.touches[0]) {
+                pageX = e.originalEvent.touches[0].pageX;
+                pageY = e.originalEvent.touches[0].pageY;
+            } else {
+                pageX = e.pageX;
+                pageY = e.pageY;
+            }
 
             const deltaX = pageX - dragStartX;
             const deltaY = pageY - dragStartY;

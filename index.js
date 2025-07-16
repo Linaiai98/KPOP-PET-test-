@@ -1858,141 +1858,34 @@ jQuery(async () => {
         }
     }
 
-    /**
-     * 测试聊天按钮常驻显示功能
-     */
-    window.testChatButtonVisibility = function() {
-        console.log('🧪 测试聊天按钮常驻显示功能...');
 
-        // 1. 检查聊天按钮是否存在
-        const chatButtons = $('.chat-btn');
-        console.log(`聊天按钮数量: ${chatButtons.length}`);
-
-        if (chatButtons.length === 0) {
-            console.log('❌ 未找到聊天按钮，请先打开宠物界面');
-            return false;
-        }
-
-        // 2. 检查商店按钮作为对比
-        const shopButtons = $('.shop-btn');
-        console.log(`商店按钮数量: ${shopButtons.length}`);
-
-        // 3. 检查按钮可见性
-        chatButtons.each(function(index) {
-            const $btn = $(this);
-            const isVisible = $btn.is(':visible');
-            const display = $btn.css('display');
-            console.log(`聊天按钮 ${index + 1}: 可见=${isVisible}, display=${display}`);
-        });
-
-        shopButtons.each(function(index) {
-            const $btn = $(this);
-            const isVisible = $btn.is(':visible');
-            const display = $btn.css('display');
-            console.log(`商店按钮 ${index + 1}: 可见=${isVisible}, display=${display}`);
-        });
-
-        // 4. 强制更新聊天按钮可见性
-        console.log('🔄 强制更新聊天按钮可见性...');
-        updateChatButtonVisibility();
-
-        // 5. 再次检查
-        setTimeout(() => {
-            const chatButtonsAfter = $('.chat-btn');
-            console.log('更新后的聊天按钮状态:');
-            chatButtonsAfter.each(function(index) {
-                const $btn = $(this);
-                const isVisible = $btn.is(':visible');
-                const display = $btn.css('display');
-                console.log(`聊天按钮 ${index + 1}: 可见=${isVisible}, display=${display}`);
-            });
-
-            const allVisible = chatButtonsAfter.filter(':visible').length === chatButtonsAfter.length;
-            console.log(`✅ 测试结果: 聊天按钮${allVisible ? '全部可见' : '部分隐藏'}`);
-
-            return allVisible;
-        }, 100);
-    };
 
     /**
-     * 🎉 AI调用重构完成说明
+     * 🎉 代码清理和重构完成
      *
-     * 重构内容：
-     * 1. 删除了所有旧的AI调用函数
-     * 2. 创建了统一的 callAI() 函数，所有AI请求都通过中继服务器
-     * 3. 添加了兼容性重定向函数，确保现有代码正常工作
-     * 4. 聊天功能、抱抱功能等都会自动使用新的统一逻辑
+     * ✅ 已完成的清理：
+     * 1. 删除了大量无用的测试函数（50+个）
+     * 2. 清理了未使用的变量和重复代码
+     * 3. 统一了AI调用逻辑 - 所有请求都通过中继服务器 154.12.38.33:3000
+     * 4. 统一了弹窗尺寸 - 聊天和商店弹窗与主UI保持一致
+     * 5. 简化了代码结构，提高了可维护性
      *
-     * 测试方法：
-     * - testUnifiedAI() - 测试统一AI调用
+     * 🚀 核心功能：
+     * - 虚拟宠物系统（喂食、抱抱、玩耍、睡觉）
+     * - AI聊天功能（通过中继服务器）
+     * - 商店系统
+     * - Firebase跨设备同步
+     * - 移动端优化
+     *
+     * 🧪 保留的测试函数：
      * - testRelayServer() - 测试中继服务器连接
-     * - 直接使用聊天功能测试
      */
 
-    /**
-     * 🧪 测试统一AI调用函数
-     */
-    window.testUnifiedAI = function() {
-        console.log('🧪 测试统一AI调用函数...');
 
-        // 检查API配置
-        const settings = loadAISettings();
-        console.log('📋 API配置:', {
-            apiType: settings.apiType || '未设置',
-            apiUrl: settings.apiUrl || '未设置',
-            apiKey: settings.apiKey ? '已设置' : '未设置'
-        });
 
-        if (!settings.apiType || !settings.apiUrl || !settings.apiKey) {
-            console.error('❌ API配置不完整，请先配置API信息');
-            return false;
-        }
 
-        // 测试AI调用
-        console.log('🚀 开始测试AI调用...');
-        callAI('你好，请简短回复').then(response => {
-            console.log('✅ 统一AI调用成功:', response);
-        }).catch(error => {
-            console.error('❌ 统一AI调用失败:', error);
-        });
 
-        return true;
-    };
 
-    /**
-     * 测试聊天功能
-     */
-    window.testChatFunction = function() {
-        console.log('🧪 测试聊天功能...');
-
-        // 1. 检查API配置
-        const settings = loadAISettings();
-        console.log('API配置:', settings);
-
-        if (!settings.apiType || !settings.apiUrl || !settings.apiKey) {
-            console.error('❌ API配置不完整');
-            return false;
-        }
-
-        // 2. 测试buildChatPrompt函数
-        try {
-            const testPrompt = buildChatPrompt('你好');
-            console.log('✅ buildChatPrompt测试成功:', testPrompt);
-        } catch (error) {
-            console.error('❌ buildChatPrompt测试失败:', error);
-            return false;
-        }
-
-        // 3. 测试callAIAPI函数
-        console.log('🔄 测试AI API调用...');
-        callAIAPI('你好', 10000).then(response => {
-            console.log('✅ AI API调用成功:', response);
-        }).catch(error => {
-            console.error('❌ AI API调用失败:', error);
-        });
-
-        return true;
-    };
 
     /**
      * 测试中继服务器连接
@@ -2453,7 +2346,7 @@ jQuery(async () => {
     }
 
     // 自定义API调用函数 - 重定向到统一函数
-    async function callCustomAPI(prompt, settings, timeout = 60000) {
+    async function callCustomAPI(prompt, settings = null, timeout = 60000) {
         console.log(`[${extensionName}] 🔄 callCustomAPI -> callAI 重定向`);
         return await callAI(prompt, timeout);
     }
@@ -2500,9 +2393,6 @@ jQuery(async () => {
 
         // 调试日志
         console.log(`[buildInteractionPrompt] action: "${action}", description: "${actionDescription}"`);
-
-        // 如果action为undefined或null，使用默认值
-        const safeAction = action || 'interact';
 
         // 获取当前人设，确保不包含冲突信息
         const currentPersonality = getCurrentPersonality();
@@ -2765,7 +2655,6 @@ ${currentPersonality}
 
                 // 检查API配置
                 const userApiUrl = $('#ai-url-input').val();
-                const userApiKey = $('#ai-key-input').val();
 
                 if (!userApiUrl) {
                     toastr.warning('请先配置API URL', '⚠️ 配置不完整', { timeOut: 3000 });
@@ -2858,7 +2747,6 @@ ${currentPersonality}
         const localData = localStorage.getItem(STORAGE_KEY_PET_DATA);
 
         let savedData = null;
-        let dataSource = 'none';
 
         // 比较同步数据和本地数据，选择最新的
         if (syncData && localData) {
@@ -4381,11 +4269,11 @@ ${currentPersonality}
         const isMobile = window.innerWidth <= 767;
         const isSmallMobile = window.innerWidth <= 480;
 
-        // 根据屏幕尺寸调整样式参数
+        // 根据屏幕尺寸调整样式参数 - 与主UI保持一致的尺寸
         const overlayPadding = isSmallMobile ? '5px' : isMobile ? '10px' : '20px';
-        const containerMaxWidth = isMobile ? '100%' : '500px';
-        const containerHeight = isSmallMobile ? 'calc(100vh - 20px)' : isMobile ? 'calc(100vh - 40px)' : '600px';
-        const containerMaxHeight = isSmallMobile ? 'calc(100vh - 20px)' : isMobile ? 'calc(100vh - 40px)' : '80vh';
+        const containerMaxWidth = isMobile ? '300px' : '380px'; // 与主UI保持一致
+        const containerHeight = isSmallMobile ? 'calc(100vh - 20px)' : isMobile ? 'calc(100vh - 40px)' : '500px'; // 减小高度
+        const containerMaxHeight = isSmallMobile ? 'calc(100vh - 20px)' : isMobile ? 'calc(100vh - 40px)' : '70vh'; // 减小最大高度
         const borderRadius = isSmallMobile ? '8px' : isMobile ? '12px' : '15px';
         const headerPadding = isMobile ? '12px 16px' : '16px 20px';
         const messagesPadding = isSmallMobile ? '12px' : isMobile ? '16px' : '20px';
@@ -6459,16 +6347,7 @@ ${currentPersonality}
         }
     }
 
-    // 全局测试函数
-    window.testVirtualPet = function() {
-        console.log("🐾 手动测试虚拟宠物系统...");
 
-        // 强制创建按钮
-        $(`#${BUTTON_ID}`).remove();
-        initializeFloatingButton();
-
-        console.log("🐾 测试完成，检查是否有🐾按钮出现");
-    };
 
     // 强制显示按钮函数
     window.forceShowPetButton = function() {
@@ -8100,6 +7979,10 @@ ${currentPersonality}
 
     // 商店系统功能
     function showShopModal() {
+        // 检测移动端状态
+        const isMobile = window.innerWidth <= 768;
+        const containerMaxWidth = isMobile ? '300px' : '380px'; // 与主UI保持一致
+
         // 创建商店弹窗
         const shopModal = $(`
             <div id="shop-modal" style="
@@ -8120,9 +8003,9 @@ ${currentPersonality}
                     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
                     border-radius: 15px !important;
                     padding: 20px !important;
-                    max-width: 500px !important;
+                    max-width: ${containerMaxWidth} !important;
                     width: 100% !important;
-                    max-height: 80vh !important;
+                    max-height: 70vh !important;
                     overflow-y: auto !important;
                     color: white !important;
                     box-shadow: 0 20px 40px rgba(0,0,0,0.3) !important;

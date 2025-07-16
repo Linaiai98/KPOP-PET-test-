@@ -1881,6 +1881,7 @@ jQuery(async () => {
      * 🧪 保留的测试函数：
      * - debugAIFunctions() - 检查AI调用函数的实际内容
      * - testDirectConnection() - 测试直连+中继退回逻辑
+     * - testGoogleURLBuild() - 测试Google API URL构建逻辑
      * - resetAPIConfig() - 重置API配置到正确的官方端点
      * - testAutoFillURL() - 测试自动填充URL功能
      * - testAPIConfig() - 测试API配置优化
@@ -1907,7 +1908,8 @@ jQuery(async () => {
      * - 修复了聊天功能中不必要的中继服务器连接测试导致的超时问题
      * - 修复了API类型切换时不自动填入官方端点的问题（在UI事件监听中添加switch逻辑）
      * - 修复了第三方模型获取时的CORS错误无限循环问题
-     * - 修复了Google API的URL构建错误（避免重复的v1beta路径）
+     * - 修复了Google API的URL构建错误（避免重复的v1beta路径和models前缀）
+     * - 修复了Google API模型名称处理，避免重复的models/前缀导致URL错误
      * - 添加了API配置重置功能，可清理错误的URL配置
      * - 在API URL输入框旁边添加了重置按钮，支持一键重置到官方端点
      * - 实现了真正的直连逻辑，而不是伪装的中继调用
@@ -2034,6 +2036,54 @@ jQuery(async () => {
         }).catch(error => {
             console.log('❌ 测试失败:', error.message);
         });
+    };
+
+    /**
+     * 🧪 测试Google API URL构建
+     */
+    window.testGoogleURLBuild = function() {
+        console.log('🧪 测试Google API URL构建...');
+
+        const testCases = [
+            {
+                baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+                model: 'gemini-pro',
+                expected: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent'
+            },
+            {
+                baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+                model: 'models/gemini-pro',
+                expected: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent'
+            },
+            {
+                baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+                model: 'gemini-2.5-pro',
+                expected: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent'
+            }
+        ];
+
+        testCases.forEach((testCase, index) => {
+            let targetApiUrl = testCase.baseUrl;
+            let modelName = testCase.model;
+
+            // 应用相同的逻辑
+            if (modelName.startsWith('models/')) {
+                modelName = modelName.replace('models/', '');
+            }
+
+            if (targetApiUrl.endsWith('/v1beta')) {
+                targetApiUrl += `/models/${modelName}:generateContent`;
+            }
+
+            const success = targetApiUrl === testCase.expected;
+            console.log(`测试 ${index + 1}: ${success ? '✅' : '❌'}`);
+            console.log(`  输入: ${testCase.baseUrl} + ${testCase.model}`);
+            console.log(`  期望: ${testCase.expected}`);
+            console.log(`  实际: ${targetApiUrl}`);
+            console.log('');
+        });
+
+        console.log('✅ Google API URL构建测试完成');
     };
 
     /**
@@ -2507,7 +2557,13 @@ jQuery(async () => {
                 }
             } else if (settings.apiType === 'google') {
                 if (!targetApiUrl.includes(':generateContent')) {
-                    const modelName = settings.apiModel || 'gemini-pro';
+                    let modelName = settings.apiModel || 'gemini-pro';
+
+                    // 确保模型名称不包含 models/ 前缀
+                    if (modelName.startsWith('models/')) {
+                        modelName = modelName.replace('models/', '');
+                    }
+
                     if (targetApiUrl.endsWith('/v1beta')) {
                         targetApiUrl += `/models/${modelName}:generateContent`;
                     } else if (!targetApiUrl.includes('/v1beta')) {
@@ -2649,7 +2705,13 @@ jQuery(async () => {
             }
         } else if (settings.apiType === 'google') {
             if (!targetApiUrl.includes(':generateContent')) {
-                const modelName = settings.apiModel || 'gemini-pro';
+                let modelName = settings.apiModel || 'gemini-pro';
+
+                // 确保模型名称不包含 models/ 前缀
+                if (modelName.startsWith('models/')) {
+                    modelName = modelName.replace('models/', '');
+                }
+
                 if (targetApiUrl.endsWith('/v1beta')) {
                     targetApiUrl += `/models/${modelName}:generateContent`;
                 } else if (!targetApiUrl.includes('/v1beta')) {

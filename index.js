@@ -1880,6 +1880,11 @@ jQuery(async () => {
      * 🧪 保留的测试函数：
      * - testRelayServer() - 测试中继服务器连接
      * - checkFloatingButton() - 检查和修复悬浮按钮
+     *
+     * 🔧 修复内容：
+     * - 修复了 dataSource 未定义错误
+     * - 清理了未使用的变量
+     * - 保持了所有核心功能
      */
 
 
@@ -2808,25 +2813,20 @@ ${currentPersonality}
 
                 if (syncTime > localTime) {
                     savedData = syncParsed;
-                    dataSource = 'sync';
                     console.log(`[${extensionName}] 使用同步数据（更新）`);
                 } else {
                     savedData = localParsed;
-                    dataSource = 'local';
                     console.log(`[${extensionName}] 使用本地数据（更新）`);
                 }
             } catch (error) {
                 console.warn(`[${extensionName}] 数据比较失败，使用本地数据:`, error);
                 savedData = JSON.parse(localData);
-                dataSource = 'local';
             }
         } else if (syncData) {
             savedData = typeof syncData === 'object' ? syncData : JSON.parse(syncData);
-            dataSource = 'sync';
             console.log(`[${extensionName}] 使用同步数据（仅有同步）`);
         } else if (localData) {
             savedData = JSON.parse(localData);
-            dataSource = 'local';
             console.log(`[${extensionName}] 使用本地数据（仅有本地）`);
         }
 

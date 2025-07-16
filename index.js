@@ -1879,6 +1879,7 @@ jQuery(async () => {
      *
      * 🧪 保留的测试函数：
      * - testRelayServer() - 测试中继服务器连接
+     * - checkFloatingButton() - 检查和修复悬浮按钮
      */
 
 
@@ -1886,6 +1887,54 @@ jQuery(async () => {
 
 
 
+
+    /**
+     * 🔧 检查和修复悬浮按钮
+     */
+    window.checkFloatingButton = function() {
+        console.log('🔧 检查悬浮按钮状态...');
+
+        // 1. 检查按钮是否存在
+        const button = $(`#${BUTTON_ID}`);
+        console.log(`按钮存在: ${button.length > 0 ? '✅' : '❌'}`);
+
+        if (button.length === 0) {
+            console.log('🔄 按钮不存在，尝试重新创建...');
+
+            // 检查插件是否启用
+            const isEnabled = localStorage.getItem(STORAGE_KEY_ENABLED) !== "false";
+            console.log(`插件启用状态: ${isEnabled ? '✅' : '❌'}`);
+
+            if (isEnabled) {
+                initializeFloatingButton();
+
+                // 再次检查
+                setTimeout(() => {
+                    const newButton = $(`#${BUTTON_ID}`);
+                    console.log(`重新创建结果: ${newButton.length > 0 ? '✅ 成功' : '❌ 失败'}`);
+
+                    if (newButton.length > 0) {
+                        console.log('✅ 悬浮按钮已恢复！');
+                    } else {
+                        console.log('❌ 悬浮按钮创建失败，请刷新页面');
+                    }
+                }, 100);
+            } else {
+                console.log('❌ 插件已禁用，请在设置中启用');
+            }
+        } else {
+            console.log('✅ 悬浮按钮正常存在');
+
+            // 检查按钮样式
+            const styles = button[0].style;
+            console.log('按钮样式:', {
+                position: styles.position,
+                display: styles.display,
+                visibility: styles.visibility,
+                zIndex: styles.zIndex
+            });
+        }
+    };
 
     /**
      * 测试中继服务器连接

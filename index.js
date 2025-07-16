@@ -1897,7 +1897,10 @@ jQuery(async () => {
      * - 修复了 dataSource 未定义错误
      * - 修复了 targetHeaders 未定义错误
      * - 修复了 relayServerUrl 未定义错误
+     * - 修复了 callViaRelay 函数未定义错误
      * - 修复了聊天功能中不必要的中继服务器连接测试导致的超时问题
+     * - 修复了API类型切换时不自动填入官方端点的问题
+     * - 实现了真正的直连逻辑，而不是伪装的中继调用
      * - 调整了聊天弹窗高度，与商店弹窗保持一致（70vh）
      * - 添加了聊天历史记录支持，AI能记住之前的对话
      * - 删除了聊天界面的开头欢迎消息，简化体验
@@ -2235,23 +2238,15 @@ jQuery(async () => {
             if (backendInfo) {
                 console.log(`[${extensionName}] 💡 为后端API提供配置建议`);
 
-                // 根据API类型自动设置URL
+                // 根据API类型自动设置URL（官方API总是填入官方端点）
                 if (backendInfo.type === 'openai') {
-                    if (!$('#ai-url-input').val()) {
-                        $('#ai-url-input').val('https://api.openai.com/v1');
-                    }
+                    $('#ai-url-input').val('https://api.openai.com/v1');
                 } else if (backendInfo.type === 'claude') {
-                    if (!$('#ai-url-input').val()) {
-                        $('#ai-url-input').val('https://api.anthropic.com/v1');
-                    }
+                    $('#ai-url-input').val('https://api.anthropic.com/v1');
                 } else if (backendInfo.type === 'google') {
-                    if (!$('#ai-url-input').val()) {
-                        $('#ai-url-input').val('https://generativelanguage.googleapis.com/v1beta');
-                    }
+                    $('#ai-url-input').val('https://generativelanguage.googleapis.com/v1beta');
                 } else if (backendInfo.type === 'deepseek') {
-                    if (!$('#ai-url-input').val()) {
-                        $('#ai-url-input').val('https://api.deepseek.com/v1');
-                    }
+                    $('#ai-url-input').val('https://api.deepseek.com/v1');
                 } else if (backendInfo.type === 'ollama') {
                     if (!$('#ai-url-input').val()) {
                         $('#ai-url-input').val('http://localhost:11434/v1');
@@ -2394,7 +2389,7 @@ jQuery(async () => {
             let targetApiUrl = settings.apiUrl.replace(/\/+$/, '');
 
             // 根据API类型自动添加正确的端点
-            if (settings.apiType === 'openai' || settings.apiType === 'custom' || !settings.apiType) {
+            if (settings.apiType === 'openai' || settings.apiType === 'deepseek') {
                 if (!targetApiUrl.includes('/chat/completions')) {
                     if (targetApiUrl.endsWith('/v1')) {
                         targetApiUrl += '/chat/completions';
@@ -2427,162 +2422,227 @@ jQuery(async () => {
                 }
             }
 
-            console.log(`[${extensionName}] 🎯 目标API: ${targetApiUrl}`);
+            console.log(`[${extensionName}] 🎯 直连目标: ${targetApiUrl}`);
 
-            // 4. 构建请求头
-            const targetHeaders = { 'Content-Type': 'application/json' };
+            // 2. 构建请求头
+            const headers = { 'Content-Type': 'application/json' };
 
-            // 5. 根据API类型设置认证头
+            // 3. 根据API类型设置认证头
             if (settings.apiType === 'google') {
-                targetHeaders['x-goog-api-key'] = settings.apiKey;
-                if (!targetApiUrl.includes('?key=') && !targetApiUrl.includes('&key=')) {
-                    targetApiUrl += `?key=${settings.apiKey}`;
-                }
+                headers['x-goog-api-key'] = settings.apiKey;
             } else if (settings.apiType === 'claude') {
-                targetHeaders['x-api-key'] = settings.apiKey;
-                targetHeaders['anthropic-version'] = '2023-06-01';
+                headers['x-api-key'] = settings.apiKey;
+                headers['anthropic-version'] = '2023-06-01';
             } else {
-                targetHeaders['Authorization'] = `Bearer ${settings.apiKey}`;
+                // OpenAI 和 DeepSeek
+                headers['Authorization'] = `Bearer ${settings.apiKey}`;
             }
 
-            // 6. 构建请求体
-            let targetRequestBody;
-            if (settings.apiType === 'openai' || settings.apiType === 'custom' || !settings.apiType) {
-                targetRequestBody = {
-                    model: settings.apiModel || 'gpt-3.5-turbo',
-                    messages: [{ role: 'user', content: prompt }],
-                    max_tokens: 4000,
-                    temperature: 0.8
-                };
-            } else if (settings.apiType === 'claude') {
-                targetRequestBody = {
+            // 4. 构建请求体
+            let requestBody;
+            if (settings.apiType === 'claude') {
+                requestBody = {
                     model: settings.apiModel || 'claude-3-sonnet-20240229',
-                    max_tokens: 4000,
+                    max_tokens: 1000,
                     messages: [{ role: 'user', content: prompt }]
                 };
             } else if (settings.apiType === 'google') {
-                targetRequestBody = {
+                requestBody = {
                     contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: { maxOutputTokens: 4000, temperature: 0.8 }
+                    generationConfig: {
+                        maxOutputTokens: 1000,
+                        temperature: 0.7
+                    }
                 };
             } else {
-                // 通用格式
-                targetRequestBody = {
-                    model: settings.apiModel || 'default',
-                    prompt: prompt,
-                    max_tokens: 4000,
-                    temperature: 0.8
+                // OpenAI 和 DeepSeek 格式
+                requestBody = {
+                    model: settings.apiModel || (settings.apiType === 'deepseek' ? 'deepseek-chat' : 'gpt-3.5-turbo'),
+                    messages: [{ role: 'user', content: prompt }],
+                    max_tokens: 1000,
+                    temperature: 0.7
                 };
             }
 
-            // 7. 构建中继服务器请求体
-            const relayRequestBody = {
-                targetUrl: targetApiUrl,
-                method: 'POST',
-                headers: targetHeaders,
-                body: targetRequestBody
-            };
+            // 5. 发送直连请求
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-            console.log(`[${extensionName}] 📦 中继请求体:`, {
-                targetUrl: targetApiUrl,
+            console.log(`[${extensionName}] 🚀 开始直连请求...`);
+
+            const response = await fetch(targetApiUrl, {
                 method: 'POST',
-                headers: targetHeaders,
-                bodySize: JSON.stringify(targetRequestBody).length
+                headers: headers,
+                body: JSON.stringify(requestBody),
+                signal: controller.signal
             });
 
-            // 8. 设置超时控制
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => {
-                console.log(`[${extensionName}] ⏰ API调用超时，取消请求`);
-                controller.abort();
-            }, timeout);
+            clearTimeout(timeoutId);
 
-            // 9. 发送请求
-            const startTime = Date.now();
-            console.log(`[${extensionName}] 🚀 开始发送请求...`);
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
 
-            const fetchOptions = {
+            const data = await response.json();
+
+            // 6. 解析响应
+            let aiReply;
+            if (settings.apiType === 'claude') {
+                if (data.content && data.content[0] && data.content[0].text) {
+                    aiReply = data.content[0].text;
+                } else {
+                    throw new Error('Claude API响应格式异常');
+                }
+            } else if (settings.apiType === 'google') {
+                if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]) {
+                    aiReply = data.candidates[0].content.parts[0].text;
+                } else {
+                    throw new Error('Google API响应格式异常');
+                }
+            } else {
+                // OpenAI 和 DeepSeek 格式
+                if (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
+                    aiReply = data.choices[0].message.content;
+                } else {
+                    throw new Error('API响应格式异常');
+                }
+            }
+
+            console.log(`[${extensionName}] ✅ 直连成功，AI回复: ${aiReply.substring(0, 50)}...`);
+            return aiReply.trim();
+
+        } catch (error) {
+            console.error(`[${extensionName}] ❌ 统一AI调用失败:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * 🔄 通过中继服务器调用API
+     */
+    async function callViaRelay(prompt, settings, timeout) {
+        console.log(`[${extensionName}] 🔄 开始中继服务器调用...`);
+
+        const relayServerUrl = 'http://154.12.38.33:3000/proxy';
+
+        // 这里使用原有的中继服务器逻辑
+        // 构建目标API URL
+        let targetApiUrl = settings.apiUrl.replace(/\/+$/, '');
+
+        // 根据API类型自动添加正确的端点
+        if (settings.apiType === 'openai' || settings.apiType === 'custom' || settings.apiType === 'deepseek') {
+            if (!targetApiUrl.includes('/chat/completions')) {
+                if (targetApiUrl.endsWith('/v1')) {
+                    targetApiUrl += '/chat/completions';
+                } else if (!targetApiUrl.includes('/v1')) {
+                    targetApiUrl += '/v1/chat/completions';
+                } else {
+                    targetApiUrl += '/chat/completions';
+                }
+            }
+        } else if (settings.apiType === 'claude') {
+            if (!targetApiUrl.includes('/messages')) {
+                if (targetApiUrl.endsWith('/v1')) {
+                    targetApiUrl += '/messages';
+                } else if (!targetApiUrl.includes('/v1')) {
+                    targetApiUrl += '/v1/messages';
+                } else {
+                    targetApiUrl += '/messages';
+                }
+            }
+        } else if (settings.apiType === 'google') {
+            if (!targetApiUrl.includes(':generateContent')) {
+                const modelName = settings.apiModel || 'gemini-pro';
+                if (targetApiUrl.endsWith('/v1beta')) {
+                    targetApiUrl += `/models/${modelName}:generateContent`;
+                } else if (!targetApiUrl.includes('/v1beta')) {
+                    targetApiUrl += `/v1beta/models/${modelName}:generateContent`;
+                } else {
+                    targetApiUrl += `/models/${modelName}:generateContent`;
+                }
+            }
+        }
+
+        // 构建请求头
+        const targetHeaders = { 'Content-Type': 'application/json' };
+
+        // 根据API类型设置认证头
+        if (settings.apiType === 'google') {
+            targetHeaders['x-goog-api-key'] = settings.apiKey;
+        } else if (settings.apiType === 'claude') {
+            targetHeaders['x-api-key'] = settings.apiKey;
+            targetHeaders['anthropic-version'] = '2023-06-01';
+        } else {
+            targetHeaders['Authorization'] = `Bearer ${settings.apiKey}`;
+        }
+
+        // 构建请求体
+        let targetRequestBody;
+        if (settings.apiType === 'openai' || settings.apiType === 'custom' || settings.apiType === 'deepseek') {
+            targetRequestBody = {
+                model: settings.apiModel || (settings.apiType === 'deepseek' ? 'deepseek-chat' : 'gpt-3.5-turbo'),
+                messages: [{ role: 'user', content: prompt }],
+                max_tokens: 4000,
+                temperature: 0.8
+            };
+        } else if (settings.apiType === 'claude') {
+            targetRequestBody = {
+                model: settings.apiModel || 'claude-3-sonnet-20240229',
+                max_tokens: 4000,
+                messages: [{ role: 'user', content: prompt }]
+            };
+        } else if (settings.apiType === 'google') {
+            targetRequestBody = {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { maxOutputTokens: 4000, temperature: 0.8 }
+            };
+        }
+
+        // 构建中继服务器请求体
+        const relayRequestBody = {
+            targetUrl: targetApiUrl,
+            method: 'POST',
+            headers: targetHeaders,
+            body: targetRequestBody
+        };
+
+        // 发送请求
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+        try {
+            const response = await fetch(relayServerUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(relayRequestBody),
                 signal: controller.signal
-            };
-
-            // 移动端特殊处理
-            const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            if (isMobile) {
-                fetchOptions.headers = {
-                    ...fetchOptions.headers,
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache'
-                };
-                console.log(`[${extensionName}] 📱 移动端优化已应用`);
-            }
-
-            // 通过中继服务器发送请求
-            console.log(`[${extensionName}] 🌐 发送到中继服务器: ${relayServerUrl}`);
-            console.log(`[${extensionName}] 📋 请求选项:`, {
-                method: fetchOptions.method,
-                headers: fetchOptions.headers,
-                bodyLength: fetchOptions.body.length,
-                hasSignal: !!fetchOptions.signal
             });
 
-            const response = await fetch(relayServerUrl, fetchOptions);
-
-            // 10. 处理响应
-            const endTime = Date.now();
-            const duration = endTime - startTime;
             clearTimeout(timeoutId);
-            console.log(`[${extensionName}] ✅ 响应状态: ${response.status} (${duration}ms)`);
 
             if (!response.ok) {
-                let errorDetails = '';
-                try {
-                    const errorText = await response.text();
-                    errorDetails = errorText ? ` - ${errorText}` : '';
-                    console.log(`[${extensionName}] ❌ 错误详情:`, errorText);
-                } catch (e) {
-                    console.log(`[${extensionName}] ❌ 无法读取错误详情:`, e);
-                }
-                throw new Error(`API调用失败: ${response.status} ${response.statusText}${errorDetails}`);
+                const errorText = await response.text();
+                throw new Error(`中继服务器错误: ${response.status} ${errorText}`);
             }
 
             const data = await response.json();
-            console.log(`[${extensionName}] 📦 响应数据:`, data);
 
-            // 11. 解析响应内容
+            // 解析响应
             let result = '';
-
-            if (settings.apiType === 'openai' || settings.apiType === 'custom' || !settings.apiType) {
-                result = data.choices?.[0]?.message?.content ||
-                         data.choices?.[0]?.text ||
-                         data.content ||
-                         '';
+            if (settings.apiType === 'openai' || settings.apiType === 'custom' || settings.apiType === 'deepseek') {
+                result = data.choices?.[0]?.message?.content || '';
             } else if (settings.apiType === 'claude') {
-                result = data.content?.[0]?.text ||
-                         data.completion ||
-                         '';
+                result = data.content?.[0]?.text || '';
             } else if (settings.apiType === 'google') {
-                result = data.candidates?.[0]?.content?.parts?.[0]?.text ||
-                         data.text ||
-                         '';
-            } else {
-                result = data.text || data.content || data.response || '';
+                result = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
             }
 
-            console.log(`[${extensionName}] 🎯 解析结果: "${result.substring(0, 100)}..."`);
-
-            if (result && result.trim()) {
-                console.log(`[${extensionName}] ✅ AI调用成功`);
-                return result.trim();
-            } else {
-                console.log(`[${extensionName}] ⚠️ 响应为空，使用默认回复`);
-                return "我现在有点累，稍后再聊吧~";
-            }
+            console.log(`[${extensionName}] ✅ 中继调用成功，AI回复: ${result.substring(0, 50)}...`);
+            return result.trim();
 
         } catch (error) {
-            console.error(`[${extensionName}] ❌ 统一AI调用失败:`, error);
+            clearTimeout(timeoutId);
             throw error;
         }
     }

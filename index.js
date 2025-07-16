@@ -1915,6 +1915,59 @@ jQuery(async () => {
     };
 
     /**
+     * 测试中继服务器连接
+     */
+    window.testRelayServer = function() {
+        console.log('🧪 测试中继服务器连接...');
+
+        const relayServerUrl = 'http://154.12.38.33:3000/proxy';
+
+        // 构建测试请求
+        const testRequest = {
+            targetUrl: 'https://httpbin.org/get',
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: null
+        };
+
+        console.log(`🔗 测试中继服务器: ${relayServerUrl}`);
+        console.log(`🎯 测试目标: ${testRequest.targetUrl}`);
+
+        return fetch(relayServerUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(testRequest)
+        })
+        .then(response => {
+            console.log(`📡 中继服务器响应状态: ${response.status} ${response.statusText}`);
+
+            if (response.ok) {
+                return response.json();
+            } else {
+                throw new Error(`中继服务器错误: ${response.status} ${response.statusText}`);
+            }
+        })
+        .then(data => {
+            console.log('✅ 中继服务器测试成功！');
+            console.log('📦 响应数据:', data);
+            return true;
+        })
+        .catch(error => {
+            console.error('❌ 中继服务器测试失败:', error);
+            console.log('💡 请确保:');
+            console.log('  1. 中继服务器已启动 (node server.js)');
+            console.log('  2. 服务器IP地址正确: 154.12.38.33');
+            console.log('  3. 端口3000已开放');
+            console.log('  4. 防火墙允许访问');
+            return false;
+        });
+    };
+
+    /**
      * 切换API配置输入框的显示状态 - 后端API版本
      */
     function toggleApiConfigInputs(apiType) {
@@ -2148,92 +2201,96 @@ jQuery(async () => {
     }
 
     /**
-     * 调用自定义API
+     * 调用自定义API - 通过中继服务器
      * @param {string} prompt - 要发送给AI的提示词
      * @param {object} settings - API配置设置
      * @param {number} timeout - 超时时间（毫秒）
      * @returns {Promise<string>} - AI生成的回复
      */
     async function callCustomAPI(prompt, settings, timeout = 30000) {
-        console.log(`[${extensionName}] 调用自定义API: ${settings.apiType}，超时时间: ${timeout}ms`);
+        console.log(`[${extensionName}] 通过中继服务器调用API: ${settings.apiType}，超时时间: ${timeout}ms`);
 
-        // 智能构建请求URL - 用户只需填写到/v1，自动添加端点
-        let apiUrl = settings.apiUrl;
+        // 中继服务器地址
+        const relayServerUrl = 'http://154.12.38.33:3000/proxy';
+
+        // 智能构建目标API URL - 用户只需填写到/v1，自动添加端点
+        let targetApiUrl = settings.apiUrl;
 
         // 移除末尾斜杠
-        apiUrl = apiUrl.replace(/\/+$/, '');
+        targetApiUrl = targetApiUrl.replace(/\/+$/, '');
 
         // 自动添加聊天端点 - 用户只需要填写到/v1
         if (settings.apiType === 'openai' || settings.apiType === 'custom' || !settings.apiType) {
-            if (!apiUrl.includes('/chat/completions')) {
+            if (!targetApiUrl.includes('/chat/completions')) {
                 // 如果URL以/v1结尾，直接添加/chat/completions
-                if (apiUrl.endsWith('/v1')) {
-                    apiUrl = apiUrl + '/chat/completions';
+                if (targetApiUrl.endsWith('/v1')) {
+                    targetApiUrl = targetApiUrl + '/chat/completions';
                 }
                 // 如果URL不包含/v1，先添加/v1再添加/chat/completions
-                else if (!apiUrl.includes('/v1')) {
-                    apiUrl = apiUrl + '/v1/chat/completions';
+                else if (!targetApiUrl.includes('/v1')) {
+                    targetApiUrl = targetApiUrl + '/v1/chat/completions';
                 }
                 // 如果URL包含/v1但不在末尾，直接添加/chat/completions
                 else {
-                    apiUrl = apiUrl + '/chat/completions';
+                    targetApiUrl = targetApiUrl + '/chat/completions';
                 }
             }
         } else if (settings.apiType === 'claude') {
-            if (!apiUrl.includes('/messages')) {
-                if (apiUrl.endsWith('/v1')) {
-                    apiUrl = apiUrl + '/messages';
-                } else if (!apiUrl.includes('/v1')) {
-                    apiUrl = apiUrl + '/v1/messages';
+            if (!targetApiUrl.includes('/messages')) {
+                if (targetApiUrl.endsWith('/v1')) {
+                    targetApiUrl = targetApiUrl + '/messages';
+                } else if (!targetApiUrl.includes('/v1')) {
+                    targetApiUrl = targetApiUrl + '/v1/messages';
                 } else {
-                    apiUrl = apiUrl + '/messages';
+                    targetApiUrl = targetApiUrl + '/messages';
                 }
             }
         } else if (settings.apiType === 'google') {
             // Google Gemini API 特殊处理
-            if (!apiUrl.includes(':generateContent')) {
+            if (!targetApiUrl.includes(':generateContent')) {
                 // 构建正确的Gemini API端点
                 const modelName = settings.apiModel || 'gemini-pro';
-                if (apiUrl.endsWith('/v1beta')) {
-                    apiUrl = apiUrl + `/models/${modelName}:generateContent`;
-                } else if (!apiUrl.includes('/v1beta')) {
-                    apiUrl = apiUrl + `/v1beta/models/${modelName}:generateContent`;
+                if (targetApiUrl.endsWith('/v1beta')) {
+                    targetApiUrl = targetApiUrl + `/models/${modelName}:generateContent`;
+                } else if (!targetApiUrl.includes('/v1beta')) {
+                    targetApiUrl = targetApiUrl + `/v1beta/models/${modelName}:generateContent`;
                 } else {
-                    apiUrl = apiUrl + `/models/${modelName}:generateContent`;
+                    targetApiUrl = targetApiUrl + `/models/${modelName}:generateContent`;
                 }
             }
         }
 
         console.log(`[${extensionName}] 原始URL: ${settings.apiUrl}`);
-        console.log(`[${extensionName}] 修正后URL: ${apiUrl}`);
+        console.log(`[${extensionName}] 目标API URL: ${targetApiUrl}`);
+        console.log(`[${extensionName}] 中继服务器: ${relayServerUrl}`);
         console.log(`[${extensionName}] API类型: ${settings.apiType}`);
 
-        // 构建请求头（根据API类型）
-        const headers = {
+        // 构建目标API的请求头（根据API类型）
+        const targetHeaders = {
             'Content-Type': 'application/json'
         };
 
         // 根据API类型设置认证头
         if (settings.apiType === 'google') {
             // Google API 使用 x-goog-api-key 头或者URL参数
-            headers['x-goog-api-key'] = settings.apiKey;
+            targetHeaders['x-goog-api-key'] = settings.apiKey;
             // 也可以通过URL参数传递，如果头部认证失败的话
-            if (!apiUrl.includes('?key=') && !apiUrl.includes('&key=')) {
-                apiUrl += `?key=${settings.apiKey}`;
+            if (!targetApiUrl.includes('?key=') && !targetApiUrl.includes('&key=')) {
+                targetApiUrl += `?key=${settings.apiKey}`;
             }
         } else if (settings.apiType === 'claude') {
             // Claude API 使用 x-api-key
-            headers['x-api-key'] = settings.apiKey;
-            headers['anthropic-version'] = '2023-06-01';
+            targetHeaders['x-api-key'] = settings.apiKey;
+            targetHeaders['anthropic-version'] = '2023-06-01';
         } else {
             // OpenAI 和其他 API 使用 Bearer token
-            headers['Authorization'] = `Bearer ${settings.apiKey}`;
+            targetHeaders['Authorization'] = `Bearer ${settings.apiKey}`;
         }
 
-        // 构建请求体（根据API类型）
-        let requestBody;
+        // 构建目标API的请求体（根据API类型）
+        let targetRequestBody;
         if (settings.apiType === 'openai' || settings.apiType === 'custom') {
-            requestBody = {
+            targetRequestBody = {
                 model: settings.apiModel || 'gpt-3.5-turbo',
                 messages: [
                     {
@@ -2245,7 +2302,7 @@ jQuery(async () => {
                 temperature: 0.8
             };
         } else if (settings.apiType === 'claude') {
-            requestBody = {
+            targetRequestBody = {
                 model: settings.apiModel || 'claude-3-sonnet-20240229',
                 max_tokens: 10000,  // 大幅增加token限制
                 messages: [
@@ -2257,7 +2314,7 @@ jQuery(async () => {
             };
         } else if (settings.apiType === 'google') {
             // Google Gemini API 格式
-            requestBody = {
+            targetRequestBody = {
                 contents: [
                     {
                         parts: [
@@ -2274,13 +2331,21 @@ jQuery(async () => {
             };
         } else {
             // 通用格式
-            requestBody = {
+            targetRequestBody = {
                 model: settings.apiModel || 'default',
                 prompt: prompt,
                 max_tokens: 10000,  // 大幅增加token限制
                 temperature: 0.8
             };
         }
+
+        // 构建发送给中继服务器的请求体
+        const relayRequestBody = {
+            targetUrl: targetApiUrl,
+            method: 'POST',
+            headers: targetHeaders,
+            body: targetRequestBody
+        };
 
         // 使用AbortController来处理超时
         const controller = new AbortController();
@@ -2290,17 +2355,21 @@ jQuery(async () => {
         }, timeout);
 
         const startTime = Date.now();
-        console.log(`[${extensionName}] 开始发送请求，时间戳: ${startTime}`);
-        console.log(`[${extensionName}] 请求头:`, headers);
-        console.log(`[${extensionName}] 请求体:`, requestBody);
-        console.log(`[${extensionName}] 请求体JSON:`, JSON.stringify(requestBody, null, 2));
+        console.log(`[${extensionName}] 开始通过中继服务器发送请求，时间戳: ${startTime}`);
+        console.log(`[${extensionName}] 中继服务器URL: ${relayServerUrl}`);
+        console.log(`[${extensionName}] 目标API URL: ${targetApiUrl}`);
+        console.log(`[${extensionName}] 目标请求头:`, targetHeaders);
+        console.log(`[${extensionName}] 目标请求体:`, targetRequestBody);
+        console.log(`[${extensionName}] 中继请求体JSON:`, JSON.stringify(relayRequestBody, null, 2));
 
         try {
-            // 移动端API连接优化
+            // 构建发送给中继服务器的请求选项
             const fetchOptions = {
                 method: 'POST',
-                headers: headers,
-                body: JSON.stringify(requestBody),
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(relayRequestBody),
                 signal: controller.signal
             };
 
@@ -2318,10 +2387,11 @@ jQuery(async () => {
                     'Pragma': 'no-cache'
                 };
 
-                console.log(`[${extensionName}] 移动端API请求优化已应用`);
+                console.log(`[${extensionName}] 移动端中继请求优化已应用`);
             }
 
-            const response = await fetch(apiUrl, fetchOptions);
+            // 通过中继服务器发送请求
+            const response = await fetch(relayServerUrl, fetchOptions);
 
             const endTime = Date.now();
             const duration = endTime - startTime;

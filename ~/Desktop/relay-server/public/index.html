@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>虚拟宠物中继服务器 - 管理面板</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .status-bar {
+            background: #f8f9fa;
+            padding: 20px;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #28a745;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+        }
+        
+        .card h3 {
+            color: #495057;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+        
+        .endpoint {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 4px solid #007bff;
+        }
+        
+        .endpoint-method {
+            display: inline-block;
+            background: #007bff;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        
+        .endpoint-method.post {
+            background: #28a745;
+        }
+        
+        .endpoint-url {
+            font-family: 'Courier New', monospace;
+            color: #495057;
+            font-weight: bold;
+        }
+        
+        .endpoint-desc {
+            color: #6c757d;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+        
+        .test-section {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 12px;
+            margin-top: 30px;
+        }
+        
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            margin: 5px;
+            transition: background 0.2s;
+        }
+        
+        .test-button:hover {
+            background: #0056b3;
+        }
+        
+        .test-button.success {
+            background: #28a745;
+        }
+        
+        .test-button.danger {
+            background: #dc3545;
+        }
+        
+        .log-area {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .stat-card {
+            text-align: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+        }
+        
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+        
+        .footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            color: #6c757d;
+            border-top: 1px solid #e9ecef;
+        }
+        
+        @media (max-width: 768px) {
+            .status-bar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .status-item {
+                justify-content: center;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🐾 虚拟宠物中继服务器</h1>
+            <p>Virtual Pet Relay Server v2.0 - API代理管理面板</p>
+        </div>
+        
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-indicator" id="status-indicator"></div>
+                <span>服务器状态: <strong id="server-status">检查中...</strong></span>
+            </div>
+            <div class="status-item">
+                <span>🕒 运行时间: <strong id="uptime">--</strong></span>
+            </div>
+            <div class="status-item">
+                <span>📡 端口: <strong>3000</strong></span>
+            </div>
+            <div class="status-item">
+                <span>🌐 外部地址: <strong>154.12.38.33:3000</strong></span>
+            </div>
+        </div>
+        
+        <div class="content">
+            <div class="grid">
+                <div class="card">
+                    <h3>📋 API端点</h3>
+                    <div class="endpoint">
+                        <span class="endpoint-method">GET</span>
+                        <span class="endpoint-url">/health</span>
+                        <div class="endpoint-desc">健康检查 - 获取服务器状态</div>
+                    </div>
+                    <div class="endpoint">
+                        <span class="endpoint-method">GET</span>
+                        <span class="endpoint-url">/test</span>
+                        <div class="endpoint-desc">测试端点 - 验证服务器连接</div>
+                    </div>
+                    <div class="endpoint">
+                        <span class="endpoint-method post">POST</span>
+                        <span class="endpoint-url">/proxy</span>
+                        <div class="endpoint-desc">API代理 - 转发请求到第三方API</div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3>📊 服务器统计</h3>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-number" id="total-requests">0</div>
+                            <div class="stat-label">总请求数</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="success-rate">100%</div>
+                            <div class="stat-label">成功率</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="avg-response">--</div>
+                            <div class="stat-label">平均响应时间</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3>🔧 快速操作</h3>
+                    <button class="test-button" onclick="testHealth()">健康检查</button>
+                    <button class="test-button" onclick="testProxy()">测试代理</button>
+                    <button class="test-button" onclick="clearLogs()">清除日志</button>
+                    <button class="test-button danger" onclick="window.open('/test.html', '_blank')">API测试工具</button>
+                </div>
+            </div>
+            
+            <div class="test-section">
+                <h3>🧪 实时日志</h3>
+                <div class="log-area" id="log-area">
+                    <div>🚀 虚拟宠物中继服务器管理面板已加载</div>
+                    <div>📡 正在检查服务器状态...</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>Virtual Pet Relay Server v2.0 | 专为虚拟宠物插件设计的API中继服务器</p>
+            <p>🧪 <a href="/test.html" style="color: #007bff;">API测试工具</a> |
+               📖 <a href="#" onclick="window.open('README.md')" style="color: #007bff;">文档</a> |
+               🔍 <a href="/health" style="color: #007bff;">健康检查</a> |
+               📊 <a href="/test" style="color: #007bff;">测试端点</a></p>
+        </div>
+    </div>
+
+    <script>
+        let logCount = 0;
+        
+        function addLog(message, type = 'info') {
+            const logArea = document.getElementById('log-area');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            
+            let icon = '📝';
+            if (type === 'success') icon = '✅';
+            if (type === 'error') icon = '❌';
+            if (type === 'warning') icon = '⚠️';
+            
+            logEntry.innerHTML = `[${timestamp}] ${icon} ${message}`;
+            logArea.appendChild(logEntry);
+            logArea.scrollTop = logArea.scrollHeight;
+            
+            // 限制日志数量
+            if (logArea.children.length > 50) {
+                logArea.removeChild(logArea.firstChild);
+            }
+        }
+        
+        async function checkServerStatus() {
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+                
+                document.getElementById('server-status').textContent = '运行中';
+                document.getElementById('status-indicator').style.background = '#28a745';
+                document.getElementById('uptime').textContent = formatUptime(data.uptime);
+                
+                addLog('服务器状态检查成功', 'success');
+                return true;
+            } catch (error) {
+                document.getElementById('server-status').textContent = '离线';
+                document.getElementById('status-indicator').style.background = '#dc3545';
+                addLog('服务器状态检查失败: ' + error.message, 'error');
+                return false;
+            }
+        }
+        
+        function formatUptime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${hours}h ${minutes}m ${secs}s`;
+        }
+        
+        async function testHealth() {
+            addLog('开始健康检查测试...');
+            const success = await checkServerStatus();
+            if (success) {
+                addLog('健康检查测试通过', 'success');
+            }
+        }
+        
+        async function testProxy() {
+            addLog('开始代理功能测试...');
+            try {
+                const response = await fetch('/proxy', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        targetUrl: 'https://httpbin.org/get',
+                        method: 'GET'
+                    })
+                });
+                
+                if (response.ok) {
+                    addLog('代理功能测试成功', 'success');
+                } else {
+                    addLog('代理功能测试失败: HTTP ' + response.status, 'error');
+                }
+            } catch (error) {
+                addLog('代理功能测试失败: ' + error.message, 'error');
+            }
+        }
+        
+        function clearLogs() {
+            document.getElementById('log-area').innerHTML = '';
+            addLog('日志已清除');
+        }
+        
+        function showAPITest() {
+            const testData = {
+                targetUrl: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent',
+                method: 'POST',
+                headers: {
+                    'x-goog-api-key': 'YOUR_API_KEY',
+                    'Content-Type': 'application/json'
+                },
+                body: {
+                    contents: [{
+                        parts: [{ text: '你好，我是虚拟宠物的主人' }]
+                    }],
+                    generationConfig: {
+                        maxOutputTokens: 1000,
+                        temperature: 0.7
+                    }
+                }
+            };
+            
+            addLog('API测试请求格式示例:');
+            addLog(JSON.stringify(testData, null, 2));
+        }
+        
+        // 页面加载时检查服务器状态
+        window.addEventListener('load', () => {
+            checkServerStatus();
+            
+            // 每30秒检查一次状态
+            setInterval(checkServerStatus, 30000);
+        });
+    </script>
+</body>
+</html>

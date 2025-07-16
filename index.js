@@ -1881,6 +1881,7 @@ jQuery(async () => {
      * 🧪 保留的测试函数：
      * - debugAIFunctions() - 检查AI调用函数的实际内容
      * - testDirectConnection() - 测试直连+中继退回逻辑
+     * - testAutoFillURL() - 测试自动填充URL功能
      * - testAPIConfig() - 测试API配置优化
      * - testRelayServerSimple() - 简单测试中继服务器连接
      * - testRelayServer() - 完整测试中继服务器代理功能
@@ -1899,7 +1900,7 @@ jQuery(async () => {
      * - 修复了 relayServerUrl 未定义错误
      * - 修复了 callViaRelay 函数未定义错误
      * - 修复了聊天功能中不必要的中继服务器连接测试导致的超时问题
-     * - 修复了API类型切换时不自动填入官方端点的问题
+     * - 修复了API类型切换时不自动填入官方端点的问题（在UI事件监听中添加switch逻辑）
      * - 实现了真正的直连逻辑，而不是伪装的中继调用
      * - 调整了聊天弹窗高度，与商店弹窗保持一致（70vh）
      * - 添加了聊天历史记录支持，AI能记住之前的对话
@@ -2024,6 +2025,46 @@ jQuery(async () => {
         }).catch(error => {
             console.log('❌ 测试失败:', error.message);
         });
+    };
+
+    /**
+     * 🧪 测试自动填充URL功能
+     */
+    window.testAutoFillURL = function() {
+        console.log('🧪 测试自动填充URL功能...');
+
+        const apiTypes = ['openai', 'claude', 'google', 'deepseek', 'ollama', 'lmstudio', 'custom'];
+        const expectedUrls = {
+            'openai': 'https://api.openai.com/v1',
+            'claude': 'https://api.anthropic.com/v1',
+            'google': 'https://generativelanguage.googleapis.com/v1beta',
+            'deepseek': 'https://api.deepseek.com/v1',
+            'ollama': 'http://localhost:11434/v1',
+            'lmstudio': 'http://localhost:1234/v1',
+            'custom': '不自动填充'
+        };
+
+        console.log('📋 测试各API类型的自动填充...');
+
+        apiTypes.forEach(apiType => {
+            // 模拟选择API类型
+            $('#ai-api-select').val(apiType).trigger('change');
+
+            // 检查URL是否正确填充
+            const currentUrl = $('#ai-url-input').val();
+            const expectedUrl = expectedUrls[apiType];
+
+            if (apiType === 'custom') {
+                console.log(`${apiType}: 保持现有URL (${currentUrl}) ✅`);
+            } else if (currentUrl === expectedUrl) {
+                console.log(`${apiType}: ${currentUrl} ✅`);
+            } else {
+                console.log(`${apiType}: 期望 ${expectedUrl}, 实际 ${currentUrl} ❌`);
+            }
+        });
+
+        console.log('\n✅ 自动填充URL测试完成');
+        console.log('💡 现在切换API类型时应该自动填入对应的官方端点');
     };
 
     /**
@@ -2909,6 +2950,35 @@ ${currentPersonality}
         // 绑定AI相关事件
         $('#ai-api-select').on('change', function() {
             const apiType = $(this).val();
+
+            // 根据选择的API类型自动填充官方端点URL
+            switch(apiType) {
+                case 'openai':
+                    $('#ai-url-input').val('https://api.openai.com/v1');
+                    break;
+                case 'claude':
+                    $('#ai-url-input').val('https://api.anthropic.com/v1');
+                    break;
+                case 'google':
+                    $('#ai-url-input').val('https://generativelanguage.googleapis.com/v1beta');
+                    break;
+                case 'deepseek':
+                    $('#ai-url-input').val('https://api.deepseek.com/v1');
+                    break;
+                case 'ollama':
+                    $('#ai-url-input').val('http://localhost:11434/v1');
+                    break;
+                case 'lmstudio':
+                    $('#ai-url-input').val('http://localhost:1234/v1');
+                    break;
+                case 'custom':
+                    // 自定义API不自动填充，保持用户输入
+                    break;
+                default:
+                    // 其他情况不自动填充
+                    break;
+            }
+
             toggleApiConfigInputs(apiType);
             saveAISettings();
             // 清除之前的测试结果

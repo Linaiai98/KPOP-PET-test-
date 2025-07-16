@@ -1884,6 +1884,7 @@ jQuery(async () => {
      * 🔧 修复内容：
      * - 修复了 dataSource 未定义错误
      * - 修复了 targetHeaders 未定义错误
+     * - 修复了 relayServerUrl 未定义错误
      * - 修复了聊天功能中不必要的中继服务器连接测试导致的超时问题
      * - 调整了聊天弹窗高度，与商店弹窗保持一致（70vh）
      * - 清理了未使用的变量
@@ -2212,6 +2213,9 @@ jQuery(async () => {
             }
 
             console.log(`[${extensionName}] 🔧 API配置: ${settings.apiType} | ${settings.apiUrl}`);
+
+            // 2. 中继服务器地址
+            const relayServerUrl = 'http://154.12.38.33:3000/proxy';
 
             // 3. 构建目标API URL
             let targetApiUrl = settings.apiUrl.replace(/\/+$/, '');

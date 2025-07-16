@@ -1881,11 +1881,16 @@ jQuery(async () => {
      * 🧪 保留的测试函数：
      * - debugAIFunctions() - 检查AI调用函数的实际内容
      * - testDirectConnection() - 测试直连+中继退回逻辑
+     * - resetAPIConfig() - 重置API配置到正确的官方端点
      * - testAutoFillURL() - 测试自动填充URL功能
      * - testAPIConfig() - 测试API配置优化
      * - testRelayServerSimple() - 简单测试中继服务器连接
      * - testRelayServer() - 完整测试中继服务器代理功能
      * - checkFloatingButton() - 检查和修复悬浮按钮
+     *
+     * 🔄 UI改进：
+     * - 在API URL输入框旁边添加了重置按钮
+     * - 支持一键重置到官方端点
      *
      * 🎯 API配置优化：
      * - 简化了API类型名称（OpenAI、Claude、Google、DeepSeek）
@@ -1903,6 +1908,7 @@ jQuery(async () => {
      * - 修复了API类型切换时不自动填入官方端点的问题（在UI事件监听中添加switch逻辑）
      * - 修复了第三方模型获取时的CORS错误无限循环问题
      * - 修复了Google API的URL构建错误（避免重复的v1beta路径）
+     * - 添加了API配置重置功能，可清理错误的URL配置
      * - 实现了真正的直连逻辑，而不是伪装的中继调用
      * - 调整了聊天弹窗高度，与商店弹窗保持一致（70vh）
      * - 添加了聊天历史记录支持，AI能记住之前的对话
@@ -2027,6 +2033,52 @@ jQuery(async () => {
         }).catch(error => {
             console.log('❌ 测试失败:', error.message);
         });
+    };
+
+    /**
+     * 🔧 重置API配置
+     */
+    window.resetAPIConfig = function() {
+        console.log('🔧 重置API配置...');
+
+        // 获取当前选择的API类型
+        const currentApiType = $('#ai-api-select').val();
+        console.log(`当前API类型: ${currentApiType}`);
+
+        // 强制重新填入正确的URL
+        switch(currentApiType) {
+            case 'openai':
+                $('#ai-url-input').val('https://api.openai.com/v1');
+                console.log('✅ 重置为OpenAI官方端点');
+                break;
+            case 'claude':
+                $('#ai-url-input').val('https://api.anthropic.com/v1');
+                console.log('✅ 重置为Claude官方端点');
+                break;
+            case 'google':
+                $('#ai-url-input').val('https://generativelanguage.googleapis.com/v1beta');
+                console.log('✅ 重置为Google官方端点');
+                break;
+            case 'deepseek':
+                $('#ai-url-input').val('https://api.deepseek.com/v1');
+                console.log('✅ 重置为DeepSeek官方端点');
+                break;
+            case 'ollama':
+                $('#ai-url-input').val('http://localhost:11434/v1');
+                console.log('✅ 重置为Ollama默认端点');
+                break;
+            case 'lmstudio':
+                $('#ai-url-input').val('http://localhost:1234/v1');
+                console.log('✅ 重置为LM Studio默认端点');
+                break;
+            default:
+                console.log('❓ 未知API类型，无法重置');
+                break;
+        }
+
+        // 保存设置
+        saveAISettings();
+        console.log('✅ API配置已重置并保存');
     };
 
     /**
@@ -2990,6 +3042,32 @@ ${currentPersonality}
         // 绑定API配置输入框事件
         $('#ai-url-input, #ai-key-input, #ai-model-input').on('input', function() {
             saveAISettings();
+        });
+
+        // 绑定URL重置按钮事件
+        $('#ai-url-reset-btn').on('click', function() {
+            const currentApiType = $('#ai-api-select').val();
+
+            if (!currentApiType || currentApiType === 'custom') {
+                toastr.info('自定义API类型无法重置，请手动输入URL', '💡 提示', { timeOut: 3000 });
+                return;
+            }
+
+            // 调用重置函数
+            resetAPIConfig();
+
+            // 显示成功提示
+            const apiNames = {
+                'openai': 'OpenAI',
+                'claude': 'Claude',
+                'google': 'Google',
+                'deepseek': 'DeepSeek',
+                'ollama': 'Ollama',
+                'lmstudio': 'LM Studio'
+            };
+
+            const apiName = apiNames[currentApiType] || currentApiType;
+            toastr.success(`已重置为${apiName}官方端点`, '🔄 重置成功', { timeOut: 3000 });
         });
 
         $('#test-ai-connection-btn').on('click', function(e) {
@@ -6333,10 +6411,17 @@ ${currentPersonality}
                                 <label for="ai-url-input" style="display: block; margin-bottom: 5px; font-size: 0.9em;">
                                     API URL:
                                 </label>
-                                <input id="ai-url-input" type="text" placeholder="例如: https://api.openai.com/v1 (只需填写到/v1，会自动添加端点)"
-                                       style="width: 100%; padding: 6px; border-radius: 4px;">
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <input id="ai-url-input" type="text" placeholder="例如: https://api.openai.com/v1 (只需填写到/v1，会自动添加端点)"
+                                           style="flex: 1; padding: 6px; border-radius: 4px; border: 1px solid #ddd;">
+                                    <button id="ai-url-reset-btn" type="button"
+                                            style="padding: 6px 12px; background: #f8f9fa; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; font-size: 0.85em; white-space: nowrap; color: #666;"
+                                            title="重置为当前API类型的官方端点">
+                                        🔄 重置
+                                    </button>
+                                </div>
                                 <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
-                                    💡 提示：只需填写到 /v1，插件会自动添加 /chat/completions 端点
+                                    💡 提示：只需填写到 /v1，插件会自动添加 /chat/completions 端点。点击重置按钮可恢复官方端点
                                 </div>
                             </div>
                             <div style="margin-bottom: 10px;">

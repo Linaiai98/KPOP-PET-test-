@@ -1883,6 +1883,7 @@ jQuery(async () => {
      *
      * 🔧 修复内容：
      * - 修复了 dataSource 未定义错误
+     * - 调整了聊天弹窗高度，与商店弹窗保持一致（70vh）
      * - 清理了未使用的变量
      * - 保持了所有核心功能
      */
@@ -4318,11 +4319,10 @@ ${currentPersonality}
         const isMobile = window.innerWidth <= 767;
         const isSmallMobile = window.innerWidth <= 480;
 
-        // 根据屏幕尺寸调整样式参数 - 与主UI保持一致的尺寸
+        // 根据屏幕尺寸调整样式参数 - 与商店弹窗保持一致的尺寸
         const overlayPadding = isSmallMobile ? '5px' : isMobile ? '10px' : '20px';
         const containerMaxWidth = isMobile ? '300px' : '380px'; // 与主UI保持一致
-        const containerHeight = isSmallMobile ? 'calc(100vh - 20px)' : isMobile ? 'calc(100vh - 40px)' : '500px'; // 减小高度
-        const containerMaxHeight = isSmallMobile ? 'calc(100vh - 20px)' : isMobile ? 'calc(100vh - 40px)' : '70vh'; // 减小最大高度
+        const containerMaxHeight = isSmallMobile ? 'calc(100vh - 20px)' : isMobile ? 'calc(100vh - 40px)' : '70vh'; // 与商店弹窗一致
         const borderRadius = isSmallMobile ? '8px' : isMobile ? '12px' : '15px';
         const headerPadding = isMobile ? '12px 16px' : '16px 20px';
         const messagesPadding = isSmallMobile ? '12px' : isMobile ? '16px' : '20px';
@@ -4350,7 +4350,6 @@ ${currentPersonality}
                     padding: 0 !important;
                     max-width: ${containerMaxWidth} !important;
                     width: 100% !important;
-                    height: ${containerHeight} !important;
                     max-height: ${containerMaxHeight} !important;
                     overflow: hidden !important;
                     color: white !important;

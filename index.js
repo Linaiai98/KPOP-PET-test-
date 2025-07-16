@@ -1577,9 +1577,10 @@ jQuery(async () => {
      */
     function getAPIDisplayName(apiType) {
         const displayNames = {
-            'openai': 'OpenAI (ChatGPT)',
-            'claude': 'Claude (Anthropic)',
-            'google': 'Google AI Studio',
+            'openai': 'OpenAI',
+            'claude': 'Claude',
+            'google': 'Google',
+            'deepseek': 'DeepSeek',
             'mistral': 'Mistral AI',
             'ollama': 'Ollama (本地)',
             'kobold': 'KoboldAI',
@@ -1879,9 +1880,18 @@ jQuery(async () => {
      *
      * 🧪 保留的测试函数：
      * - debugAIFunctions() - 检查AI调用函数的实际内容
+     * - testDirectConnection() - 测试直连+中继退回逻辑
+     * - testAPIConfig() - 测试API配置优化
      * - testRelayServerSimple() - 简单测试中继服务器连接
      * - testRelayServer() - 完整测试中继服务器代理功能
      * - checkFloatingButton() - 检查和修复悬浮按钮
+     *
+     * 🎯 API配置优化：
+     * - 简化了API类型名称（OpenAI、Claude、Google、DeepSeek）
+     * - 新增DeepSeek API支持，包含Chat和Coder模型
+     * - 选择API类型时自动填入官方端点
+     * - Google统一了Gemini系列模型
+     * - 官方API首选直连，失败时自动退回中继服务器
      *
      * 🔧 修复内容：
      * - 修复了 dataSource 未定义错误
@@ -1889,6 +1899,8 @@ jQuery(async () => {
      * - 修复了 relayServerUrl 未定义错误
      * - 修复了聊天功能中不必要的中继服务器连接测试导致的超时问题
      * - 调整了聊天弹窗高度，与商店弹窗保持一致（70vh）
+     * - 添加了聊天历史记录支持，AI能记住之前的对话
+     * - 删除了聊天界面的开头欢迎消息，简化体验
      * - 清理了未使用的变量
      * - 保持了所有核心功能
      */
@@ -1976,6 +1988,75 @@ jQuery(async () => {
         } else {
             console.log('❌ callAI 函数不存在');
         }
+    };
+
+    /**
+     * 🧪 测试直连+中继退回逻辑
+     */
+    window.testDirectConnection = function() {
+        console.log('🧪 测试直连+中继退回逻辑...');
+
+        const settings = loadAISettings();
+        if (!settings.apiType || !settings.apiUrl || !settings.apiKey) {
+            console.log('❌ 请先配置API设置');
+            return;
+        }
+
+        console.log(`📋 当前配置: ${settings.apiType} | ${settings.apiUrl}`);
+
+        const isOfficialAPI = ['openai', 'claude', 'google', 'deepseek'].includes(settings.apiType);
+        const isCustomAPI = settings.apiType === 'custom';
+
+        if (isOfficialAPI) {
+            console.log('✅ 官方API - 将尝试直连，失败时退回中继');
+        } else if (isCustomAPI) {
+            console.log('🔧 自定义API - 将使用中继服务器');
+        } else {
+            console.log('❓ 未知API类型');
+        }
+
+        console.log('\n🚀 发送测试请求...');
+        callAI('请简单回复"测试成功"', 10000).then(response => {
+            console.log('✅ 测试成功，AI回复:', response);
+        }).catch(error => {
+            console.log('❌ 测试失败:', error.message);
+        });
+    };
+
+    /**
+     * 🧪 测试API配置优化
+     */
+    window.testAPIConfig = function() {
+        console.log('🧪 测试API配置优化...');
+
+        // 测试API类型选项
+        const apiSelect = $('#ai-api-select');
+        const options = apiSelect.find('option');
+
+        console.log('📋 可用的API类型:');
+        options.each(function() {
+            const value = $(this).val();
+            const text = $(this).text();
+            if (value) {
+                console.log(`  ${value}: ${text}`);
+            }
+        });
+
+        // 测试默认URL设置
+        console.log('\n🔗 默认URL配置:');
+        const defaults = {
+            'openai': 'https://api.openai.com/v1',
+            'claude': 'https://api.anthropic.com/v1',
+            'google': 'https://generativelanguage.googleapis.com/v1beta',
+            'deepseek': 'https://api.deepseek.com/v1'
+        };
+
+        Object.entries(defaults).forEach(([type, url]) => {
+            console.log(`  ${type}: ${url}`);
+        });
+
+        console.log('\n✅ API配置优化验证完成');
+        console.log('💡 现在API类型名称更简洁，选择后会自动填入官方端点');
     };
 
     /**
@@ -2091,7 +2172,9 @@ jQuery(async () => {
                 } else if (backendType === 'claude') {
                     configMessage += '，请输入Claude API密钥';
                 } else if (backendType === 'google') {
-                    configMessage += '，请输入Google AI API密钥';
+                    configMessage += '，请输入Google API密钥';
+                } else if (backendType === 'deepseek') {
+                    configMessage += '，请输入DeepSeek API密钥';
                 } else if (backendType === 'ollama' || backendType === 'lmstudio') {
                     configMessage += '，本地API无需密钥';
                 } else {
@@ -2126,6 +2209,7 @@ jQuery(async () => {
                 'openai': { url: 'https://api.openai.com/v1', model: 'gpt-4' },
                 'claude': { url: 'https://api.anthropic.com/v1', model: 'claude-3-sonnet-20240229' },
                 'google': { url: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-pro' },
+                'deepseek': { url: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
                 'mistral': { url: 'https://api.mistral.ai/v1', model: 'mistral-medium' },
                 'ollama': { url: 'http://localhost:11434/v1', model: 'llama2' },
                 'lmstudio': { url: 'http://localhost:1234/v1', model: 'local-model' },
@@ -2163,6 +2247,10 @@ jQuery(async () => {
                 } else if (backendInfo.type === 'google') {
                     if (!$('#ai-url-input').val()) {
                         $('#ai-url-input').val('https://generativelanguage.googleapis.com/v1beta');
+                    }
+                } else if (backendInfo.type === 'deepseek') {
+                    if (!$('#ai-url-input').val()) {
+                        $('#ai-url-input').val('https://api.deepseek.com/v1');
                     }
                 } else if (backendInfo.type === 'ollama') {
                     if (!$('#ai-url-input').val()) {
@@ -2251,7 +2339,7 @@ jQuery(async () => {
 
     /**
      * 🚀 统一AI调用函数 - 所有AI请求的唯一入口
-     * 通过中继服务器调用第三方API，解决CORS和移动端连接问题
+     * 官方API首选直连，失败时自动退回中继服务器
      * @param {string} prompt - 要发送给AI的提示词
      * @param {number} timeout - 超时时间（毫秒）
      * @returns {Promise<string>} - AI生成的回复
@@ -2270,10 +2358,39 @@ jQuery(async () => {
 
             console.log(`[${extensionName}] 🔧 API配置: ${settings.apiType} | ${settings.apiUrl}`);
 
-            // 2. 中继服务器地址
-            const relayServerUrl = 'http://154.12.38.33:3000/proxy';
+            // 2. 判断是否为官方API（支持直连）
+            const isOfficialAPI = ['openai', 'claude', 'google', 'deepseek'].includes(settings.apiType);
+            const isCustomAPI = settings.apiType === 'custom';
 
-            // 3. 构建目标API URL
+            if (isOfficialAPI) {
+                console.log(`[${extensionName}] 🎯 检测到官方API，尝试直连...`);
+                try {
+                    return await callDirectAPI(prompt, settings, timeout);
+                } catch (directError) {
+                    console.log(`[${extensionName}] ⚠️ 直连失败，退回中继服务器: ${directError.message}`);
+                    return await callViaRelay(prompt, settings, timeout);
+                }
+            } else if (isCustomAPI) {
+                console.log(`[${extensionName}] 🔧 自定义API，使用中继服务器...`);
+                return await callViaRelay(prompt, settings, timeout);
+            } else {
+                throw new Error(`不支持的API类型: ${settings.apiType}`);
+            }
+
+        } catch (error) {
+            console.error(`[${extensionName}] ❌ 统一AI调用失败:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * 🎯 直连官方API
+     */
+    async function callDirectAPI(prompt, settings, timeout) {
+        console.log(`[${extensionName}] 🎯 开始直连官方API...`);
+
+        try {
+            // 1. 构建目标API URL
             let targetApiUrl = settings.apiUrl.replace(/\/+$/, '');
 
             // 根据API类型自动添加正确的端点
@@ -4158,6 +4275,32 @@ ${currentPersonality}
     }
 
     /**
+     * 构建聊天Prompt（支持历史记录）
+     */
+    function buildChatPromptWithHistory(userInput) {
+        const personality = getCurrentPersonality();
+
+        // 构建聊天历史上下文
+        let historyContext = '';
+        if (chatHistory.length > 0) {
+            // 只取最近的5条对话作为上下文
+            const recentHistory = chatHistory.slice(-5);
+            const historyText = recentHistory.map(item => {
+                const role = item.sender === 'user' ? '主人' : petData.name;
+                return `${role}: ${item.message}`;
+            }).join('\n');
+            historyContext = `\n\n之前的对话:\n${historyText}\n`;
+        }
+
+        // 构建完整的Prompt
+        const prompt = `你是一只名叫"${petData.name}"的虚拟宠物。你的性格设定是："${personality}"。${historyContext}
+现在，你的主人对你说了："${userInput}"。请严格按照你的性格设定，结合之前的对话内容，以宠物的身份和口吻，给主人一个简短、可爱、自然的回复。`;
+
+        console.log(`[buildChatPrompt] Generated prompt with ${chatHistory.length} history items`);
+        return prompt;
+    }
+
+    /**
      * 处理发送聊天消息
      */
     async function handleSendMessage() {
@@ -4202,7 +4345,7 @@ ${currentPersonality}
         try {
             console.log(`[${extensionName}] 构建提示词并调用AI API`);
 
-            const prompt = buildChatPrompt(message);
+            const prompt = buildChatPromptWithHistory(message);
             const aiResponse = await callAIAPI(prompt, 60000);
 
             // 移除打字指示器
@@ -4463,39 +4606,7 @@ ${currentPersonality}
                         flex-direction: column !important;
                         gap: ${isMobile ? '12px' : '16px'} !important;
                     ">
-                        <!-- 欢迎消息 -->
-                        <div style="
-                            display: flex !important;
-                            gap: 12px !important;
-                            align-items: flex-start !important;
-                        ">
-                            <div style="
-                                width: 40px !important;
-                                height: 40px !important;
-                                border-radius: 50% !important;
-                                display: flex !important;
-                                align-items: center !important;
-                                justify-content: center !important;
-                                font-size: 20px !important;
-                                background: linear-gradient(145deg, #A8E6CF, #87CEEB) !important;
-                                border: 2px solid white !important;
-                                box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
-                                flex-shrink: 0 !important;
-                            ">${getPetEmoji()}</div>
-                            <div style="
-                                max-width: 70% !important;
-                                background: white !important;
-                                border-radius: 18px !important;
-                                padding: 12px 16px !important;
-                                box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
-                                border: 1px solid rgba(168,230,207,0.3) !important;
-                                color: #2D3748 !important;
-                            ">
-                                <div style="margin: 0 !important; line-height: 1.4 !important; word-wrap: break-word !important;">
-                                    你好！有什么想对我说的吗？
-                                </div>
-                            </div>
-                        </div>
+
                     </div>
 
                     <!-- 输入区域 -->
@@ -6074,9 +6185,10 @@ ${currentPersonality}
                             </label>
                             <select id="ai-api-select" style="width: 100%; padding: 8px; margin-bottom: 8px; border-radius: 4px;">
                                 <option value="">请选择API类型...</option>
-                                <option value="openai">OpenAI (ChatGPT)</option>
-                                <option value="claude">Claude (Anthropic)</option>
-                                <option value="google">Google AI Studio</option>
+                                <option value="openai">OpenAI</option>
+                                <option value="claude">Claude</option>
+                                <option value="google">Google</option>
+                                <option value="deepseek">DeepSeek</option>
                                 <option value="mistral">Mistral AI</option>
                                 <option value="ollama">Ollama (本地)</option>
                                 <option value="custom">自定义API</option>
@@ -6117,6 +6229,8 @@ ${currentPersonality}
                                         <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
                                         <option value="gemini-pro">Gemini Pro</option>
                                         <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                                        <option value="deepseek-chat">DeepSeek Chat</option>
+                                        <option value="deepseek-coder">DeepSeek Coder</option>
                                         <option value="custom">🔧 自定义模型</option>
                                     </select>
                                     <button id="refresh-models-btn" style="

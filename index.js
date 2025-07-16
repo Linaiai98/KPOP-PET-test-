@@ -1878,6 +1878,7 @@ jQuery(async () => {
      * - 移动端优化
      *
      * 🧪 保留的测试函数：
+     * - debugAIFunctions() - 检查AI调用函数的实际内容
      * - testRelayServerSimple() - 简单测试中继服务器连接
      * - testRelayServer() - 完整测试中继服务器代理功能
      * - checkFloatingButton() - 检查和修复悬浮按钮

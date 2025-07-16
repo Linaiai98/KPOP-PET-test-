@@ -47,7 +47,7 @@ jQuery(async () => {
     const TOGGLE_ID = "#virtual-pet-enabled-toggle";
     
     // DOM 元素引用
-    let overlay, mainView, petView, settingsView;
+    let overlay, mainView, petView, settingsView, chatView;
     let petContainer;
 
     // 弹窗状态管理
@@ -69,6 +69,11 @@ jQuery(async () => {
     let isFirebaseInitialized = false;
     let connectionCode = null;
     let connectionCodeExpiry = null;
+
+    // 聊天功能状态管理
+    let chatHistory = [];
+    let isAIResponding = false;
+    let chatInitialized = false;
 
     // 安全的z-index值，避免影响其他插件
     const SAFE_Z_INDEX = {
@@ -360,7 +365,10 @@ jQuery(async () => {
         happiness: '#FFD93D',    // 快乐 - 柠檬黄
         hunger: '#FF9F43',       // 饱食 - 蜜桃橙
         energy: '#74B9FF',       // 精力 - 天空蓝
-        experience: '#A29BFE'    // 经验 - 薰衣草紫
+        experience: '#A29BFE',   // 经验 - 薰衣草紫
+
+        // 额外按钮色
+        info: '#17A2B8'          // 信息蓝 - 用于聊天按钮
     };
     
     // 宠物数据结构 - 智能初始化系统
@@ -1819,13 +1827,92 @@ jQuery(async () => {
                 }
 
                 console.log(`[${extensionName}] AI设置已加载:`, settings);
+
                 return settings;
             }
         } catch (error) {
             console.error(`[${extensionName}] 加载AI设置失败:`, error);
         }
+
+        // 即使加载失败也要更新聊天按钮状态
+        updateChatButtonVisibility();
         return {};
     }
+
+    /**
+     * 更新聊天按钮可见性 - 让聊天按钮像商店按钮一样常驻显示
+     */
+    function updateChatButtonVisibility() {
+        console.log(`[${extensionName}] 更新聊天按钮可见性...`);
+
+        // 聊天按钮应该始终显示，就像商店按钮一样
+        // 如果API未配置，点击时会显示配置提示，而不是隐藏按钮
+        const chatButtons = $('.chat-btn');
+
+        if (chatButtons.length > 0) {
+            // 确保聊天按钮始终可见
+            chatButtons.show();
+            console.log(`[${extensionName}] 聊天按钮已设置为可见 (找到 ${chatButtons.length} 个按钮)`);
+        } else {
+            console.log(`[${extensionName}] 未找到聊天按钮，可能还未渲染`);
+        }
+    }
+
+    /**
+     * 测试聊天按钮常驻显示功能
+     */
+    window.testChatButtonVisibility = function() {
+        console.log('🧪 测试聊天按钮常驻显示功能...');
+
+        // 1. 检查聊天按钮是否存在
+        const chatButtons = $('.chat-btn');
+        console.log(`聊天按钮数量: ${chatButtons.length}`);
+
+        if (chatButtons.length === 0) {
+            console.log('❌ 未找到聊天按钮，请先打开宠物界面');
+            return false;
+        }
+
+        // 2. 检查商店按钮作为对比
+        const shopButtons = $('.shop-btn');
+        console.log(`商店按钮数量: ${shopButtons.length}`);
+
+        // 3. 检查按钮可见性
+        chatButtons.each(function(index) {
+            const $btn = $(this);
+            const isVisible = $btn.is(':visible');
+            const display = $btn.css('display');
+            console.log(`聊天按钮 ${index + 1}: 可见=${isVisible}, display=${display}`);
+        });
+
+        shopButtons.each(function(index) {
+            const $btn = $(this);
+            const isVisible = $btn.is(':visible');
+            const display = $btn.css('display');
+            console.log(`商店按钮 ${index + 1}: 可见=${isVisible}, display=${display}`);
+        });
+
+        // 4. 强制更新聊天按钮可见性
+        console.log('🔄 强制更新聊天按钮可见性...');
+        updateChatButtonVisibility();
+
+        // 5. 再次检查
+        setTimeout(() => {
+            const chatButtonsAfter = $('.chat-btn');
+            console.log('更新后的聊天按钮状态:');
+            chatButtonsAfter.each(function(index) {
+                const $btn = $(this);
+                const isVisible = $btn.is(':visible');
+                const display = $btn.css('display');
+                console.log(`聊天按钮 ${index + 1}: 可见=${isVisible}, display=${display}`);
+            });
+
+            const allVisible = chatButtonsAfter.filter(':visible').length === chatButtonsAfter.length;
+            console.log(`✅ 测试结果: 聊天按钮${allVisible ? '全部可见' : '部分隐藏'}`);
+
+            return allVisible;
+        }, 100);
+    };
 
     /**
      * 切换API配置输入框的显示状态 - 后端API版本
@@ -3752,21 +3839,27 @@ ${currentPersonality}
     /**
      * 切换到指定视图
      */
-    function switchView(viewToShow) {
-        // 隐藏所有视图
-        mainView.hide();
-        petView.hide();
-        settingsView.hide();
+    function switchView(viewIdToShow) {
+        console.log(`[${extensionName}] 切换视图，目标视图: #${viewIdToShow}`);
         
+        // 隐藏所有 .pet-view 元素
+        $('.pet-view').hide();
+
         // 显示目标视图
-        viewToShow.show();
+        const $view = $(`#${viewIdToShow}`);
+        if ($view.length > 0) {
+            $view.show();
+            console.log(`[${extensionName}] 视图 #${viewIdToShow} 已显示`);
+        } else {
+            console.error(`[${extensionName}] 错误: 视图 #${viewIdToShow} 不存在`);
+        }
     }
     
     /**
      * 显示主视图
      */
     function showMainView() {
-        switchView(mainView);
+        switchView('pet-main-view');
         renderPetStatus();
     }
     
@@ -3774,7 +3867,7 @@ ${currentPersonality}
      * 显示宠物详情视图
      */
     function showPetView() {
-        switchView(petView);
+        switchView('pet-detail-view');
         renderPetDetails();
     }
     
@@ -3782,11 +3875,1007 @@ ${currentPersonality}
      * 显示设置视图
      */
     function showSettingsView() {
-        switchView(settingsView);
+        switchView('pet-settings-view');
         renderSettings();
     }
+
+    // showChatView函数已被移除，现在使用openChatModal()替代
+
+    /**
+     * 测试聊天模态弹窗功能 - 更新为商店风格版本
+     */
+    window.testChatModal = function() {
+        console.log(`[${extensionName}] 🧪 测试新版聊天模态弹窗功能...`);
+
+        try {
+            // 测试打开聊天模态弹窗
+            console.log(`[${extensionName}] 1. 测试打开商店风格聊天模态弹窗...`);
+            openChatModal();
+
+            // 检查模态弹窗是否创建成功
+            setTimeout(() => {
+                const modal = $('#chat-modal-overlay');
+                const container = $('#chat-modal-container');
+                const input = $('#chat-modal-input');
+                const sendBtn = $('#chat-modal-send-btn');
+                const messages = $('#chat-modal-messages');
+                const closeBtn = $('#chat-modal-close-btn');
+
+                console.log(`[${extensionName}] 2. 检查DOM元素...`);
+                console.log(`   - 模态弹窗遮罩: ${modal.length > 0 ? '✅' : '❌'}`);
+                console.log(`   - 弹窗容器: ${container.length > 0 ? '✅' : '❌'}`);
+                console.log(`   - 输入框: ${input.length > 0 ? '✅' : '❌'}`);
+                console.log(`   - 发送按钮: ${sendBtn.length > 0 ? '✅' : '❌'}`);
+                console.log(`   - 消息容器: ${messages.length > 0 ? '✅' : '❌'}`);
+                console.log(`   - 关闭按钮: ${closeBtn.length > 0 ? '✅' : '❌'}`);
+
+                // 检查样式应用
+                console.log(`[${extensionName}] 3. 检查商店风格样式...`);
+                const modalBg = modal.css('background-color');
+                const containerBg = container.css('background');
+                console.log(`   - 遮罩背景: ${modalBg.includes('rgba') ? '✅' : '❌'}`);
+                console.log(`   - 容器渐变: ${containerBg.includes('gradient') || containerBg.includes('linear') ? '✅' : '❌'}`);
+                console.log(`   - z-index: ${modal.css('z-index') === '1000001' ? '✅' : '❌'}`);
+
+                // 检查API配置
+                const config = getAIConfiguration();
+                console.log(`[${extensionName}] 4. 检查API配置...`);
+                console.log(`   - API类型: ${config.type || '未配置'}`);
+                console.log(`   - API URL: ${config.url || '未配置'}`);
+                console.log(`   - API密钥: ${config.key ? '已配置' : '未配置'}`);
+                console.log(`   - 配置完整: ${config.isConfigured ? '✅' : '❌'}`);
+
+                // 测试交互功能
+                console.log(`[${extensionName}] 5. 测试交互功能...`);
+                if (input.length > 0) {
+                    input.focus();
+                    console.log(`   - 输入框聚焦: ✅`);
+                }
+
+                // 测试添加消息功能
+                console.log(`[${extensionName}] 6. 测试消息添加功能...`);
+                addMessageToChat('user', '这是一条测试消息');
+                addMessageToChat('pet', '这是宠物的回复消息');
+
+                const messageCount = messages.children().length;
+                console.log(`   - 消息数量: ${messageCount} (应该 >= 3，包括欢迎消息)`);
+
+                console.log(`[${extensionName}] 🎉 新版聊天模态弹窗测试完成！`);
+                console.log(`[${extensionName}] 💡 提示: 现在可以尝试在聊天框中输入消息进行测试`);
+                console.log(`[${extensionName}] 🎨 新特性: 商店风格的渐变背景和内联样式`);
+                console.log(`[${extensionName}] 🔧 测试关闭: 点击关闭按钮或外部区域关闭弹窗`);
+
+            }, 100);
+
+        } catch (error) {
+            console.error(`[${extensionName}] ❌ 聊天模态弹窗测试失败:`, error);
+        }
+    };
+
+    /**
+     * 处理聊天按钮点击
+     */
+    function handleChatButtonClick() {
+        console.log(`[${extensionName}] 聊天按钮被点击，打开聊天模态弹窗`);
+
+        // 检查API配置
+        const config = getAIConfiguration();
+        if (!config.isConfigured) {
+            toastr.warning('请先在扩展设置中配置AI API信息（类型、URL和密钥）', '聊天功能需要配置', { timeOut: 5000 });
+            return;
+        }
+
+        // 打开独立的聊天模态弹窗
+        openChatModal();
+    }
     
-    // ----------------------------------------------------------------- 
+    // -----------------------------------------------------------------
+    // 3.5. 聊天功能逻辑
+    // -----------------------------------------------------------------
+
+    /**
+     * 初始化聊天界面
+     */
+    function initializeChatInterface() {
+        console.log(`[${extensionName}] 初始化聊天界面...`);
+
+        // 检查聊天视图是否存在
+        const chatViewElement = $('#pet-chat-view');
+        console.log(`[${extensionName}] 聊天视图元素存在: ${chatViewElement.length > 0}`);
+
+        // 检查聊天容器是否存在
+        const chatContainer = $('#chat-messages-container');
+        console.log(`[${extensionName}] 聊天容器元素存在: ${chatContainer.length > 0}`);
+
+        // 检查API配置
+        const config = getAIConfiguration();
+        console.log(`[${extensionName}] API配置状态: ${config.isConfigured ? '已配置' : '未配置'}`);
+
+        if (!config.isConfigured) {
+            console.log(`[${extensionName}] 显示配置提示...`);
+            // 显示配置提示在聊天界面内
+            showChatConfigurationHint();
+        } else {
+            console.log(`[${extensionName}] 显示正常聊天界面...`);
+            // 配置完整，显示正常聊天界面
+            showNormalChatInterface();
+        }
+
+        console.log(`[${extensionName}] 绑定聊天事件...`);
+        // 绑定聊天相关事件（总是绑定）
+        bindChatEvents();
+
+        chatInitialized = true;
+        console.log(`[${extensionName}] 聊天界面初始化完成`);
+    }
+
+    /**
+     * 显示聊天配置提示
+     */
+    function showChatConfigurationHint() {
+        console.log(`[${extensionName}] 开始显示聊天配置提示...`);
+
+        // 清空聊天容器
+        const container = $('#chat-messages-container');
+        console.log(`[${extensionName}] 聊天容器查找结果: ${container.length > 0 ? '找到' : '未找到'}`);
+
+        if (container.length === 0) {
+            console.error(`[${extensionName}] 错误: 找不到聊天消息容器 #chat-messages-container`);
+            return;
+        }
+
+        container.empty();
+        console.log(`[${extensionName}] 聊天容器已清空`);
+
+
+        // 添加配置提示
+        const configHint = `
+            <div class="chat-config-hint" style="text-align: center; padding: 20px;">
+                <div style="font-size: 3em; margin-bottom: 15px;">🤖</div>
+                <h3 style="color: var(--primary-accent-color); margin-bottom: 15px;">需要配置AI API</h3>
+                <p style="margin-bottom: 15px; line-height: 1.5;">
+                    要与宠物聊天，需要先配置AI API。<br>
+                </p>
+                <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: left;">
+                    <div style="font-weight: bold; color: #007bff; margin-bottom: 10px;">📋 配置步骤：</div>
+                    <ol style="margin: 0; padding-left: 20px; line-height: 1.6;">
+                        <li>点击右上角的 <strong>扩展</strong> 按钮 (🧩)</li>
+                        <li>找到 <strong>🐾 虚拟宠物系统</strong> 设置</li>
+                        <li>在 <strong>🤖 AI API 配置</strong> 部分填写：
+                            <ul style="margin-top: 5px;">
+                                <li>选择API类型（如OpenAI、Claude等）</li>
+                                <li>填写API URL</li>
+                                <li>填写API密钥</li>
+                            </ul>
+                        </li>
+                        <li>点击 <strong>🔗 测试连接</strong> 验证配置</li>
+                    </ol>
+                </div>
+                <div style="background: #fff3cd; padding: 12px; border-radius: 6px; margin-bottom: 20px; text-align: left; border-left: 4px solid #ffc107;">
+                    <div style="font-weight: bold; color: #856404; margin-bottom: 8px;">💡 常用API推荐：</div>
+                    <div style="font-size: 0.9em; color: #856404; line-height: 1.5;">
+                        • <strong>OpenAI</strong>：https://api.openai.com/v1<br>
+                        • <strong>本地Ollama</strong>：http://localhost:11434/v1<br>
+                        • <strong>LM Studio</strong>：http://localhost:1234/v1<br>
+                        • <strong>第三方代理</strong>：根据提供商文档配置
+                    </div>
+                </div>
+                <button id="goto-settings-from-chat-view" class="pet-button success">
+                    ⚙️ 去配置
+                </button>
+            </div>
+        `;
+
+        container.html(configHint);
+        console.log(`[${extensionName}] 配置提示HTML已添加`);
+
+        // 绑定去配置按钮事件
+        const configButton = $('#goto-settings-from-chat-view');
+        console.log(`[${extensionName}] 配置按钮查找结果: ${configButton.length > 0 ? '找到' : '未找到'}`);
+
+        configButton.on('click', function() {
+            console.log(`[${extensionName}] 配置按钮被点击，跳转到设置视图`);
+            showSettingsView();
+        });
+
+        // 禁用聊天输入
+        const chatInput = $('#chat-input');
+        const sendButton = $('#send-chat-btn');
+
+        console.log(`[${extensionName}] 聊天输入框查找结果: ${chatInput.length > 0 ? '找到' : '未找到'}`);
+        console.log(`[${extensionName}] 发送按钮查找结果: ${sendButton.length > 0 ? '找到' : '未找到'}`);
+
+        chatInput.prop('disabled', true).attr('placeholder', '请先配置AI API...');
+        sendButton.prop('disabled', true);
+
+        console.log(`[${extensionName}] 聊天配置提示显示完成`);
+    }
+
+    /**
+     * 显示正常聊天界面
+     */
+    function showNormalChatInterface() {
+        // 启用聊天输入
+        $('#chat-input').prop('disabled', false).attr('placeholder', '输入消息...');
+
+        // 加载聊天历史
+        loadChatHistory();
+    }
+
+    /**
+     * 绑定聊天相关事件
+     */
+    function bindChatEvents() {
+        // 发送按钮点击事件
+        $('#send-chat-btn').off('click').on('click', handleSendMessage);
+
+        // 输入框回车事件
+        $('#chat-input').off('keypress').on('keypress', function(e) {
+            if (e.which === 13 && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage();
+            }
+        });
+
+        // 输入框输入事件（控制发送按钮状态）
+        $('#chat-input').off('input').on('input', function() {
+            const hasText = $(this).val().trim().length > 0;
+            $('#send-chat-btn').prop('disabled', !hasText || isAIResponding);
+        });
+    }
+
+    /**
+     * 构建聊天Prompt
+     * @param {string} userInput - 用户的输入
+     * @returns {string} - 构建好的Prompt
+     */
+    function buildChatPrompt(userInput) {
+        const currentPersonality = getCurrentPersonality();
+        const prompt = `你是${petData.name}，你的设定是：${currentPersonality}。用户对你说了：“${userInput}”。请根据你的设定，用简短、可爱、自然的语言回复。`;
+        return prompt;
+    }
+
+    /**
+     * 构建与宠物聊天的Prompt
+     * @param {string} userInput 用户的输入消息
+     * @returns {string} 构建好的、用于API请求的Prompt
+     */
+    function buildChatPrompt(userInput) {
+        const personality = getCurrentPersonality();
+        // 优化后的Prompt，更清晰地定义了角色和任务，避免AI混淆
+        const prompt = `你是一只名叫“${petData.name}”的虚拟宠物。你的性格设定是：“${personality}”。现在，你的主人对你说了：“${userInput}”。请严格按照你的性格设定，以宠物的身份和口吻，给主人一个简短、可爱、自然的回复。`;
+        console.log(`[buildChatPrompt] Generated prompt: ${prompt}`);
+        return prompt;
+    }
+
+    /**
+     * 处理发送聊天消息
+     */
+    async function handleSendMessage() {
+        console.log(`[${extensionName}] handleSendMessage 被调用`);
+
+        const input = $('#chat-modal-input');
+        const sendBtn = $('#chat-modal-send-btn');
+        const message = input.val().trim();
+
+        // 验证输入
+        if (!message) {
+            console.log(`[${extensionName}] 消息为空，忽略发送`);
+            return;
+        }
+
+        if (isAIResponding) {
+            console.log(`[${extensionName}] AI正在响应中，忽略新消息`);
+            return;
+        }
+
+        // 验证API配置
+        const config = getAIConfiguration();
+        if (!config.isConfigured) {
+            console.log(`[${extensionName}] API未配置，显示提示消息`);
+            addMessageToChat('pet', '抱歉，我暂时不能和你聊天。请主人先帮我配置好AI API哦！');
+            return;
+        }
+
+        console.log(`[${extensionName}] 开始处理消息: "${message}"`);
+
+        // 清空输入框并禁用发送按钮
+        input.val('');
+        sendBtn.prop('disabled', true);
+
+        // 添加用户消息
+        addMessageToChat('user', message);
+        isAIResponding = true;
+
+        // 显示打字指示器
+        addMessageToChat('pet', '...');
+
+        try {
+            console.log(`[${extensionName}] 构建提示词并调用AI API`);
+            const prompt = buildChatPrompt(message);
+            const aiResponse = await callAIAPI(prompt, 30000); // 30秒超时
+
+            // 移除打字指示器
+            $('#chat-modal-messages .chat-message.pet-message').last().remove();
+
+            // 添加AI回复
+            const finalResponse = aiResponse || "嗯...我在想什么呢？";
+            addMessageToChat('pet', finalResponse);
+
+            console.log(`[${extensionName}] AI回复成功: "${finalResponse}"`);
+
+            // 保存聊天历史
+            saveChatHistory();
+
+        } catch (error) {
+            console.error(`[${extensionName}] AI回复失败:`, error);
+
+            // 移除打字指示器
+            $('#chat-modal-messages .chat-message.pet-message').last().remove();
+
+            // 显示错误消息
+            let errorMessage = '呜...我的脑袋有点乱，稍后再试吧！';
+            if (error.message.includes('timeout')) {
+                errorMessage = '抱歉，我想得太久了...请再试一次吧！';
+            } else if (error.message.includes('API')) {
+                errorMessage = '我的大脑连接出了点问题，请检查API配置哦！';
+            }
+
+            addMessageToChat('pet', errorMessage);
+
+        } finally {
+            isAIResponding = false;
+            sendBtn.prop('disabled', false);
+
+            // 聚焦到输入框
+            input.focus();
+
+            console.log(`[${extensionName}] handleSendMessage 处理完成`);
+        }
+    }
+
+    /**
+     * 添加消息到聊天窗口 - 适配新的商店风格模态弹窗
+     * @param {string} sender 'user' 或 'pet'
+     * @param {string} message 消息内容
+     */
+    function addMessageToChat(sender, message) {
+        const container = $('#chat-modal-messages');
+        if (container.length === 0) {
+            console.log(`[${extensionName}] 聊天消息容器不存在，无法添加消息`);
+            return;
+        }
+
+        // 检测移动端 - 学习商店的响应式设计
+        const isMobile = window.innerWidth <= 767;
+        const isSmallMobile = window.innerWidth <= 480;
+
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const isUser = sender === 'user';
+        const avatar = isUser ? '👤' : getPetEmoji();
+
+        // 响应式尺寸参数
+        const avatarSize = isSmallMobile ? '32px' : isMobile ? '36px' : '40px';
+        const avatarFontSize = isSmallMobile ? '16px' : isMobile ? '18px' : '20px';
+        const messagePadding = isSmallMobile ? '8px 12px' : isMobile ? '10px 14px' : '12px 16px';
+        const messageBorderRadius = isSmallMobile ? '14px' : isMobile ? '16px' : '18px';
+        const messageMaxWidth = isSmallMobile ? '85%' : isMobile ? '80%' : '70%';
+        const messageFontSize = isMobile ? '0.9em' : '1em';
+
+        // 处理打字指示器
+        const messageContent = message === '...'
+            ? `<div style="
+                display: flex !important;
+                align-items: center !important;
+                gap: 4px !important;
+                padding: 8px 0 !important;
+            ">
+                <span style="
+                    width: 8px !important;
+                    height: 8px !important;
+                    background: #A0AEC0 !important;
+                    border-radius: 50% !important;
+                    animation: typingBounce 1.4s infinite ease-in-out !important;
+                    animation-delay: 0s !important;
+                "></span>
+                <span style="
+                    width: 8px !important;
+                    height: 8px !important;
+                    background: #A0AEC0 !important;
+                    border-radius: 50% !important;
+                    animation: typingBounce 1.4s infinite ease-in-out !important;
+                    animation-delay: 0.2s !important;
+                "></span>
+                <span style="
+                    width: 8px !important;
+                    height: 8px !important;
+                    background: #A0AEC0 !important;
+                    border-radius: 50% !important;
+                    animation: typingBounce 1.4s infinite ease-in-out !important;
+                    animation-delay: 0.4s !important;
+                "></span>
+            </div>`
+            : escapeHtml(message);
+
+        // 学习商店风格的消息HTML结构
+        const messageHtml = `
+            <div style="
+                display: flex !important;
+                gap: 12px !important;
+                align-items: flex-start !important;
+                ${isUser ? 'flex-direction: row-reverse !important;' : ''}
+                animation: messageSlideIn 0.3s ease-out !important;
+            ">
+                <div style="
+                    width: ${avatarSize} !important;
+                    height: ${avatarSize} !important;
+                    border-radius: 50% !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    font-size: ${avatarFontSize} !important;
+                    background: linear-gradient(145deg, ${isUser ? '#FF9EC7, #FF7FB3' : '#A8E6CF, #87CEEB'}) !important;
+                    border: 2px solid white !important;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+                    flex-shrink: 0 !important;
+                ">${avatar}</div>
+                <div style="
+                    max-width: ${messageMaxWidth} !important;
+                    background: ${isUser ? 'linear-gradient(135deg, #87CEEB, #A8E6CF)' : 'white'} !important;
+                    border-radius: ${messageBorderRadius} !important;
+                    padding: ${messagePadding} !important;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+                    border: 1px solid ${isUser ? 'rgba(135,206,235,0.3)' : 'rgba(168,230,207,0.3)'} !important;
+                    color: ${isUser ? 'white' : '#2D3748'} !important;
+                    position: relative !important;
+                ">
+                    <div style="
+                        margin: 0 !important;
+                        line-height: 1.4 !important;
+                        word-wrap: break-word !important;
+                        font-size: ${messageFontSize} !important;
+                    ">${messageContent}</div>
+                    ${message !== '...' ? `<div style="
+                        font-size: 0.75em !important;
+                        color: ${isUser ? 'rgba(255, 255, 255, 0.8)' : '#A0AEC0'} !important;
+                        margin-top: 4px !important;
+                        text-align: right !important;
+                    ">${timestamp}</div>` : ''}
+                </div>
+            </div>
+        `;
+
+        container.append(messageHtml);
+
+        // 滚动到底部
+        container.scrollTop(container[0].scrollHeight);
+
+        // 保存聊天历史（不保存打字指示器）
+        if (message !== '...') {
+            chatHistory.push({ sender, message, timestamp: Date.now() });
+            if (chatHistory.length > 50) chatHistory.shift();
+        }
+
+        console.log(`[${extensionName}] 已添加${isUser ? '用户' : '宠物'}消息: ${message.substring(0, 20)}...`);
+    }
+
+    /**
+     * 打开独立的聊天模态弹窗 - 学习商店设计模式
+     */
+    function openChatModal() {
+        console.log(`[${extensionName}] 打开聊天模态弹窗...`);
+
+        // 确保只有一个聊天弹窗
+        $('#chat-modal-overlay').remove();
+
+        // 检测移动端 - 学习商店的响应式设计
+        const isMobile = window.innerWidth <= 767;
+        const isSmallMobile = window.innerWidth <= 480;
+
+        // 根据屏幕尺寸调整样式参数
+        const overlayPadding = isSmallMobile ? '5px' : isMobile ? '10px' : '20px';
+        const containerMaxWidth = isMobile ? '100%' : '500px';
+        const containerHeight = isSmallMobile ? 'calc(100vh - 20px)' : isMobile ? 'calc(100vh - 40px)' : '600px';
+        const containerMaxHeight = isSmallMobile ? 'calc(100vh - 20px)' : isMobile ? 'calc(100vh - 40px)' : '80vh';
+        const borderRadius = isSmallMobile ? '8px' : isMobile ? '12px' : '15px';
+        const headerPadding = isMobile ? '12px 16px' : '16px 20px';
+        const messagesPadding = isSmallMobile ? '12px' : isMobile ? '16px' : '20px';
+        const inputAreaPadding = isSmallMobile ? '10px 12px' : isMobile ? '12px 16px' : '16px 20px';
+
+        // 学习商店模态弹窗的设计，使用内联样式确保优先级
+        const chatModal = $(`
+            <div id="chat-modal-overlay" style="
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100vw !important;
+                height: 100vh !important;
+                background-color: rgba(0, 0, 0, 0.8) !important;
+                z-index: 1000001 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                padding: ${overlayPadding} !important;
+                box-sizing: border-box !important;
+            ">
+                <div id="chat-modal-container" style="
+                    background: linear-gradient(135deg, #FF9EC7 0%, #A8E6CF 50%, #87CEEB 100%) !important;
+                    border-radius: ${borderRadius} !important;
+                    padding: 0 !important;
+                    max-width: ${containerMaxWidth} !important;
+                    width: 100% !important;
+                    height: ${containerHeight} !important;
+                    max-height: ${containerMaxHeight} !important;
+                    overflow: hidden !important;
+                    color: white !important;
+                    box-shadow: 0 20px 40px rgba(0,0,0,0.3) !important;
+                    display: flex !important;
+                    flex-direction: column !important;
+                ">
+                    <!-- 标题栏 -->
+                    <div style="
+                        padding: ${headerPadding} !important;
+                        background: linear-gradient(145deg, rgba(255,158,199,0.9), rgba(255,158,199,0.7)) !important;
+                        display: flex !important;
+                        justify-content: space-between !important;
+                        align-items: center !important;
+                        border-bottom: 1px solid rgba(255,255,255,0.2) !important;
+                    ">
+                        <h3 style="
+                            margin: 0 !important;
+                            color: white !important;
+                            font-size: 1.2em !important;
+                            font-weight: 600 !important;
+                        ">💬 与 ${escapeHtml(petData.name)} 聊天</h3>
+                        <button id="chat-modal-close-btn" style="
+                            background: transparent !important;
+                            border: none !important;
+                            color: white !important;
+                            font-size: 24px !important;
+                            font-weight: bold !important;
+                            cursor: pointer !important;
+                            padding: 4px 8px !important;
+                            border-radius: 4px !important;
+                            min-width: 32px !important;
+                            height: 32px !important;
+                            display: flex !important;
+                            align-items: center !important;
+                            justify-content: center !important;
+                            transition: all 0.2s ease !important;
+                        ">&times;</button>
+                    </div>
+
+                    <!-- 消息区域 -->
+                    <div id="chat-modal-messages" style="
+                        flex: 1 !important;
+                        padding: ${messagesPadding} !important;
+                        overflow-y: auto !important;
+                        background: linear-gradient(135deg, rgba(248,249,255,0.9) 0%, rgba(255,248,252,0.9) 50%, rgba(240,248,255,0.9) 100%) !important;
+                        display: flex !important;
+                        flex-direction: column !important;
+                        gap: ${isMobile ? '12px' : '16px'} !important;
+                    ">
+                        <!-- 欢迎消息 -->
+                        <div style="
+                            display: flex !important;
+                            gap: 12px !important;
+                            align-items: flex-start !important;
+                        ">
+                            <div style="
+                                width: 40px !important;
+                                height: 40px !important;
+                                border-radius: 50% !important;
+                                display: flex !important;
+                                align-items: center !important;
+                                justify-content: center !important;
+                                font-size: 20px !important;
+                                background: linear-gradient(145deg, #A8E6CF, #87CEEB) !important;
+                                border: 2px solid white !important;
+                                box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+                                flex-shrink: 0 !important;
+                            ">${getPetEmoji()}</div>
+                            <div style="
+                                max-width: 70% !important;
+                                background: white !important;
+                                border-radius: 18px !important;
+                                padding: 12px 16px !important;
+                                box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+                                border: 1px solid rgba(168,230,207,0.3) !important;
+                                color: #2D3748 !important;
+                            ">
+                                <div style="margin: 0 !important; line-height: 1.4 !important; word-wrap: break-word !important;">
+                                    你好！有什么想对我说的吗？
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 输入区域 -->
+                    <div style="
+                        padding: ${inputAreaPadding} !important;
+                        background: rgba(255,255,255,0.9) !important;
+                        border-top: 1px solid rgba(255,255,255,0.2) !important;
+                        display: flex !important;
+                        gap: ${isMobile ? '10px' : '12px'} !important;
+                        align-items: center !important;
+                        box-shadow: 0 -2px 8px rgba(0,0,0,0.05) !important;
+                    ">
+                        <input type="text" id="chat-modal-input" placeholder="输入消息..." maxlength="500" style="
+                            flex: 1 !important;
+                            padding: ${isSmallMobile ? '8px 12px' : isMobile ? '10px 14px' : '12px 16px'} !important;
+                            border: 1px solid rgba(255,158,199,0.3) !important;
+                            border-radius: ${isSmallMobile ? '18px' : isMobile ? '20px' : '25px'} !important;
+                            font-size: ${isMobile ? '16px' : '0.9em'} !important;
+                            background: white !important;
+                            color: #2D3748 !important;
+                            outline: none !important;
+                            transition: all 0.3s ease !important;
+                        ">
+                        <button id="chat-modal-send-btn" style="
+                            padding: ${isSmallMobile ? '8px 14px' : isMobile ? '10px 16px' : '12px 20px'} !important;
+                            background: linear-gradient(145deg, #FF9EC7, #FF7FB3) !important;
+                            color: white !important;
+                            border: none !important;
+                            border-radius: ${isSmallMobile ? '18px' : isMobile ? '20px' : '25px'} !important;
+                            font-size: ${isSmallMobile ? '0.8em' : isMobile ? '0.85em' : '0.9em'} !important;
+                            font-weight: 600 !important;
+                            cursor: pointer !important;
+                            min-width: ${isSmallMobile ? '60px' : isMobile ? '70px' : '80px'} !important;
+                            display: flex !important;
+                            align-items: center !important;
+                            justify-content: center !important;
+                            gap: 6px !important;
+                            transition: all 0.2s ease !important;
+                        ">发送</button>
+                    </div>
+                </div>
+            </div>
+        `);
+
+        $('body').append(chatModal);
+
+        // 加载历史记录
+        loadChatHistory();
+
+        // 绑定事件 - 学习商店的事件绑定方式
+        // 关闭按钮事件
+        $('#chat-modal-close-btn').on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            closeChatModal();
+        });
+
+        // 点击外部关闭 - 学习商店的实现
+        chatModal.on('click', function(e) {
+            if (e.target === this) {
+                closeChatModal();
+            }
+        });
+
+        // 阻止内容区域点击冒泡
+        $('#chat-modal-container').on('click', e => e.stopPropagation());
+
+        // 发送按钮事件
+        $('#chat-modal-send-btn').on('click', handleSendMessage);
+
+        // 输入框回车事件
+        $('#chat-modal-input').on('keypress', function(e) {
+            if (e.which === 13 && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage();
+            }
+        });
+
+        // 输入框聚焦和样式
+        $('#chat-modal-input').on('focus', function() {
+            $(this).css({
+                'border-color': '#FF9EC7',
+                'box-shadow': '0 0 0 3px rgba(255, 158, 199, 0.2)'
+            });
+        }).on('blur', function() {
+            $(this).css({
+                'border-color': 'rgba(255,158,199,0.3)',
+                'box-shadow': 'none'
+            });
+        });
+
+        // 发送按钮悬停效果
+        $('#chat-modal-send-btn').on('mouseenter', function() {
+            if (!$(this).prop('disabled')) {
+                $(this).css({
+                    'background': 'linear-gradient(145deg, #FF7FB3, #FF6BA3)',
+                    'transform': 'translateY(-1px)',
+                    'box-shadow': '0 4px 12px rgba(255, 158, 199, 0.4)'
+                });
+            }
+        }).on('mouseleave', function() {
+            $(this).css({
+                'background': 'linear-gradient(145deg, #FF9EC7, #FF7FB3)',
+                'transform': 'translateY(0)',
+                'box-shadow': 'none'
+            });
+        });
+
+        // 关闭按钮悬停效果
+        $('#chat-modal-close-btn').on('mouseenter', function() {
+            $(this).css({
+                'background': 'rgba(255, 255, 255, 0.2)',
+                'transform': 'scale(1.1)'
+            });
+        }).on('mouseleave', function() {
+            $(this).css({
+                'background': 'transparent',
+                'transform': 'scale(1)'
+            });
+        });
+
+        // 聚焦到输入框
+        setTimeout(() => {
+            $('#chat-modal-input').focus();
+        }, 100);
+
+        console.log(`[${extensionName}] 聊天模态弹窗已打开`);
+    }
+
+    /**
+     * 关闭聊天模态弹窗 - 学习商店的关闭方式
+     */
+    function closeChatModal() {
+        console.log(`[${extensionName}] 关闭聊天模态弹窗`);
+        $('#chat-modal-overlay').remove();
+    }
+
+    /**
+     * 获取AI配置
+     */
+    function getAIConfiguration() {
+        // 从扩展设置中获取AI配置
+        try {
+            const settings = JSON.parse(localStorage.getItem(`${extensionName}-ai-settings`));
+            if (settings) {
+                return {
+                    type: settings.apiType || '',
+                    url: settings.apiUrl || '',
+                    key: settings.apiKey || '',
+                    model: settings.apiModel || '',
+                    isConfigured: settings.apiType && settings.apiUrl && settings.apiKey
+                };
+            }
+        } catch (error) {
+            console.error(`[${extensionName}] 获取AI配置失败:`, error);
+        }
+
+        return { isConfigured: false };
+    }
+
+    /**
+     * 加载聊天历史
+     */
+    function loadChatHistory() {
+        try {
+            const saved = localStorage.getItem('virtual-pet-chat-history');
+            if (saved) {
+                chatHistory = JSON.parse(saved);
+
+                // 渲���历史消息
+                const container = $('#chat-messages-container');
+                // 清空除了欢迎消息之外的所有消息
+                container.find('.chat-message').not('.chat-welcome-message .chat-message').remove();
+
+                chatHistory.forEach(item => {
+                    const timestamp = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    const isUser = item.sender === 'user';
+
+                    const messageHtml = `
+                        <div class="chat-message ${isUser ? 'user-message' : 'pet-message'}">
+                            <div class="message-avatar">${isUser ? '👤' : getPetEmoji()}</div>
+                            <div class="message-content">
+                                <div class="message-text">${escapeHtml(item.message)}</div>
+                                <div class="message-timestamp">${timestamp}</div>
+                            </div>
+                        </div>
+                    `;
+
+                    container.append(messageHtml);
+                });
+
+                // 滚动到底部
+                container.scrollTop(container[0].scrollHeight);
+            }
+        } catch (error) {
+            console.error(`[${extensionName}] 加载聊天历史失败:`, error);
+            chatHistory = [];
+        }
+    }
+
+    /**
+     * 保存聊天历史
+     */
+    function saveChatHistory() {
+        try {
+            localStorage.setItem('virtual-pet-chat-history', JSON.stringify(chatHistory));
+        } catch (error) {
+            console.error(`[${extensionName}] 保存聊天历史失败:`, error);
+        }
+    }
+
+    /**
+     * 转义HTML字符
+     */
+    function escapeHtml(text) {
+        if (typeof text !== 'string') return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    /**
+     * 测试聊天按钮功能
+     */
+    window.testChatButton = function() {
+        console.log('🧪 测试聊天按钮功能...');
+
+        // 1. 检查弹窗是否存在
+        const popup = $('.virtual-pet-popup-overlay');
+        console.log(`弹窗存在: ${popup.length > 0 ? '✅' : '❌'} (数量: ${popup.length})`);
+
+        if (popup.length === 0) {
+            console.log('❌ 请先打开宠物界面');
+            return false;
+        }
+
+        // 2. 检查聊天按钮是否存在
+        const chatBtn = popup.find('.chat-btn');
+        console.log(`聊天按钮存在: ${chatBtn.length > 0 ? '✅' : '❌'} (数量: ${chatBtn.length})`);
+
+        if (chatBtn.length === 0) {
+            console.log('❌ 聊天按钮未找到');
+            return false;
+        }
+
+        // 3. 检查按钮样式
+        const btnStyle = chatBtn.attr('style');
+        console.log(`按钮样式: ${btnStyle ? '✅ 有样式' : '❌ 无样式'}`);
+        if (btnStyle) {
+            console.log(`背景色: ${btnStyle.includes('background') ? '✅' : '❌'}`);
+        }
+
+        // 4. 检查事件绑定
+        const events = $._data(chatBtn[0], 'events');
+        console.log(`事件绑定: ${events ? '✅' : '❌'}`);
+        if (events) {
+            console.log(`- click: ${events.click ? '✅' : '❌'}`);
+            console.log(`- touchend: ${events.touchend ? '✅' : '❌'}`);
+        }
+
+        // 5. 检查函数是否存在
+        console.log(`handleChatButtonClick函数: ${typeof handleChatButtonClick === 'function' ? '✅' : '❌'}`);
+        console.log(`showChatView函数: ${typeof showChatView === 'function' ? '✅' : '❌'}`);
+        console.log(`initializeChatInterface函数: ${typeof initializeChatInterface === 'function' ? '✅' : '❌'}`);
+
+        // 6. 检查API配置状态
+        const config = getAIConfiguration();
+        console.log(`API配置状态: ${config.isConfigured ? '✅ 已配置' : '❌ 未配置'}`);
+
+        // 7. 测试点击
+        console.log('🎯 模拟点击聊天按钮...');
+        try {
+            chatBtn.trigger('click');
+            console.log('✅ 点击事件已触发');
+
+            // 检查是否切换到聊天视图
+            setTimeout(() => {
+                const chatView = $('#pet-chat-view');
+                const isVisible = chatView.is(':visible');
+                console.log(`聊天视图显示: ${isVisible ? '✅' : '❌'}`);
+
+                if (isVisible) {
+                    const configHint = chatView.find('.chat-config-hint');
+                    const hasConfigHint = configHint.length > 0;
+                    console.log(`配置提示显示: ${hasConfigHint ? '✅' : '❌'}`);
+                }
+            }, 100);
+
+        } catch (error) {
+            console.error('❌ 点击事件失败:', error);
+        }
+
+        return true;
+    };
+
+    /**
+     * 显示API配置提示
+     */
+    function showAPIConfigurationPrompt() {
+        // 检查具体缺少哪些配置
+        const config = getAIConfiguration();
+        let missingItems = [];
+
+        if (!config.type) missingItems.push('API类型');
+        if (!config.url) missingItems.push('API URL');
+        if (!config.key) missingItems.push('API密钥');
+
+        const missingText = missingItems.join('、');
+
+        // 创建友好的提示消息
+        const message = `
+            <div style="text-align: center; padding: 20px;">
+                <div style="font-size: 3em; margin-bottom: 15px;">🤖</div>
+                <h3 style="color: var(--primary-accent-color); margin-bottom: 15px;">需要配置AI API</h3>
+                <p style="margin-bottom: 15px; line-height: 1.5;">
+                    要与宠物聊天，需要先配置AI API。<br>
+                    当前缺少：<strong>${missingText}</strong>
+                </p>
+                <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: left;">
+                    <div style="font-weight: bold; color: #007bff; margin-bottom: 10px;">📋 配置步骤：</div>
+                    <ol style="margin: 0; padding-left: 20px; line-height: 1.6;">
+                        <li>点击右上角的 <strong>扩展</strong> 按钮 (🧩)</li>
+                        <li>找到 <strong>🐾 虚拟宠物系统</strong> 设置</li>
+                        <li>在 <strong>🤖 AI API 配置</strong> 部分填写：
+                            <ul style="margin-top: 5px;">
+                                <li>选择API类型（如OpenAI、Claude等）</li>
+                                <li>填写API URL</li>
+                                <li>填写API密钥</li>
+                            </ul>
+                        </li>
+                        <li>点击 <strong>🔗 测试连接</strong> 验证配置</li>
+                    </ol>
+                </div>
+                <div style="background: #fff3cd; padding: 12px; border-radius: 6px; margin-bottom: 20px; text-align: left; border-left: 4px solid #ffc107;">
+                    <div style="font-weight: bold; color: #856404; margin-bottom: 8px;">💡 常用API推荐：</div>
+                    <div style="font-size: 0.9em; color: #856404; line-height: 1.5;">
+                        • <strong>OpenAI</strong>：https://api.openai.com/v1<br>
+                        • <strong>本地Ollama</strong>：http://localhost:11434/v1<br>
+                        • <strong>LM Studio</strong>：http://localhost:1234/v1<br>
+                        • <strong>第三方代理</strong>：根据提供商文档配置
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button id="goto-settings-from-chat" class="pet-button success">
+                        ⚙️ 去配置
+                    </button>
+                    <button id="close-config-prompt" class="pet-button">
+                        取消
+                    </button>
+                </div>
+            </div>
+        `;
+
+        // 创建提示弹窗
+        const promptOverlay = $(`
+            <div id="api-config-prompt-overlay" class="virtual-pet-popup-overlay" style="display: flex;">
+                <div class="pet-popup-container" style="max-width: 450px; height: auto;">
+                    <div class="pet-popup-body">
+                        ${message}
+                    </div>
+                </div>
+            </div>
+        `);
+
+        // 添加到页面
+        $('body').append(promptOverlay);
+
+        // 绑定事件
+        $('#goto-settings-from-chat').on('click', function() {
+            promptOverlay.remove();
+            showSettingsView();
+        });
+
+        $('#close-config-prompt').on('click', function() {
+            promptOverlay.remove();
+        });
+
+        // 点击遮罩关闭
+        promptOverlay.on('click', function(e) {
+            if (e.target === this) {
+                promptOverlay.remove();
+            }
+        });
+    }
+
+
+
+    // -----------------------------------------------------------------
     // 4. UI 渲染逻辑
     // -----------------------------------------------------------------
     
@@ -4082,6 +5171,9 @@ ${currentPersonality}
         `;
         
         petContainer.html(statusHtml);
+
+        // 确保聊天按钮始终可见
+        updateChatButtonVisibility();
     }
     
     /**
@@ -4587,7 +5679,6 @@ ${currentPersonality}
 
             e.preventDefault();
         };
-
         const onDragEnd = () => {
             if (isDragging) {
                 isDragging = false;
@@ -5179,6 +6270,7 @@ ${currentPersonality}
             mainView = $("#pet-main-view");
             petView = $("#pet-detail-view");
             settingsView = $("#pet-settings-view");
+            chatView = $("#pet-chat-view");
             petContainer = $("#pet-status-container");
         }
 
@@ -5236,6 +6328,8 @@ ${currentPersonality}
             e.preventDefault();
             petSleep();
         });
+
+
 
         // 视图切换按钮
         $("#goto-pet-detail-btn").on("click touchend", (e) => {
@@ -11070,6 +12164,28 @@ ${currentPersonality}
                         <span style="font-size: 1em !important;">🛒</span>
                         <span>商店</span>
                     </button>
+                    <button class="action-btn chat-btn" style="
+                        padding: 8px !important;
+                        background: ${candyColors.info} !important;
+                        color: ${candyColors.textWhite} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 11px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
+                        cursor: pointer !important;
+                        min-height: 36px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 4px !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                    ">
+                        <span style="font-size: 1em !important;">💬</span>
+                        <span>聊天</span>
+                    </button>
                     <button class="action-btn settings-btn" style="
                         padding: 8px !important;
                         background: #8B5CF6 !important;
@@ -11092,6 +12208,23 @@ ${currentPersonality}
                         <span style="font-size: 1em !important;">⚙️</span>
                         <span>设置</span>
                     </button>
+                </div>
+
+                <!-- 聊天视图 (隐藏) -->
+                <div id="pet-chat-view" class="pet-view" style="display: none;">
+                    <div class="pet-section">
+                        <h3>💬 与 <span id="chat-pet-name"></span> 聊天</h3>
+                        <div id="chat-messages-container" class="chat-messages-container">
+                            <!-- 聊天消息会通过JavaScript动态添加到这里 -->
+                        </div>
+                        <div class="chat-input-container">
+                            <textarea id="chat-user-input" placeholder="说点什么..." rows="3"></textarea>
+                            <button id="chat-send-btn" class="pet-button">发送</button>
+                        </div>
+                        <div class="pet-nav-buttons">
+                            <button class="pet-button back-to-main-btn">← 返回</button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- 底部信息 -->
@@ -11350,6 +12483,28 @@ ${currentPersonality}
                         <span style="font-size: 1.1em !important;">🛒</span>
                         <span>商店</span>
                     </button>
+                    <button class="action-btn chat-btn" style="
+                        padding: 12px !important;
+                        background: ${candyColors.info} !important;
+                        color: ${candyColors.textWhite} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 12px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
+                        cursor: pointer !important;
+                        min-height: 44px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 6px !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                    ">
+                        <span style="font-size: 1.1em !important;">💬</span>
+                        <span>聊天</span>
+                    </button>
                     <button class="action-btn settings-btn" style="
                         padding: 12px !important;
                         background: #8B5CF6 !important;
@@ -11372,6 +12527,23 @@ ${currentPersonality}
                         <span style="font-size: 1.1em !important;">⚙️</span>
                         <span>设置</span>
                     </button>
+                </div>
+
+                <!-- 聊天视图 (隐藏) -->
+                <div id="pet-chat-view" class="pet-view" style="display: none;">
+                    <div class="pet-section">
+                        <h3>💬 与 <span id="chat-pet-name"></span> 聊天</h3>
+                        <div id="chat-messages-container" class="chat-messages-container">
+                            <!-- 聊天消息会通过JavaScript动态添加到这里 -->
+                        </div>
+                        <div class="chat-input-container">
+                            <textarea id="chat-user-input" placeholder="说点什么..." rows="3"></textarea>
+                            <button id="chat-send-btn" class="pet-button">发送</button>
+                        </div>
+                        <div class="pet-nav-buttons">
+                            <button class="pet-button back-to-main-btn">← 返回</button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- 底部信息 -->
@@ -11454,6 +12626,32 @@ ${currentPersonality}
             openShop();
         });
 
+        // 聊天按钮 (统一UI中的chat-btn类)
+        $container.find(".chat-btn").on("click touchend", function(e) {
+            e.preventDefault();
+            console.log("💬 与宠物聊天");
+            console.log(`[${extensionName}] 聊天按钮被点击，开始处理...`);
+            try {
+                handleChatButtonClick();
+                console.log(`[${extensionName}] handleChatButtonClick 执行完成`);
+            } catch (error) {
+                console.error(`[${extensionName}] handleChatButtonClick 执行失败:`, error);
+            }
+        });
+
+        // 聊天按钮 (popup.html中的goto-chat-btn ID)
+        $container.find("#goto-chat-btn").on("click touchend", function(e) {
+            e.preventDefault();
+            console.log("💬 与宠物聊天 (popup.html)");
+            console.log(`[${extensionName}] popup.html聊天按钮被点击，开始处理...`);
+            try {
+                handleChatButtonClick();
+                console.log(`[${extensionName}] handleChatButtonClick 执行完成`);
+            } catch (error) {
+                console.error(`[${extensionName}] handleChatButtonClick 执行失败:`, error);
+            }
+        });
+
         // 设置按钮
         $container.find(".settings-btn").on("click touchend", function(e) {
             e.preventDefault();
@@ -11467,7 +12665,21 @@ ${currentPersonality}
             editPetName();
         });
 
+        // 验证聊天按钮是否正确绑定
+        const chatButtons = $container.find(".chat-btn");
+        console.log(`[${extensionName}] 聊天按钮绑定验证: 找到 ${chatButtons.length} 个聊天按钮`);
+
+        if (chatButtons.length > 0) {
+            chatButtons.each(function(index) {
+                const events = $._data(this, 'events');
+                console.log(`[${extensionName}] 聊天按钮 ${index + 1} 事件:`, events ? Object.keys(events) : '无事件');
+            });
+        }
+
         console.log(`[${extensionName}] Unified UI events bound successfully`);
+
+        // 确保聊天按钮始终可见
+        updateChatButtonVisibility();
     }
 
     // 显示通知
@@ -12115,6 +13327,70 @@ ${currentPersonality}
     };
 
     /**
+     * 带重试机制的fetch函数，用于处理网络连接问题
+     * @param {string} url - 请求URL
+     * @param {object} options - fetch选项
+     * @param {number} maxRetries - 最大重试次数
+     * @returns {Promise<Response>} fetch响应
+     */
+    async function fetchWithRetry(url, options = {}, maxRetries = 2) {
+        let lastError;
+
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                if (attempt > 0) {
+                    console.log(`🔄 重试第 ${attempt} 次: ${url}`);
+                    // 重试前等待一段时间，避免立即重试
+                    await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+                }
+
+                const response = await fetch(url, options);
+                return response;
+
+            } catch (error) {
+                lastError = error;
+
+                // 检查是否是网络连接问题
+                if (error.message.includes('Failed to fetch') ||
+                    error.message.includes('ERR_CONNECTION_RESET') ||
+                    error.message.includes('ERR_NETWORK') ||
+                    error.message.includes('ERR_INTERNET_DISCONNECTED')) {
+
+                    console.log(`🌐 网络连接问题 (尝试 ${attempt + 1}/${maxRetries + 1}): ${error.message}`);
+
+                    if (attempt < maxRetries) {
+                        continue; // 继续重试
+                    }
+                } else {
+                    // 非网络问题，直接抛出错误
+                    throw error;
+                }
+            }
+        }
+
+        // 所有重试都失败了
+        throw lastError;
+    }
+
+    /**
+     * 检测网络连接状态
+     * @returns {Promise<boolean>} 是否有网络连接
+     */
+    async function checkNetworkConnection() {
+        try {
+            // 尝试访问一个可靠的测试端点
+            const response = await fetch('https://httpbin.org/get', {
+                method: 'GET',
+                signal: AbortSignal.timeout(3000)
+            });
+            return response.ok;
+        } catch (error) {
+            console.log(`🌐 网络连接检测失败: ${error.message}`);
+            return false;
+        }
+    }
+
+    /**
      * 通用第三方API模型获取器 - 支持任意第三方API
      */
     window.getThirdPartyModels = async function() {
@@ -12246,11 +13522,12 @@ ${currentPersonality}
                 try {
                     console.log(`🔍 测试: ${endpoint} (${authMethod.name})`);
 
-                    const response = await fetch(endpoint, {
+                    // 添加网络连接检测和重试机制
+                    const response = await fetchWithRetry(endpoint, {
                         method: 'GET',
                         headers: authMethod.headers,
                         signal: AbortSignal.timeout(8000) // 8秒超时
-                    });
+                    }, 2); // 最多重试2次
 
                     if (response.ok) {
                         const data = await response.json();

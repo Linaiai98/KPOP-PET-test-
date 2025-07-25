@@ -260,48 +260,95 @@ jQuery(async () => {
         return false;
     }
 
-    // 拓麻歌子风格配色方案
+    // 添加 Candy Pop 2.0 动画样式
+    const candyPopAnimations = `
+        <style>
+            @keyframes petGlow {
+                0% {
+                    box-shadow: 0 0 20px ${candyColors?.shadowGlow || 'rgba(255, 107, 107, 0.25)'},
+                                0 0 40px ${candyColors?.shadowGlow || 'rgba(255, 107, 107, 0.25)'} !important;
+                    transform: scale(1) !important;
+                }
+                100% {
+                    box-shadow: 0 0 30px ${candyColors?.gold || '#FFD700'},
+                                0 0 60px ${candyColors?.gold || '#FFD700'} !important;
+                    transform: scale(1.05) !important;
+                }
+            }
+
+            @keyframes buttonPress {
+                0% { transform: translateY(0) scale(1) !important; }
+                50% { transform: translateY(2px) scale(0.98) !important; }
+                100% { transform: translateY(0) scale(1) !important; }
+            }
+
+            @keyframes statusPulse {
+                0%, 100% { opacity: 1 !important; }
+                50% { opacity: 0.8 !important; }
+            }
+        </style>
+    `;
+
+    // 注入动画样式到页面
+    if (!document.getElementById('candy-pop-animations')) {
+        const styleElement = document.createElement('style');
+        styleElement.id = 'candy-pop-animations';
+        styleElement.innerHTML = candyPopAnimations;
+        document.head.appendChild(styleElement);
+    }
+
+    // Candy Pop 2.0 精致糖果色配色方案
     const candyColors = {
-        // 主色调 - 经典拓麻歌子风格
-        primary: '#000000',      // 黑色主色
-        secondary: '#333333',    // 深灰
-        accent: '#666666',       // 中灰
-        warning: '#FF8000',      // 橙色警告
-        success: '#008000',      // 绿色成功
+        // 主色调 - 精致现代风格
+        primary: '#4E342E',      // 深巧克力色 - 温暖的深色文字
+        secondary: '#6D4C41',    // 中巧克力色
+        accent: '#8D6E63',       // 浅巧克力色
+        warning: '#FF9800',      // 温暖橙色
+        success: '#4CAF50',      // 清新绿色
 
-        // 背景色 - 糖果色渐变
-        background: 'linear-gradient(135deg, #FFE5F1 0%, #E5F9F0 50%, #E5F4FF 100%)', // 糖果渐变
-        backgroundSolid: '#FFF8FC', // 纯色背景备选
-        screen: '#FFE5F1',       // 糖果粉屏幕
-        screenDark: '#E5F9F0',   // 薄荷绿屏幕
+        // 背景色 - 奶油糖果色
+        background: 'linear-gradient(135deg, #FFFBEB 0%, #FFF0F5 50%, #F0F8FF 100%)', // 奶油渐变
+        backgroundSolid: '#FFFBEB', // 奶油色背景
+        screen: '#FFF0F5',       // 棉花糖粉
+        screenDark: '#F0F8FF',   // 爱丽丝蓝
 
-        // 文字色 - 糖果色适配
-        textPrimary: '#2D3748',   // 深灰色文字
-        textSecondary: '#4A5568', // 中灰色文字
-        textLight: '#718096',     // 浅灰色文字
-        textWhite: '#FFFFFF',     // 白色文字
+        // 文字色 - 温暖巧克力色系
+        textPrimary: '#4E342E',   // 深巧克力色 - 主要文字
+        textSecondary: '#6D4C41', // 中巧克力色 - 次要文字
+        textLight: '#8D6E63',     // 浅巧克力色 - 辅助文字
+        textWhite: '#FFFFFF',     // 纯白色文字
+        textMuted: '#A1887F',     // 柔和巧克力色
 
-        // 边框和阴影 - 柔和风格
-        border: '#E2E8F0',       // 浅边框
-        borderAccent: '#FF9EC7', // 强调边框
-        shadow: 'rgba(255, 158, 199, 0.2)', // 粉色阴影
-        shadowLight: 'rgba(255, 158, 199, 0.1)', // 浅粉色阴影
+        // 边框和阴影 - 彩色弥散效果
+        border: '#F8BBD9',       // 柔和粉色边框
+        borderAccent: '#FF6B6B', // 活力珊瑚粉边框
+        shadow: 'rgba(255, 107, 107, 0.15)', // 珊瑚粉弥散阴影
+        shadowLight: 'rgba(255, 107, 107, 0.08)', // 浅珊瑚粉阴影
+        shadowGlow: 'rgba(255, 107, 107, 0.25)', // 发光效果阴影
 
-        // 按钮色 - 糖果色风格
-        buttonPrimary: '#FF9EC7',
-        buttonSecondary: '#A8E6CF',
-        buttonAccent: '#87CEEB',
-        buttonHover: '#FF7FB3',
+        // 按钮色 - 精致糖果色
+        buttonPrimary: '#FF6B6B',    // 活力珊瑚粉
+        buttonSecondary: '#48D1CC',  // 清新薄荷绿
+        buttonAccent: '#FFD166',     // 柠檬黄
+        buttonHover: '#FF5252',      // 深珊瑚粉
+        buttonSoft: '#F8BBD9',       // 柔和粉色
 
-        // 状态栏色 - 糖果色风格
-        health: '#FF6B9D',       // 健康 - 糖果粉
-        happiness: '#FFD93D',    // 快乐 - 柠檬黄
-        hunger: '#FF9F43',       // 饱食 - 蜜桃橙
-        energy: '#74B9FF',       // 精力 - 天空蓝
-        experience: '#A29BFE',   // 经验 - 薰衣草紫
+        // 状态栏色 - Candy Pop 2.0 精致色彩
+        health: '#FF87A0',       // 草莓粉 - 更精致的健康色
+        happiness: '#FFD166',    // 柠檬黄 - 明亮快乐
+        hunger: '#FF9F68',       // 蜜桃橙 - 温暖饱食色
+        energy: '#74B9FF',       // 苏打蓝 - 清爽精力色
+        experience: '#B794F6',   // 薰衣草紫 - 优雅经验色
 
-        // 额外按钮色
-        info: '#17A2B8'          // 信息蓝 - 用于聊天按钮
+        // 特殊功能色
+        info: '#48D1CC',         // 薄荷绿 - 信息色
+        love: '#FF69B4',         // 热情粉 - 爱心色
+        magic: '#DDA0DD',        // 梅花紫 - 魔法色
+        gold: '#FFD700',         // 金色 - 特殊奖励色
+
+        // Candy Pop 2.0 字体系统
+        fontFamily: "'Nunito', 'Quicksand', 'Baloo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        fontFamilyCode: "'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace" // 代码字体保留等宽
     };
     
     // 宠物数据结构 - 智能初始化系统
@@ -3461,18 +3508,17 @@ ${currentPersonality}
                     height: auto !important;
                     max-width: ${containerMaxWidth} !important;
                     max-height: calc(100vh - 60px) !important;
-                    background: ${candyColors.background} !important;
+                    background: ${candyColors.backgroundSolid} !important;
                     color: ${candyColors.textPrimary} !important;
-                    border: 4px solid ${candyColors.border} !important;
-                    border-radius: 8px !important;
+                    border: 3px solid ${candyColors.border} !important;
+                    border-radius: 24px !important;
                     padding: ${containerPadding} !important;
                     overflow-y: auto !important;
                     -webkit-overflow-scrolling: touch !important;
-                    box-shadow: 4px 4px 0px ${candyColors.shadow} !important;
-                    font-family: 'Courier New', monospace !important;
-                    image-rendering: pixelated !important;
-                    image-rendering: -moz-crisp-edges !important;
-                    image-rendering: crisp-edges !important;
+                    box-shadow: 0 20px 40px ${candyColors.shadowGlow}, 0 8px 16px ${candyColors.shadow} !important;
+                    font-family: 'Nunito', 'Quicksand', 'Baloo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+                    backdrop-filter: blur(10px) !important;
+                    -webkit-backdrop-filter: blur(10px) !important;
                     ${iosTransform}
                 ">
                     ${generateUnifiedUI()}
@@ -4693,7 +4739,7 @@ ${currentPersonality}
                     border: 3px solid ${candyColors.border} !important;
                     box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
                     cursor: pointer !important;
-                    font-family: 'Courier New', monospace !important;
+                    font-family: ${candyColors.fontFamily} !important;
                     image-rendering: pixelated !important;
                     image-rendering: -moz-crisp-edges !important;
                     image-rendering: crisp-edges !important;
@@ -4723,7 +4769,7 @@ ${currentPersonality}
                     display: flex !important;
                     align-items: center !important;
                     margin-bottom: 8px !important;
-                    font-family: 'Courier New', monospace !important;
+                    font-family: ${candyColors.fontFamily} !important;
                     font-size: 12px !important;
                     font-weight: bold !important;
                 ">
@@ -4734,18 +4780,21 @@ ${currentPersonality}
                     ">HP</label>
                     <div class="progress-bar" style="
                         flex: 1 !important;
-                        height: 12px !important;
+                        height: 16px !important;
                         background: ${candyColors.backgroundSolid} !important;
                         border: 2px solid ${candyColors.border} !important;
-                        border-radius: 0 !important;
+                        border-radius: 20px !important;
                         overflow: hidden !important;
                         margin-right: 8px !important;
+                        box-shadow: inset 0 2px 4px ${candyColors.shadowLight} !important;
                     ">
                         <div class="progress-fill health" style="
                             width: ${petData.health}% !important;
                             height: 100% !important;
-                            background: ${candyColors.health} !important;
-                            transition: none !important;
+                            background: linear-gradient(135deg, ${candyColors.health} 0%, ${candyColors.health}dd 100%) !important;
+                            border-radius: 20px !important;
+                            transition: width 0.3s ease !important;
+                            box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
                         "></div>
                     </div>
                     <span style="
@@ -8098,9 +8147,6 @@ ${currentPersonality}
         if (!petData.inventory) petData.inventory = {};
         petData.inventory[itemId] = (petData.inventory[itemId] || 0) + 1;
 
-        // 立即使用物品效果
-        useItem(itemId);
-
         // 保存数据
         savePetData();
 
@@ -8112,7 +8158,7 @@ ${currentPersonality}
         $('#shop-items').html(generateShopItems(currentCategory));
         $('.shop-modal h2').next().html(`💰 ${petData.coins} 金币`);
 
-        toastr.success(`购买成功！${item.name} 已自动使用。`);
+        toastr.success(`购买成功！${item.emoji} ${item.name} 已添加到背包。`);
     };
 
     function useItem(itemId) {
@@ -8338,7 +8384,7 @@ ${currentPersonality}
                             transition: all 0.3s ease !important;
                             position: relative !important;
                         ">
-                            <div style="font-size: 2em !important; margin-bottom: 5px !important;">${item.icon}</div>
+                            <div style="font-size: 2em !important; margin-bottom: 5px !important;">${item.emoji}</div>
                             <div style="font-size: 0.8em !important; color: white !important; margin-bottom: 3px !important;">${item.name}</div>
                             <div style="
                                 position: absolute !important;
@@ -8403,8 +8449,8 @@ ${currentPersonality}
         }
 
         // 使用物品效果
-        if (item.effects) {
-            Object.entries(item.effects).forEach(([stat, value]) => {
+        if (item.effect) {
+            Object.entries(item.effect).forEach(([stat, value]) => {
                 if (petData.hasOwnProperty(stat)) {
                     petData[stat] = Math.min(100, Math.max(0, petData[stat] + value));
                 }
@@ -8422,7 +8468,7 @@ ${currentPersonality}
         renderBackpackItems();
 
         // 显示使用效果
-        toastr.success(`使用了 ${item.icon} ${item.name}！`);
+        toastr.success(`使用了 ${item.emoji} ${item.name}！`);
 
         // 更新主界面状态
         setTimeout(() => {
@@ -11931,23 +11977,25 @@ ${currentPersonality}
                 ">
                     <!-- 拓麻歌子风格头像框 -->
                     <div class="pet-avatar-circle" style="
-                        width: 70px !important;
-                        height: 70px !important;
-                        border-radius: 6px !important;
+                        width: 80px !important;
+                        height: 80px !important;
+                        border-radius: 50% !important;
                         background: ${candyColors.screen} !important;
                         display: flex !important;
                         align-items: center !important;
                         justify-content: center !important;
-                        font-size: 2.5em !important;
+                        font-size: 2.8em !important;
                         overflow: hidden !important;
-                        border: 3px solid ${candyColors.border} !important;
-                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        border: 4px solid ${(petData.health > 80 && petData.happiness > 80) ? candyColors.gold : candyColors.border} !important;
+                        box-shadow: ${(petData.health > 80 && petData.happiness > 80) ?
+                            `0 0 20px ${candyColors.shadowGlow}, 0 0 40px ${candyColors.shadowGlow}` :
+                            `0 4px 12px ${candyColors.shadow}`} !important;
                         cursor: pointer !important;
-                        margin: 0 auto 8px auto !important;
-                        font-family: 'Courier New', monospace !important;
-                        image-rendering: pixelated !important;
-                        image-rendering: -moz-crisp-edges !important;
-                        image-rendering: crisp-edges !important;
+                        margin: 0 auto 12px auto !important;
+                        font-family: ${candyColors.fontFamily} !important;
+                        transition: all 0.3s ease !important;
+                        ${(petData.health > 80 && petData.happiness > 80) ?
+                            'animation: petGlow 2s ease-in-out infinite alternate !important;' : ''}
                     " onclick="openAvatarSelector()" oncontextmenu="showAvatarContextMenu(event)" title="点击更换头像，右键重置">
                         ${getAvatarContent()}
                     </div>
@@ -12025,24 +12073,25 @@ ${currentPersonality}
                     gap: 6px !important;
                 ">
                     <button class="action-btn feed-btn" style="
-                        padding: 8px !important;
+                        padding: 12px 16px !important;
                         background: ${candyColors.buttonPrimary} !important;
-                        color: ${candyColors.textPrimary} !important;
-                        border: 2px solid ${candyColors.border} !important;
-                        border-radius: 0 !important;
-                        font-family: 'Courier New', monospace !important;
-                        font-size: 11px !important;
-                        font-weight: bold !important;
-                        text-transform: uppercase !important;
+                        color: ${candyColors.textWhite} !important;
+                        border: none !important;
+                        border-radius: 20px !important;
+                        font-family: ${candyColors.fontFamily} !important;
+                        font-size: 12px !important;
+                        font-weight: 600 !important;
+                        text-transform: none !important;
                         cursor: pointer !important;
-                        min-height: 36px !important;
+                        min-height: 40px !important;
                         display: flex !important;
                         align-items: center !important;
                         justify-content: center !important;
-                        gap: 4px !important;
-                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
-                        transition: none !important;
-                    ">
+                        gap: 6px !important;
+                        box-shadow: 0 4px 12px ${candyColors.shadow}, 0 2px 4px rgba(0,0,0,0.1) !important;
+                        transition: all 0.2s ease !important;
+                        transform: translateY(0) !important;
+                    " onmousedown="this.style.transform='translateY(2px)'; this.style.boxShadow='0 2px 6px ${candyColors.shadow}'" onmouseup="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px ${candyColors.shadow}, 0 2px 4px rgba(0,0,0,0.1)'" onmouseleave="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px ${candyColors.shadow}, 0 2px 4px rgba(0,0,0,0.1)'"">
                         <span style="font-size: 1em !important;">🍖</span>
                         <span>喂食</span>
                     </button>

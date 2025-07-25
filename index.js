@@ -260,43 +260,6 @@ jQuery(async () => {
         return false;
     }
 
-    // 添加 Candy Pop 2.0 动画样式
-    const candyPopAnimations = `
-        <style>
-            @keyframes petGlow {
-                0% {
-                    box-shadow: 0 0 20px ${candyColors?.shadowGlow || 'rgba(255, 107, 107, 0.25)'},
-                                0 0 40px ${candyColors?.shadowGlow || 'rgba(255, 107, 107, 0.25)'} !important;
-                    transform: scale(1) !important;
-                }
-                100% {
-                    box-shadow: 0 0 30px ${candyColors?.gold || '#FFD700'},
-                                0 0 60px ${candyColors?.gold || '#FFD700'} !important;
-                    transform: scale(1.05) !important;
-                }
-            }
-
-            @keyframes buttonPress {
-                0% { transform: translateY(0) scale(1) !important; }
-                50% { transform: translateY(2px) scale(0.98) !important; }
-                100% { transform: translateY(0) scale(1) !important; }
-            }
-
-            @keyframes statusPulse {
-                0%, 100% { opacity: 1 !important; }
-                50% { opacity: 0.8 !important; }
-            }
-        </style>
-    `;
-
-    // 注入动画样式到页面
-    if (!document.getElementById('candy-pop-animations')) {
-        const styleElement = document.createElement('style');
-        styleElement.id = 'candy-pop-animations';
-        styleElement.innerHTML = candyPopAnimations;
-        document.head.appendChild(styleElement);
-    }
-
     // Candy Pop 2.0 精致糖果色配色方案
     const candyColors = {
         // 主色调 - 精致现代风格
@@ -350,7 +313,44 @@ jQuery(async () => {
         fontFamily: "'Nunito', 'Quicksand', 'Baloo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
         fontFamilyCode: "'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace" // 代码字体保留等宽
     };
-    
+
+    // 添加 Candy Pop 2.0 动画样式（在 candyColors 定义之后）
+    const candyPopAnimations = `
+        <style>
+            @keyframes petGlow {
+                0% {
+                    box-shadow: 0 0 20px ${candyColors.shadowGlow},
+                                0 0 40px ${candyColors.shadowGlow} !important;
+                    transform: scale(1) !important;
+                }
+                100% {
+                    box-shadow: 0 0 30px ${candyColors.gold},
+                                0 0 60px ${candyColors.gold} !important;
+                    transform: scale(1.05) !important;
+                }
+            }
+
+            @keyframes buttonPress {
+                0% { transform: translateY(0) scale(1) !important; }
+                50% { transform: translateY(2px) scale(0.98) !important; }
+                100% { transform: translateY(0) scale(1) !important; }
+            }
+
+            @keyframes statusPulse {
+                0%, 100% { opacity: 1 !important; }
+                50% { opacity: 0.8 !important; }
+            }
+        </style>
+    `;
+
+    // 注入动画样式到页面
+    if (!document.getElementById('candy-pop-animations')) {
+        const styleElement = document.createElement('style');
+        styleElement.id = 'candy-pop-animations';
+        styleElement.innerHTML = candyPopAnimations;
+        document.head.appendChild(styleElement);
+    }
+
     // 宠物数据结构 - 智能初始化系统
     let petData = {
         name: "小宠物",

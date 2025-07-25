@@ -233,74 +233,7 @@ jQuery(async () => {
         return !hasIssues;
     }
 
-    // 全局紧急修复函数
-    window.emergencyFixSillyTavernUI = function() {
-        console.log('🚨 紧急修复SillyTavern UI...');
 
-        // 1. 检查并修复CSS变量污染
-        checkAndFixCSSVariables();
-
-        // 2. 移除所有虚拟宠物相关样式
-        $('style').each(function() {
-            const content = $(this).text();
-            if (content.includes('virtual-pet') ||
-                content.includes('body >') ||
-                content.includes('position: relative !important') ||
-                content.includes(':root')) {
-                console.log('移除样式:', $(this).attr('id') || '匿名样式');
-                $(this).remove();
-            }
-        });
-
-        // 3. 重置body样式
-        $('body').removeAttr('style');
-        $('body').css({
-            'position': '',
-            'overflow': '',
-            'display': '',
-            'visibility': ''
-        });
-
-        // 4. 重置html样式
-        $('html').removeAttr('style');
-        $('html').css({
-            'position': '',
-            'overflow': '',
-            'display': '',
-            'visibility': ''
-        });
-
-        // 5. 清除document.documentElement上的样式
-        const docStyle = document.documentElement.style;
-        for (let i = docStyle.length - 1; i >= 0; i--) {
-            const prop = docStyle[i];
-            if (prop.includes('virtual-pet') || prop.startsWith('--')) {
-                docStyle.removeProperty(prop);
-            }
-        }
-
-        // 6. 移除虚拟宠物元素
-        $('[id*="virtual-pet"]').remove();
-        $('[class*="virtual-pet"]').remove();
-
-        // 7. 强制刷新页面布局
-        $('body').hide().show();
-
-        console.log('✅ 紧急修复完成！请刷新页面以完全恢复。');
-        alert('🚨 紧急修复完成！\n\n请按 Ctrl+F5 强制刷新页面以完全恢复SillyTavern界面。\n\n如果问题持续，请禁用虚拟宠物插件。');
-
-        return true;
-    };
-
-    // 立即执行紧急清理（如果检测到问题）
-    setTimeout(() => {
-        if ($('body').children().length === 0 ||
-            $('body').css('display') === 'none' ||
-            $('#send_textarea').length === 0) {
-            console.log(`[${extensionName}] 🚨 检测到SillyTavern UI问题，执行紧急修复...`);
-            window.emergencyFixSillyTavernUI();
-        }
-    }, 1000);
 
     /**
      * 安全的SillyTavern设置保存函数
@@ -418,74 +351,9 @@ jQuery(async () => {
         dataVersion: 4.1 // 数据版本标记 - 升级到4.1表示首次互动激活机制
     };
 
-    /**
-     * 🧪 测试宠物状态系统大修
-     */
-    window.testPetStatusSystemFix = function() {
-        console.log('🧪 测试宠物状态系统大修...');
 
-        console.log('\n📊 当前宠物状态:');
-        console.log(`- 健康: ${petData.health}/100`);
-        console.log(`- 快乐: ${petData.happiness}/100`);
-        console.log(`- 饱食: ${petData.hunger}/100`);
-        console.log(`- 精力: ${petData.energy}/100`);
-        console.log(`- 首次互动: ${petData.hasInteracted ? '已激活' : '未激活'}`);
-        console.log(`- 数据版本: ${petData.dataVersion}`);
 
-        console.log('\n🔧 测试激活机制:');
-        if (!petData.hasInteracted) {
-            console.log('✅ 宠物处于宽限期，数值不会衰减');
-            console.log('💡 进行任何互动（喂食、玩耍、抱抱）将激活衰减系统');
-        } else {
-            console.log('✅ 宠物已激活，衰减系统正常运行');
-            const timeSinceLastUpdate = Date.now() - (petData.lastUpdateTime || Date.now());
-            const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
-            console.log(`⏰ 距离上次更新: ${hoursElapsed.toFixed(2)} 小时`);
-        }
 
-        console.log('\n🧪 测试命令:');
-        console.log('- feedPet() - 喂食（会激活衰减系统）');
-        console.log('- playWithPet() - 玩耍（会激活衰减系统）');
-        console.log('- hugPet() - 抱抱（会激活衰减系统）');
-        console.log('- updatePetStatus() - 手动更新状态（只有激活后才会衰减）');
-
-        return {
-            hasInteracted: petData.hasInteracted,
-            health: petData.health,
-            dataVersion: petData.dataVersion,
-            systemFixed: true
-        };
-    };
-
-    /**
-     * 🎉 宠物状态系统大修完成总结
-     */
-    window.showSystemFixSummary = function() {
-        console.log('🎉 宠物状态系统大修完成！');
-        console.log('\n✅ 已修复的问题:');
-        console.log('1. 时间系统核心Bug - 移除了savePetData中错误的lastUpdateTime更新');
-        console.log('2. 实现首次互动激活机制 - 新用户享受宽限期');
-        console.log('3. 优化新用户体验 - 初始健康值设为100');
-
-        console.log('\n🔧 修改内容:');
-        console.log('- petData.health: 35 → 100 (无压力开局)');
-        console.log('- 新增 petData.hasInteracted: false (激活标志)');
-        console.log('- 数据版本: 4.0 → 4.1');
-        console.log('- updatePetStatus() 添加激活检查');
-        console.log('- 所有互动函数添加激活逻辑');
-
-        console.log('\n🎮 用户体验:');
-        console.log('- 新用户: 宠物健康100，数值不会下降，直到首次互动');
-        console.log('- 首次互动: 显示欢迎消息，激活衰减系统');
-        console.log('- 激活后: 正常的时间衰减机制开始工作');
-
-        console.log('\n🧪 测试方法:');
-        console.log('- testPetStatusSystemFix() - 查看当前状态');
-        console.log('- 清除localStorage重新加载页面测试新用户体验');
-        console.log('- 进行互动观察激活消息和衰减开始');
-
-        return '🎉 宠物状态系统大修完成！';
-    };
 
     // -----------------------------------------------------------------
     // 2. Firebase 云端备份系统
@@ -1957,96 +1825,11 @@ jQuery(async () => {
 
 
 
-    /**
-     * 🧪 测试API配置优化
-     */
-    window.testAPIConfig = function() {
-        console.log('🧪 测试API配置优化...');
-
-        // 测试API类型选项
-        const apiSelect = $('#ai-api-select');
-        const options = apiSelect.find('option');
-
-        console.log('📋 可用的API类型:');
-        options.each(function() {
-            const value = $(this).val();
-            const text = $(this).text();
-            if (value) {
-                console.log(`  ${value}: ${text}`);
-            }
-        });
-
-        // 测试默认URL设置
-        console.log('\n🔗 默认URL配置:');
-        const defaults = {
-            'openai': 'https://api.openai.com/v1',
-            'claude': 'https://api.anthropic.com/v1',
-            'google': 'https://generativelanguage.googleapis.com/v1beta',
-            'deepseek': 'https://api.deepseek.com/v1'
-        };
-
-        Object.entries(defaults).forEach(([type, url]) => {
-            console.log(`  ${type}: ${url}`);
-        });
-
-        console.log('\n✅ API配置优化验证完成');
-        console.log('💡 现在API类型名称更简洁，选择后会自动填入官方端点');
-    };
 
 
 
-    /**
-     * 测试中继服务器连接
-     */
-    window.testRelayServer = function() {
-        console.log('🧪 测试中继服务器连接...');
 
-        const relayServerUrl = 'http://154.12.38.33:3000/proxy';
 
-        // 构建测试请求
-        const testRequest = {
-            targetUrl: 'https://httpbin.org/get',
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: null
-        };
-
-        console.log(`🔗 测试中继服务器: ${relayServerUrl}`);
-        console.log(`🎯 测试目标: ${testRequest.targetUrl}`);
-
-        return fetch(relayServerUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(testRequest)
-        })
-        .then(response => {
-            console.log(`📡 中继服务器响应状态: ${response.status} ${response.statusText}`);
-
-            if (response.ok) {
-                return response.json();
-            } else {
-                throw new Error(`中继服务器错误: ${response.status} ${response.statusText}`);
-            }
-        })
-        .then(data => {
-            console.log('✅ 中继服务器测试成功！');
-            console.log('📦 响应数据:', data);
-            return true;
-        })
-        .catch(error => {
-            console.error('❌ 中继服务器测试失败:', error);
-            console.log('💡 请确保:');
-            console.log('  1. 中继服务器已启动 (node server.js)');
-            console.log('  2. 服务器IP地址正确: 154.12.38.33');
-            console.log('  3. 端口3000已开放');
-            console.log('  4. 防火墙允许访问');
-            return false;
-        });
-    };
 
     /**
      * 切换API配置输入框的显示状态 - 后端API版本
@@ -3538,49 +3321,7 @@ ${currentPersonality}
         }
     }
 
-    /**
-     * 更新宠物状态（基于时间流逝）
-     */
-    function updatePetStatus() {
-        // 首次互动激活机制 - 只有在用户首次互动后才开始衰减
-        if (!petData.hasInteracted) {
-            return;
-        }
 
-        const now = Date.now();
-        const timeSinceLastUpdate = now - (petData.lastUpdateTime || now);
-        const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
-
-        // 防止异常大的时间差（超过24小时的按24小时计算）
-        const safeHoursElapsed = Math.min(hoursElapsed, 24);
-
-        // 随时间降低的属性（减缓衰减速度）
-        if (safeHoursElapsed > 0.2) { // 每12分钟更新一次
-            petData.hunger = Math.max(0, petData.hunger - safeHoursElapsed * 0.8);
-            petData.energy = Math.max(0, petData.energy - safeHoursElapsed * 0.6);
-
-            // 饥饿和疲劳影响健康和快乐（减缓影响）
-            if (petData.hunger < 20) {
-                petData.health = Math.max(0, petData.health - safeHoursElapsed * 1);
-                petData.happiness = Math.max(0, petData.happiness - safeHoursElapsed * 0.8);
-            }
-
-            if (petData.energy < 20) {
-                petData.happiness = Math.max(0, petData.happiness - safeHoursElapsed * 0.5);
-            }
-
-            // 更新时间戳（只有在实际进行衰减后才更新）
-            petData.lastUpdateTime = now;
-
-            // 验证并修复数值
-            validateAndFixValues();
-
-            savePetData();
-
-            // 检查是否需要发送通知
-            checkAndSendNotifications();
-        }
-    }
     
 
     
@@ -4074,76 +3815,7 @@ ${currentPersonality}
 
     // showChatView函数已被移除，现在使用openChatModal()替代
 
-    /**
-     * 测试聊天模态弹窗功能 - 更新为商店风格版本
-     */
-    window.testChatModal = function() {
-        console.log(`[${extensionName}] 🧪 测试新版聊天模态弹窗功能...`);
 
-        try {
-            // 测试打开聊天模态弹窗
-            console.log(`[${extensionName}] 1. 测试打开商店风格聊天模态弹窗...`);
-            openChatModal();
-
-            // 检查模态弹窗是否创建成功
-            setTimeout(() => {
-                const modal = $('#chat-modal-overlay');
-                const container = $('#chat-modal-container');
-                const input = $('#chat-modal-input');
-                const sendBtn = $('#chat-modal-send-btn');
-                const messages = $('#chat-modal-messages');
-                const closeBtn = $('#chat-modal-close-btn');
-
-                console.log(`[${extensionName}] 2. 检查DOM元素...`);
-                console.log(`   - 模态弹窗遮罩: ${modal.length > 0 ? '✅' : '❌'}`);
-                console.log(`   - 弹窗容器: ${container.length > 0 ? '✅' : '❌'}`);
-                console.log(`   - 输入框: ${input.length > 0 ? '✅' : '❌'}`);
-                console.log(`   - 发送按钮: ${sendBtn.length > 0 ? '✅' : '❌'}`);
-                console.log(`   - 消息容器: ${messages.length > 0 ? '✅' : '❌'}`);
-                console.log(`   - 关闭按钮: ${closeBtn.length > 0 ? '✅' : '❌'}`);
-
-                // 检查样式应用
-                console.log(`[${extensionName}] 3. 检查商店风格样式...`);
-                const modalBg = modal.css('background-color');
-                const containerBg = container.css('background');
-                console.log(`   - 遮罩背景: ${modalBg.includes('rgba') ? '✅' : '❌'}`);
-                console.log(`   - 容器渐变: ${containerBg.includes('gradient') || containerBg.includes('linear') ? '✅' : '❌'}`);
-                console.log(`   - z-index: ${modal.css('z-index') === '1000001' ? '✅' : '❌'}`);
-
-                // 检查API配置
-                const config = getAIConfiguration();
-                console.log(`[${extensionName}] 4. 检查API配置...`);
-                console.log(`   - API类型: ${config.type || '未配置'}`);
-                console.log(`   - API URL: ${config.url || '未配置'}`);
-                console.log(`   - API密钥: ${config.key ? '已配置' : '未配置'}`);
-                console.log(`   - 配置完整: ${config.isConfigured ? '✅' : '❌'}`);
-
-                // 测试交互功能
-                console.log(`[${extensionName}] 5. 测试交互功能...`);
-                if (input.length > 0) {
-                    input.focus();
-                    console.log(`   - 输入框聚焦: ✅`);
-                }
-
-                // 测试添加消息功能
-                console.log(`[${extensionName}] 6. 测试消息添加功能...`);
-                addMessageToChat('user', '这是一条测试消息');
-                addMessageToChat('pet', '这是宠物的回复消息');
-
-                const messageCount = messages.children().length;
-                console.log(`   - 消息数量: ${messageCount} (应该 >= 3，包括欢迎消息)`);
-
-                console.log(`[${extensionName}] 🎉 新版聊天模态弹窗测试完成！`);
-                console.log(`[${extensionName}] 💡 提示: 现在可以尝试在聊天框中输入消息进行测试`);
-                console.log(`[${extensionName}] 🎨 新特性: 商店风格的渐变背景和内联样式`);
-                console.log(`[${extensionName}] 🔧 测试关闭: 点击关闭按钮或外部区域关闭弹窗`);
-
-            }, 100);
-
-        } catch (error) {
-            console.error(`[${extensionName}] ❌ 聊天模态弹窗测试失败:`, error);
-        }
-    };
 
     /**
      * 处理聊天按钮点击
@@ -4895,79 +4567,7 @@ ${currentPersonality}
         return div.innerHTML;
     }
 
-    /**
-     * 测试聊天按钮功能
-     */
-    window.testChatButton = function() {
-        console.log('🧪 测试聊天按钮功能...');
 
-        // 1. 检查弹窗是否存在
-        const popup = $('.virtual-pet-popup-overlay');
-        console.log(`弹窗存在: ${popup.length > 0 ? '✅' : '❌'} (数量: ${popup.length})`);
-
-        if (popup.length === 0) {
-            console.log('❌ 请先打开宠物界面');
-            return false;
-        }
-
-        // 2. 检查聊天按钮是否存在
-        const chatBtn = popup.find('.chat-btn');
-        console.log(`聊天按钮存在: ${chatBtn.length > 0 ? '✅' : '❌'} (数量: ${chatBtn.length})`);
-
-        if (chatBtn.length === 0) {
-            console.log('❌ 聊天按钮未找到');
-            return false;
-        }
-
-        // 3. 检查按钮样式
-        const btnStyle = chatBtn.attr('style');
-        console.log(`按钮样式: ${btnStyle ? '✅ 有样式' : '❌ 无样式'}`);
-        if (btnStyle) {
-            console.log(`背景色: ${btnStyle.includes('background') ? '✅' : '❌'}`);
-        }
-
-        // 4. 检查事件绑定
-        const events = $._data(chatBtn[0], 'events');
-        console.log(`事件绑定: ${events ? '✅' : '❌'}`);
-        if (events) {
-            console.log(`- click: ${events.click ? '✅' : '❌'}`);
-            console.log(`- touchend: ${events.touchend ? '✅' : '❌'}`);
-        }
-
-        // 5. 检查函数是否存在
-        console.log(`handleChatButtonClick函数: ${typeof handleChatButtonClick === 'function' ? '✅' : '❌'}`);
-        console.log(`showChatView函数: ${typeof showChatView === 'function' ? '✅' : '❌'}`);
-        console.log(`initializeChatInterface函数: ${typeof initializeChatInterface === 'function' ? '✅' : '❌'}`);
-
-        // 6. 检查API配置状态
-        const config = getAIConfiguration();
-        console.log(`API配置状态: ${config.isConfigured ? '✅ 已配置' : '❌ 未配置'}`);
-
-        // 7. 测试点击
-        console.log('🎯 模拟点击聊天按钮...');
-        try {
-            chatBtn.trigger('click');
-            console.log('✅ 点击事件已触发');
-
-            // 检查是否切换到聊天视图
-            setTimeout(() => {
-                const chatView = $('#pet-chat-view');
-                const isVisible = chatView.is(':visible');
-                console.log(`聊天视图显示: ${isVisible ? '✅' : '❌'}`);
-
-                if (isVisible) {
-                    const configHint = chatView.find('.chat-config-hint');
-                    const hasConfigHint = configHint.length > 0;
-                    console.log(`配置提示显示: ${hasConfigHint ? '✅' : '❌'}`);
-                }
-            }, 100);
-
-        } catch (error) {
-            console.error('❌ 点击事件失败:', error);
-        }
-
-        return true;
-    };
 
     /**
      * 显示API配置提示
@@ -8599,6 +8199,239 @@ ${currentPersonality}
         };
     };
 
+    // 背包系统功能
+    function showBackpackModal() {
+        // 检测移动端状态
+        const isMobile = window.innerWidth <= 768;
+        const containerMaxWidth = isMobile ? '300px' : '380px';
+
+        // 初始化背包数据
+        if (!petData.inventory) {
+            petData.inventory = {};
+        }
+
+        // 创建背包弹窗
+        const backpackModal = $(`
+            <div id="backpack-modal" style="
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100vw !important;
+                height: 100vh !important;
+                background-color: rgba(0, 0, 0, 0.8) !important;
+                z-index: 1000000 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                padding: 20px !important;
+                box-sizing: border-box !important;
+            ">
+                <div style="
+                    background: linear-gradient(135deg, #8B4513 0%, #A0522D 100%) !important;
+                    border-radius: 15px !important;
+                    padding: 20px !important;
+                    max-width: ${containerMaxWidth} !important;
+                    width: 100% !important;
+                    max-height: 70vh !important;
+                    overflow-y: auto !important;
+                    color: white !important;
+                    box-shadow: 0 20px 40px rgba(0,0,0,0.3) !important;
+                ">
+                    <div style="
+                        display: flex !important;
+                        justify-content: space-between !important;
+                        align-items: center !important;
+                        margin-bottom: 20px !important;
+                        border-bottom: 1px solid rgba(255,255,255,0.2) !important;
+                        padding-bottom: 15px !important;
+                    ">
+                        <h2 style="margin: 0 !important; color: #ffd700 !important;">🎒 我的背包</h2>
+                        <button id="close-backpack" style="
+                            background: rgba(255,255,255,0.2) !important;
+                            border: none !important;
+                            color: white !important;
+                            padding: 8px 12px !important;
+                            border-radius: 5px !important;
+                            cursor: pointer !important;
+                            font-size: 1.2em !important;
+                        ">✕</button>
+                    </div>
+
+                    <div id="backpack-content" style="
+                        display: grid !important;
+                        grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)) !important;
+                        gap: 10px !important;
+                        min-height: 200px !important;
+                    ">
+                        <!-- 背包物品将在这里显示 -->
+                    </div>
+
+                    <div style="
+                        margin-top: 20px !important;
+                        padding-top: 15px !important;
+                        border-top: 1px solid rgba(255,255,255,0.2) !important;
+                        text-align: center !important;
+                        color: rgba(255,255,255,0.7) !important;
+                        font-size: 0.9em !important;
+                    ">
+                        点击物品使用 • 长按查看详情
+                    </div>
+                </div>
+            </div>
+        `);
+
+        $('body').append(backpackModal);
+
+        // 渲染背包物品
+        renderBackpackItems();
+
+        // 绑定关闭事件
+        $('#close-backpack').on('click', function() {
+            $('#backpack-modal').remove();
+        });
+
+        // 点击背景关闭
+        $('#backpack-modal').on('click', function(e) {
+            if (e.target === this) {
+                $(this).remove();
+            }
+        });
+    }
+
+    // 渲染背包物品
+    function renderBackpackItems() {
+        const $content = $('#backpack-content');
+        $content.empty();
+
+        const inventory = petData.inventory || {};
+        const hasItems = Object.keys(inventory).length > 0;
+
+        if (!hasItems) {
+            $content.html(`
+                <div style="
+                    grid-column: 1 / -1 !important;
+                    text-align: center !important;
+                    color: rgba(255,255,255,0.6) !important;
+                    padding: 40px 20px !important;
+                    font-size: 1.1em !important;
+                ">
+                    🎒 背包空空如也<br>
+                    <span style="font-size: 0.9em !important;">去商店购买一些物品吧！</span>
+                </div>
+            `);
+            return;
+        }
+
+        // 显示背包物品
+        Object.entries(inventory).forEach(([itemId, quantity]) => {
+            if (quantity > 0) {
+                const item = SHOP_ITEMS[itemId];
+                if (item) {
+                    const $item = $(`
+                        <div class="backpack-item" data-item-id="${itemId}" style="
+                            background: rgba(255,255,255,0.1) !important;
+                            border: 2px solid rgba(255,255,255,0.2) !important;
+                            border-radius: 10px !important;
+                            padding: 10px !important;
+                            text-align: center !important;
+                            cursor: pointer !important;
+                            transition: all 0.3s ease !important;
+                            position: relative !important;
+                        ">
+                            <div style="font-size: 2em !important; margin-bottom: 5px !important;">${item.icon}</div>
+                            <div style="font-size: 0.8em !important; color: white !important; margin-bottom: 3px !important;">${item.name}</div>
+                            <div style="
+                                position: absolute !important;
+                                top: -5px !important;
+                                right: -5px !important;
+                                background: #ff4444 !important;
+                                color: white !important;
+                                border-radius: 50% !important;
+                                width: 20px !important;
+                                height: 20px !important;
+                                display: flex !important;
+                                align-items: center !important;
+                                justify-content: center !important;
+                                font-size: 0.7em !important;
+                                font-weight: bold !important;
+                            ">${quantity}</div>
+                        </div>
+                    `);
+
+                    // 悬停效果
+                    $item.hover(
+                        function() {
+                            $(this).css({
+                                'background': 'rgba(255,255,255,0.2)',
+                                'border-color': '#ffd700',
+                                'transform': 'scale(1.05)'
+                            });
+                        },
+                        function() {
+                            $(this).css({
+                                'background': 'rgba(255,255,255,0.1)',
+                                'border-color': 'rgba(255,255,255,0.2)',
+                                'transform': 'scale(1)'
+                            });
+                        }
+                    );
+
+                    // 点击使用物品
+                    $item.on('click', function() {
+                        useBackpackItem(itemId);
+                    });
+
+                    $content.append($item);
+                }
+            }
+        });
+    }
+
+    // 使用背包物品
+    function useBackpackItem(itemId) {
+        const item = SHOP_ITEMS[itemId];
+        const quantity = petData.inventory[itemId] || 0;
+
+        if (quantity <= 0) {
+            toastr.error("物品数量不足！");
+            return;
+        }
+
+        if (!item) {
+            toastr.error("未知物品！");
+            return;
+        }
+
+        // 使用物品效果
+        if (item.effects) {
+            Object.entries(item.effects).forEach(([stat, value]) => {
+                if (petData.hasOwnProperty(stat)) {
+                    petData[stat] = Math.min(100, Math.max(0, petData[stat] + value));
+                }
+            });
+        }
+
+        // 减少物品数量
+        petData.inventory[itemId]--;
+        if (petData.inventory[itemId] <= 0) {
+            delete petData.inventory[itemId];
+        }
+
+        // 保存数据并更新UI
+        savePetData();
+        renderBackpackItems();
+
+        // 显示使用效果
+        toastr.success(`使用了 ${item.icon} ${item.name}！`);
+
+        // 更新主界面状态
+        setTimeout(() => {
+            if (typeof updateUnifiedUIStatus === 'function') {
+                updateUnifiedUIStatus();
+            }
+        }, 100);
+    }
+
     // 强制更新到拓麻歌子系统
     window.forceUpdateToTamagotchi = function() {
         console.log('🔄 强制更新到拓麻歌子系统...');
@@ -9597,6 +9430,42 @@ ${currentPersonality}
             }
         };
 
+        // 添加快乐值衰减诊断函数
+        window.testHappinessDecay = function() {
+            console.log('🩺 测试快乐值衰减功能...');
+
+            const beforeHappiness = petData.happiness;
+            const beforeTime = petData.lastUpdateTime;
+
+            console.log(`测试前快乐值: ${Math.round(beforeHappiness)}`);
+            console.log(`宠物存活状态: ${petData.isAlive ? '✅' : '❌'}`);
+            console.log(`首次互动状态: ${petData.hasInteracted ? '✅' : '❌'}`);
+
+            // 模拟1小时前的时间戳
+            petData.lastUpdateTime = Date.now() - (1 * 60 * 60 * 1000);
+
+            // 调用更新函数
+            window.updatePetStatus();
+
+            const afterHappiness = petData.happiness;
+            const change = afterHappiness - beforeHappiness;
+
+            console.log(`测试后快乐值: ${Math.round(afterHappiness)}`);
+            console.log(`快乐值变化: ${Math.round(change * 100) / 100} (预期: -0.8)`);
+            console.log(`衰减是否正常: ${Math.abs(change + 0.8) < 0.1 ? '✅' : '❌'}`);
+
+            // 恢复原始时间戳
+            petData.lastUpdateTime = beforeTime;
+            petData.happiness = beforeHappiness;
+
+            return {
+                beforeHappiness,
+                afterHappiness,
+                change,
+                isWorking: Math.abs(change + 0.8) < 0.1
+            };
+        };
+
         // 重新定义喂食函数 - 拓麻歌子式
         window.feedPet = async function() {
             // 首次互动激活机制
@@ -9854,6 +9723,16 @@ ${currentPersonality}
             }
 
             showShopModal();
+        };
+
+        // 添加背包功能
+        window.openBackpack = function() {
+            if (!petData.isAlive) {
+                toastr.error("💀 你的宠物已经死亡，无法使用背包...");
+                return;
+            }
+
+            showBackpackModal();
         };
 
         console.log('✅ 拓麻歌子式系统已应用！');
@@ -11074,114 +10953,7 @@ ${currentPersonality}
         return true;
     };
 
-    /**
-     * 调整衰减速度和缓冲机制
-     */
-    window.adjustDecaySystem = function() {
-        console.log('⚖️ 调整衰减速度和缓冲机制...');
 
-        // 重新定义更平衡的衰减系统
-        window.updatePetStatus = function() {
-            if (!petData.isAlive) return;
-
-            const now = Date.now();
-            const timeSinceLastUpdate = now - (petData.lastUpdateTime || now);
-            const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
-
-            if (hoursElapsed > 0.1) { // 每6分钟更新一次
-
-                // 1. 年龄增长
-                petData.age += hoursElapsed;
-
-                // 2. 生命阶段检查
-                if (typeof checkLifeStageProgression === 'function') {
-                    checkLifeStageProgression();
-                }
-
-                // 3. 更真实的衰减速度 - 让时间流逝更有感知
-                petData.hunger = Math.max(0, petData.hunger - hoursElapsed * 3.5);    // 每小时-3.5 (离线8小时下降28点)
-                petData.energy = Math.max(0, petData.energy - hoursElapsed * 3.0);    // 每小时-3.0 (离线8小时下降24点)
-                petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 2.5); // 每小时-2.5 (离线8小时下降20点)
-
-                // 4. 状态不佳时的惩罚性衰减 - 提高门槛和惩罚力度
-                if (petData.hunger < 25) { // 门槛提高到25，给玩家更多反应时间
-                    petData.health = Math.max(0, petData.health - hoursElapsed * 1.5); // 惩罚加大
-                    petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 1.0);
-                }
-
-                if (petData.energy < 25) { // 门槛提高到25
-                    petData.happiness = Math.max(0, petData.happiness - hoursElapsed * 0.8);
-                }
-
-                // 5. 死亡检查
-                if (typeof checkDeathConditions === 'function') {
-                    checkDeathConditions();
-                }
-
-                petData.lastUpdateTime = now;
-                validateAndFixValues();
-                savePetData();
-            }
-        };
-
-        // 重新定义更宽松的缓冲机制
-        window.applyInitializationBuffer = function() {
-            const now = Date.now();
-            const timeSinceLastUpdate = now - (petData.lastUpdateTime || now);
-            const hoursElapsed = timeSinceLastUpdate / (1000 * 60 * 60);
-
-            // 如果距离上次更新超过2小时，给予"急救包"缓冲
-            if (hoursElapsed > 2) {
-                console.log(`检测到长时间未更新 (${hoursElapsed.toFixed(1)}小时)，应用急救缓冲...`);
-
-                // 50上限系统：急救缓冲数值
-                const minValues = {
-                    hunger: 25,    // 50上限系统：急救饱食度25
-                    energy: 20,    // 50上限系统：急救精力20
-                    happiness: 15, // 50上限系统：急救快乐度15
-                    health: 30     // 50上限系统：急救健康度30
-                };
-
-                let buffered = false;
-                Object.entries(minValues).forEach(([key, minValue]) => {
-                    if (petData[key] < minValue) {
-                        console.log(`缓冲 ${key}: ${petData[key]} → ${minValue}`);
-                        petData[key] = minValue;
-                        buffered = true;
-                    }
-                });
-
-                if (buffered) {
-                    petData.lastUpdateTime = now;
-                    savePetData();
-                    toastr.info('🌟 欢迎回来！已为你的宠物提供了基础照顾。', '', { timeOut: 4000 });
-                    console.log('初始化缓冲已应用');
-                }
-            }
-        };
-
-        console.log('✅ 衰减系统已调整为更真实的养成体验');
-        console.log('📊 新的衰减速度 (更有感知的时间流逝):');
-        console.log('  - 饱食度: 每小时 -3.5 (离线8小时下降28点)');
-        console.log('  - 精力: 每小时 -3.0 (离线8小时下降24点)');
-        console.log('  - 快乐度: 每小时 -2.5 (离线8小时下降20点)');
-        console.log('⚠️ 惩罚性衰减 (状态不佳时):');
-        console.log('  - 饥饿门槛: <25 (原来 <15)');
-        console.log('  - 疲劳门槛: <25 (原来 <15)');
-        console.log('  - 惩罚力度: 显著增加');
-        console.log('🛡️ 急救缓冲机制:');
-        console.log('  - 触发时间: 2小时 (更严格)');
-        console.log('  - 最低饱食度: 35 (急救水平)');
-        console.log('  - 最低精力: 30 (急救水平)');
-        console.log('  - 最低快乐度: 25 (急救水平)');
-        console.log('  - 最低健康度: 40 (急救水平)');
-        console.log('💡 设计理念: 鼓励频繁互动，但提供死亡保护');
-
-        // 立即应用缓冲
-        applyInitializationBuffer();
-
-        return true;
-    };
 
     /**
      * 测试新的衰减系统效果
@@ -12340,6 +12112,28 @@ ${currentPersonality}
                         <span style="font-size: 1em !important;">🤗</span>
                         <span>抱抱</span>
                     </button>
+                    <button class="action-btn backpack-btn" style="
+                        padding: 8px !important;
+                        background: #8B4513 !important;
+                        color: ${candyColors.textWhite} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 11px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
+                        cursor: pointer !important;
+                        min-height: 36px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 4px !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                    ">
+                        <span style="font-size: 1em !important;">🎒</span>
+                        <span>背包</span>
+                    </button>
                     <button class="action-btn heal-btn" style="
                         padding: 8px !important;
                         background: ${(petData.sickness || 0) > 10 ? candyColors.health : candyColors.secondary} !important;
@@ -12659,6 +12453,28 @@ ${currentPersonality}
                         <span style="font-size: 1.1em !important;">🤗</span>
                         <span>抱抱</span>
                     </button>
+                    <button class="action-btn backpack-btn" style="
+                        padding: 12px !important;
+                        background: #8B4513 !important;
+                        color: ${candyColors.textWhite} !important;
+                        border: 2px solid ${candyColors.border} !important;
+                        border-radius: 0 !important;
+                        font-family: 'Courier New', monospace !important;
+                        font-size: 12px !important;
+                        font-weight: bold !important;
+                        text-transform: none !important;
+                        cursor: pointer !important;
+                        min-height: 44px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        gap: 6px !important;
+                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
+                        transition: none !important;
+                    ">
+                        <span style="font-size: 1.1em !important;">🎒</span>
+                        <span>背包</span>
+                    </button>
                     <button class="action-btn heal-btn" style="
                         padding: 12px !important;
                         background: ${(petData.sickness || 0) > 10 ? candyColors.health : candyColors.secondary} !important;
@@ -12827,6 +12643,13 @@ ${currentPersonality}
             setTimeout(() => {
                 updateUnifiedUIStatus();
             }, 100);
+        });
+
+        // 背包按钮
+        $container.find(".backpack-btn").on("click touchend", function(e) {
+            e.preventDefault();
+            console.log("🎒 打开背包");
+            openBackpack();
         });
 
         // 治疗按钮
@@ -13040,10 +12863,12 @@ ${currentPersonality}
                 console.log("按钮数量:", buttons.length);
                 console.log("按钮文字:", buttons.map((i, btn) => $(btn).text().trim()).get());
 
-                if (popup.length > 0 && buttons.length === 4) {
+                if (popup.length > 0 && buttons.length === 5) {
                     console.log("✅ 统一UI测试成功！所有平台显示相同内容");
                 } else {
                     console.log("❌ 统一UI测试失败！内容不一致");
+                    console.log(`预期: 弹窗存在且有5个按钮`);
+                    console.log(`实际: 弹窗${popup.length > 0 ? '存在' : '不存在'}，${buttons.length}个按钮`);
                 }
             }, 500);
         }, 200);

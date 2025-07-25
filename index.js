@@ -389,7 +389,19 @@ jQuery(async () => {
             // 其他图标
             'star': '<polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"></polygon>',
             'award': '<circle cx="12" cy="8" r="7"></circle><polyline points="8.21,13.89 7,23 12,20 17,23 15.79,13.88"></polyline>',
-            'trending-up': '<polyline points="23,6 13.5,15.5 8.5,10.5 1,18"></polyline><polyline points="17,6 23,6 23,12"></polyline>'
+            'trending-up': '<polyline points="23,6 13.5,15.5 8.5,10.5 1,18"></polyline><polyline points="17,6 23,6 23,12"></polyline>',
+
+            // 商店物品图标
+            'apple': '<path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06Z"></path><path d="M10 2c1 .5 2 2 2 5"></path>',
+            'sandwich': '<path d="M3 11v3a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-3"></path><path d="M12 19H4a2 2 0 0 1-2-2v-1a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2h-8Z"></path><path d="M20 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v3"></path><path d="M4 14h16"></path>',
+            'cake': '<path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8"></path><path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1"></path><path d="M2 21h20"></path><path d="M7 8v3"></path><path d="M12 8v3"></path><path d="M17 8v3"></path>',
+            'pill': '<path d="M10.5 20.5 10 10l10.5 10.5a2.828 2.828 0 1 1-4 4Z"></path><path d="M8.5 8.5 18 18l-4 4L4.5 12.5a2.828 2.828 0 1 1 4-4Z"></path>',
+            'syringe': '<path d="M18 6 7 17l-4-4"></path><path d="M7 17l4 4"></path><path d="M3 21l4-4"></path><circle cx="18" cy="6" r="3"></circle>',
+            'ball': '<circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path>',
+            'robot': '<rect x="3" y="11" width="18" height="10" rx="2" ry="2"></rect><circle cx="12" cy="5" r="2"></circle><path d="M12 7v4"></path><line x1="8" y1="16" x2="8" y2="16"></line><line x1="16" y1="16" x2="16" y2="16"></line>',
+            'clock': '<circle cx="12" cy="12" r="10"></circle><polyline points="12,6 12,12 16,14"></polyline>',
+            'sparkles': '<path d="M9 12l2 2 4-4"></path><path d="M21 12c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1z"></path><path d="M3 12c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1z"></path><path d="M12 3c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1z"></path><path d="M12 21c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1z"></path>',
+            'gem': '<path d="M6 3h12l4 6-10 13L2 9l4-6z"></path><path d="M11 3 8 9l4 13 4-13-3-6"></path><path d="M2 9h20"></path>'
         };
 
         return `${svgHeader}${paths[name] || ''}</svg>`;
@@ -4804,7 +4816,7 @@ ${currentPersonality}
                         font-size: 1em !important;
                     ">${petData.isAlive ?
                         `${LIFE_STAGES[petData.lifeStage]?.emoji || '🐾'} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` :
-                        '💀 已死亡'
+                        `${getFeatherIcon('x', { color: '#ff4444', size: 16 })} 已死亡`
                     }</div>
                 </div>
             </div>
@@ -8010,9 +8022,9 @@ ${currentPersonality}
                         border-bottom: 1px solid rgba(255,255,255,0.2) !important;
                         padding-bottom: 15px !important;
                     ">
-                        <h2 style="margin: 0 !important; color: #ffd700 !important;">🛒 宠物商店</h2>
-                        <div style="color: #ffd700 !important; font-weight: bold !important;">
-                            💰 ${petData.coins || 100} 金币
+                        <h2 style="margin: 0 !important; color: #ffd700 !important; display: flex !important; align-items: center !important; gap: 8px !important;">${getFeatherIcon('shopping-bag', { color: '#ffd700', size: 24 })} 宠物商店</h2>
+                        <div style="color: #ffd700 !important; font-weight: bold !important; display: flex !important; align-items: center !important; gap: 6px !important;">
+                            ${getFeatherIcon('star', { color: '#ffd700', size: 18 })} ${petData.coins || 100} 金币
                         </div>
                     </div>
 
@@ -8067,7 +8079,7 @@ ${currentPersonality}
                             border-radius: 20px !important;
                             cursor: pointer !important;
                             font-size: 0.9em !important;
-                        ">✨ 特殊</button>
+                        ">${getFeatherIcon('sparkles', { color: 'currentColor', size: 16 })} 特殊</button>
                     </div>
 
                     <div id="shop-items" style="
@@ -8134,8 +8146,8 @@ ${currentPersonality}
                         text-align: center !important;
                         border: 2px solid ${canAfford ? 'rgba(255,215,0,0.5)' : 'rgba(255,255,255,0.2)'} !important;
                     ">
-                        <div style="font-size: 2em !important; margin-bottom: 8px !important;">
-                            ${item.emoji}
+                        <div style="font-size: 2em !important; margin-bottom: 8px !important; display: flex !important; justify-content: center !important; align-items: center !important;">
+                            ${getFeatherIcon(item.emoji, { color: '#ffd700', size: 32 })}
                         </div>
                         <div style="font-weight: bold !important; margin-bottom: 5px !important;">
                             ${item.name}
@@ -8143,8 +8155,8 @@ ${currentPersonality}
                         <div style="font-size: 0.8em !important; color: rgba(255,255,255,0.8) !important; margin-bottom: 8px !important; min-height: 32px !important;">
                             ${item.description}
                         </div>
-                        <div style="color: #ffd700 !important; font-weight: bold !important; margin-bottom: 8px !important;">
-                            💰 ${item.price} 金币
+                        <div style="color: #ffd700 !important; font-weight: bold !important; margin-bottom: 8px !important; display: flex !important; align-items: center !important; justify-content: center !important; gap: 6px !important;">
+                            ${getFeatherIcon('star', { color: '#ffd700', size: 16 })} ${item.price} 金币
                         </div>
                         ${ownedCount > 0 ? `
                         <div style="color: #4ecdc4 !important; font-size: 0.8em !important; margin-bottom: 8px !important;">
@@ -8200,9 +8212,9 @@ ${currentPersonality}
         }).data('category') || 'all';
 
         $('#shop-items').html(generateShopItems(currentCategory));
-        $('.shop-modal h2').next().html(`💰 ${petData.coins} 金币`);
+        $('.shop-modal h2').next().html(`${getFeatherIcon('star', { color: '#ffd700', size: 18 })} ${petData.coins} 金币`);
 
-        toastr.success(`购买成功！${item.emoji} ${item.name} 已添加到背包。`);
+        toastr.success(`购买成功！${item.name} 已添加到背包。`);
     };
 
     function useItem(itemId) {
@@ -8428,7 +8440,7 @@ ${currentPersonality}
                             transition: all 0.3s ease !important;
                             position: relative !important;
                         ">
-                            <div style="font-size: 2em !important; margin-bottom: 5px !important;">${item.emoji}</div>
+                            <div style="font-size: 2em !important; margin-bottom: 5px !important; display: flex !important; justify-content: center !important; align-items: center !important;">${getFeatherIcon(item.emoji, { color: 'white', size: 28 })}</div>
                             <div style="font-size: 0.8em !important; color: white !important; margin-bottom: 3px !important;">${item.name}</div>
                             <div style="
                                 position: absolute !important;
@@ -8512,7 +8524,7 @@ ${currentPersonality}
         renderBackpackItems();
 
         // 显示使用效果
-        toastr.success(`使用了 ${item.emoji} ${item.name}！`);
+        toastr.success(`使用了 ${item.name}！`);
 
         // 更新主界面状态
         setTimeout(() => {
@@ -9377,7 +9389,7 @@ ${currentPersonality}
         // 食物类
         basic_food: {
             name: "基础食物",
-            emoji: "🍎",
+            emoji: "apple",
             price: 10,
             category: "food",
             description: "普通的食物，恢复饱食度",
@@ -9385,7 +9397,7 @@ ${currentPersonality}
         },
         premium_food: {
             name: "高级食物",
-            emoji: "🍖",
+            emoji: "sandwich",
             price: 25,
             category: "food",
             description: "营养丰富的食物，恢复饱食度和健康",
@@ -9393,7 +9405,7 @@ ${currentPersonality}
         },
         special_treat: {
             name: "特殊零食",
-            emoji: "🍰",
+            emoji: "cake",
             price: 40,
             category: "food",
             description: "美味的零食，大幅提升快乐度",
@@ -9403,7 +9415,7 @@ ${currentPersonality}
         // 药品类
         medicine: {
             name: "感冒药",
-            emoji: "💊",
+            emoji: "pill",
             price: 30,
             category: "medicine",
             description: "治疗轻微疾病",
@@ -9411,7 +9423,7 @@ ${currentPersonality}
         },
         super_medicine: {
             name: "特效药",
-            emoji: "💉",
+            emoji: "syringe",
             price: 80,
             category: "medicine",
             description: "治疗严重疾病，完全恢复健康",
@@ -9421,7 +9433,7 @@ ${currentPersonality}
         // 玩具类
         ball: {
             name: "小球",
-            emoji: "⚽",
+            emoji: "ball",
             price: 20,
             category: "toy",
             description: "简单的玩具，提升快乐度和纪律",
@@ -9429,7 +9441,7 @@ ${currentPersonality}
         },
         robot_toy: {
             name: "机器人玩具",
-            emoji: "🤖",
+            emoji: "robot",
             price: 60,
             category: "toy",
             description: "高科技玩具，大幅提升纪律和快乐",
@@ -12046,7 +12058,7 @@ ${currentPersonality}
                     <div class="pet-name" style="font-size: 1.2em !important; font-weight: bold !important; margin-bottom: 3px !important;">${escapeHtml(petData.name)}</div>
                     <div class="pet-level" style="color: #7289da !important; font-size: 0.9em !important;">${petData.isAlive ?
                         `${LIFE_STAGES[petData.lifeStage]?.emoji || '🐾'} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` :
-                        '💀 已死亡'
+                        `${getFeatherIcon('x', { color: '#ff4444', size: 16 })} 已死亡`
                     }</div>
                 </div>
 
@@ -12104,8 +12116,8 @@ ${currentPersonality}
                     border-radius: 6px !important;
                     margin-bottom: 8px !important;
                 ">
-                    <span style="color: #ffd700 !important; font-weight: bold !important; font-size: 1em !important;">
-                        💰 ${petData.coins || 100} 金币
+                    <span style="color: #ffd700 !important; font-weight: bold !important; font-size: 1em !important; display: flex !important; align-items: center !important; gap: 6px !important;">
+                        ${getFeatherIcon('star', { color: '#ffd700', size: 16 })} ${petData.coins || 100} 金币
                     </span>
                 </div>
                 ` : ''}
@@ -12342,7 +12354,7 @@ ${currentPersonality}
                     color: ${candyColors.textLight} !important;
                     font-size: 0.7em !important;
                 ">
-                    <p style="margin: 0 !important;">🎉 虚拟宠物系统 v1.0</p>
+                    <p style="margin: 0 !important; display: flex !important; align-items: center !important; gap: 6px !important;">${getFeatherIcon('heart', { color: 'currentColor', size: 14 })} 虚拟宠物系统 v1.0</p>
                     <p style="margin: 2px 0 0 0 !important;">上次互动: 刚刚</p>
                 </div>
             </div>
@@ -12388,7 +12400,7 @@ ${currentPersonality}
                     <div class="pet-name" style="font-size: 1.3em !important; font-weight: bold !important; margin-bottom: 4px !important; color: ${candyColors.textPrimary} !important; cursor: pointer !important; text-decoration: underline !important;" onclick="editPetName()" title="点击编辑宠物名字">${escapeHtml(petData.name)}</div>
                     <div class="pet-level" style="color: ${candyColors.primary} !important; font-size: 1em !important;">${petData.isAlive ?
                         `${LIFE_STAGES[petData.lifeStage]?.emoji || '🐾'} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` :
-                        '💀 已死亡'
+                        `${getFeatherIcon('x', { color: '#ff4444', size: 16 })} 已死亡`
                     }</div>
                 </div>
 
@@ -12446,8 +12458,8 @@ ${currentPersonality}
                     border-radius: 8px !important;
                     margin-bottom: 10px !important;
                 ">
-                    <span style="color: #ffd700 !important; font-weight: bold !important; font-size: 1.1em !important;">
-                        💰 ${petData.coins || 100} 金币
+                    <span style="color: #ffd700 !important; font-weight: bold !important; font-size: 1.1em !important; display: flex !important; align-items: center !important; gap: 6px !important;">
+                        ${getFeatherIcon('star', { color: '#ffd700', size: 18 })} ${petData.coins || 100} 金币
                     </span>
                 </div>
                 ` : ''}
@@ -12683,7 +12695,7 @@ ${currentPersonality}
                     color: ${candyColors.textLight} !important;
                     font-size: 0.8em !important;
                 ">
-                    <p style="margin: 0 !important;">🎉 虚拟宠物系统 v1.0</p>
+                    <p style="margin: 0 !important; display: flex !important; align-items: center !important; gap: 6px !important;">${getFeatherIcon('heart', { color: 'currentColor', size: 14 })} 虚拟宠物系统 v1.0</p>
                     <p style="margin: 3px 0 0 0 !important;">上次互动: 刚刚</p>
                 </div>
             </div>

@@ -2618,6 +2618,15 @@ jQuery(async () => {
             targetHeaders['anthropic-version'] = '2023-06-01';
         } else {
             targetHeaders['Authorization'] = `Bearer ${settings.apiKey}`;
+
+            console.debug(`[${extensionName}] ▶️ Relay Request`, {
+                relayServerUrl,
+                targetUrl: targetApiUrl,
+                headers: redactHeaders(targetHeaders),
+                body: previewBody(targetRequestBody),
+                timeout
+            });
+
         }
 
         // 构建请求体

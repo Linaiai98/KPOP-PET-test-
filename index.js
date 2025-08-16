@@ -370,6 +370,9 @@ jQuery(async () => {
 
             // 动作相关图标
             'utensils': '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"></path><path d="M7 2v20"></path><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3z"></path>',
+
+
+
             'gamepad-2': '<line x1="6" y1="11" x2="10" y2="11"></line><line x1="8" y1="9" x2="8" y2="13"></line><line x1="15" y1="12" x2="15.01" y2="12"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><rect x="2" y="6" width="20" height="12" rx="2"></rect>',
             'moon': '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>',
             'gift': '<polyline points="20,12 20,22 4,22 4,12"></polyline><rect x="2" y="7" width="20" height="5"></rect><line x1="12" y1="22" x2="12" y2="7"></line><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path>',
@@ -415,6 +418,9 @@ jQuery(async () => {
             cyan: '#00F0FF',
             purple: '#9B5CFF',
             blue: '#00A3FF',
+
+
+
             lime: '#80FF00',
             bg: '#0B0E1A',
             panel: '#111424',
@@ -4306,8 +4312,8 @@ ${currentPersonality}
                     border-radius: 50% !important;
                 ">`);
             } else {
-                // 显示默认爪子图案
-                button.html('🐾');
+                // 显示默认SVG图标
+                button.html(getFeatherIcon('sparkles', { color: '#00F0FF', size: 22, strokeWidth: 2 }));
             }
         }
     }
@@ -5255,7 +5261,7 @@ ${currentPersonality}
                     image-rendering: -moz-crisp-edges !important;
                     image-rendering: crisp-edges !important;
                 " onclick="openAvatarSelector()" oncontextmenu="showAvatarContextMenu(event)" title="点击更换头像，右键重置">
-                    ${getAvatarContent()}
+                    ${customAvatarData ? getAvatarContent() : getDefaultPetIcon(48, '#ffd700')}
                 </div>
 
                 <!-- 宠物信息 -->
@@ -6058,22 +6064,22 @@ ${currentPersonality}
         // 创建按钮
         console.log(`[${extensionName}] Creating floating button with ID: ${BUTTON_ID}`);
 
-        // 使用内联样式确保按钮可见，强制使用fixed定位
+        // 使用内联样式确保按钮可见，强制使用fixed定位（重构为霓虹玻璃风格）
+        const avatarHTML = customAvatarData ?
+            `<img src="${customAvatarData}" alt="宠物头像" style="width: 70% !important; height: 70% !important; object-fit: cover !important; border-radius: 12px !important;">` :
+            getFeatherIcon('sparkles', { color: '#00F0FF', size: 22, strokeWidth: 2 });
+
         const buttonHtml = `
-            <div id="${BUTTON_ID}" style="
+            <div id="${BUTTON_ID}" class="kpop-neon" style="
                 position: fixed !important;
                 z-index: ${SAFE_Z_INDEX.button} !important;
                 cursor: grab !important;
-                width: 48px !important;
-                height: 48px !important;
-                background: linear-gradient(145deg, ${candyColors.primary}, ${candyColors.buttonHover}) !important;
-                border-radius: 50% !important;
+                width: 52px !important;
+                height: 52px !important;
+                border-radius: 14px !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
-                color: #7289da !important;
-                font-size: 24px !important;
-                box-shadow: 0 4px 8px rgba(0,0,0,0.3), inset 0 2px 2px rgba(255,255,255,0.05), 0 0 0 1px rgba(0,0,0,0.5) !important;
                 user-select: none !important;
                 opacity: 1 !important;
                 visibility: visible !important;
@@ -6084,7 +6090,13 @@ ${currentPersonality}
                 left: 20px !important;
                 bottom: auto !important;
                 right: auto !important;
-            ">${customAvatarData ? `<img src="${customAvatarData}" alt="宠物头像" style="width: 100% !important; height: 100% !important; object-fit: cover !important; border-radius: 50% !important;">` : '🐾'}</div>
+                border: 1px solid rgba(164,0,255,.40) !important;
+                background: radial-gradient(120px 120px at 30% 20%, rgba(255,45,149,.22), transparent 55%),
+                            radial-gradient(180px 180px at 80% 70%, rgba(0,240,255,.18), transparent 60%),
+                            rgba(17,20,36,.72) !important;
+                backdrop-filter: blur(8px) !important;
+                box-shadow: 0 8px 24px rgba(0,0,0,.35), 0 0 18px rgba(255,45,149,.6), 0 0 28px rgba(0,240,255,.55) !important;
+            ">${avatarHTML}</div>
         `;
 
         // 直接添加到body，避免被其他容器影响定位
@@ -6408,7 +6420,7 @@ ${currentPersonality}
 
                         <div class="flex-container">
                             <label for="ai-api-select" style="display: block; margin-bottom: 8px; font-weight: bold;">
-                                🤖 AI API 配置
+                                AI API 配置
                             </label>
                             <select id="ai-api-select" style="width: 100%; padding: 8px; margin-bottom: 8px; border-radius: 4px;">
                                 <option value="">请选择API类型...</option>
@@ -6438,7 +6450,7 @@ ${currentPersonality}
                                     </button>
                                 </div>
                                 <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
-                                    💡 提示：只需填写到 /v1，插件会自动添加 /chat/completions 端点。点击重置按钮可恢复官方端点
+                                    提示：只需填写到 /v1，插件会自动添加 /chat/completions 端点。点击重置可恢复官方端点
                                 </div>
                             </div>
                             <div style="margin-bottom: 10px;">
@@ -6465,7 +6477,7 @@ ${currentPersonality}
                                         <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
                                         <option value="deepseek-chat">DeepSeek Chat</option>
                                         <option value="deepseek-coder">DeepSeek Coder</option>
-                                        <option value="custom">🔧 自定义模型</option>
+                                        <option value="custom">自定义模型</option>
                                     </select>
                                     <button id="refresh-models-btn" style="
                                         padding: 6px 10px;
@@ -6477,7 +6489,7 @@ ${currentPersonality}
                                         font-size: 0.8em;
                                         white-space: nowrap;
                                     " title="从配置的API获取可用模型列表">
-                                        🔄 获取
+                                        刷新模型
                                     </button>
                                 </div>
                                 <input id="ai-model-input" type="text" placeholder="自定义模型名称"
@@ -6487,7 +6499,7 @@ ${currentPersonality}
 
                         <div class="flex-container" style="margin-top: 10px;">
                             <button id="test-ai-connection-btn" style="padding: 8px 16px; background: #48bb78; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">
-                                🔗 测试连接
+                                测试连接
                             </button>
                             <span id="ai-connection-status" style="padding: 8px; font-size: 0.9em; color: #888;">
                                 未测试
@@ -11724,7 +11736,7 @@ ${currentPersonality}
                         ${(petData.health > 80 && petData.happiness > 80) ?
                             'animation: petGlow 2s ease-in-out infinite alternate !important;' : ''}
                     " onclick="openAvatarSelector()" oncontextmenu="showAvatarContextMenu(event)" title="点击更换头像，右键重置">
-                        ${getAvatarContent()}
+                        ${customAvatarData ? getAvatarContent() : getDefaultPetIcon(56, '#ffd700')}
                     </div>
                     <div class="pet-name" style="font-size: 1.2em !important; font-weight: bold !important; margin-bottom: 3px !important;">${escapeHtml(petData.name)}</div>
                     <div class="pet-level" style="color: #7289da !important; font-size: 0.9em !important;">${petData.isAlive ?
@@ -12066,7 +12078,7 @@ ${currentPersonality}
                         margin: 0 auto 10px auto !important;
                         transition: transform 0.2s ease !important;
                     " onclick="openAvatarSelector()" oncontextmenu="showAvatarContextMenu(event)" title="点击更换头像，右键重置">
-                        ${getAvatarContent()}
+                        ${customAvatarData ? getAvatarContent() : getDefaultPetIcon(64, '#ffd700')}
                     </div>
                     <div class="pet-name" style="font-size: 1.3em !important; font-weight: bold !important; margin-bottom: 4px !important; color: ${candyColors.textPrimary} !important; cursor: pointer !important; text-decoration: underline !important;" onclick="editPetName()" title="点击编辑宠物名字">${escapeHtml(petData.name)}</div>
                     <div class="pet-level" style="color: ${candyColors.primary} !important; font-size: 1em !important;">${petData.isAlive ?

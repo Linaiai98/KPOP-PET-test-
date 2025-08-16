@@ -1,9 +1,9 @@
 // 虚拟宠物系统 - SillyTavern插件
-console.log("🐾 虚拟宠物系统脚本开始加载...");
+console.log("[VirtualPet] 脚本开始加载...");
 
 // 使用 jQuery 确保在 DOM 加载完毕后执行我们的代码
 jQuery(async () => {
-    console.log("🐾 jQuery ready, 开始初始化...");
+    console.log("[VirtualPet] jQuery ready, 开始初始化...");
 
     // -----------------------------------------------------------------
     // 1. 定义常量和状态变量
@@ -201,7 +201,7 @@ jQuery(async () => {
      * 检查并修复CSS变量污染
      */
     function checkAndFixCSSVariables() {
-        console.log(`[${extensionName}] 🔍 检查CSS变量污染...`);
+        console.log(`[${extensionName}] [CHECK] 检查CSS变量污染...`);
 
         // 检查是否有插件修改了关键的CSS变量
         const rootStyle = getComputedStyle(document.documentElement);
@@ -410,6 +410,16 @@ jQuery(async () => {
         return `${svgHeader}${paths[name] || ''}</svg>`;
     }
 
+
+        // Default pet SVG icon (for main UI and chat avatars)
+        function getDefaultPetIcon(size = 48, color = '#ffd700') {
+            try {
+                return getFeatherIcon('smile', { color, size, strokeWidth: 2 });
+            } catch (e) {
+                return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>`;
+            }
+        }
+
         // ------------------------------
         // UI Route A: K-POP Neon quick skin (non-breaking, additive)
         // ------------------------------
@@ -596,11 +606,11 @@ jQuery(async () => {
 
         // 拓麻歌子式生命阶段定义 - moved earlier to avoid TDZ when used in UI builders
         const LIFE_STAGES = {
-            baby:   { name: "幼体",  duration: 24,  emoji: "🥚" },   // 24小时
-            child:  { name: "儿童",  duration: 48,  emoji: "🐣" },   // 48小时
-            teen:   { name: "少年",  duration: 72,  emoji: "🐤" },   // 72小时
-            adult:  { name: "成年",  duration: 120, emoji: "🐦" },   // 120小时
-            senior: { name: "老年",  duration: 48,  emoji: "🦅" }    // 48小时后死亡
+            baby:   { name: "幼体",  duration: 24,  icon: 'egg' },   // 24小时
+            child:  { name: "儿童",  duration: 48,  icon: 'baby' },   // 48小时
+            teen:   { name: "少年",  duration: 72,  icon: 'bird' },   // 72小时
+            adult:  { name: "成年",  duration: 120, icon: 'bird' },   // 120小时
+            senior: { name: "老年",  duration: 48,  icon: 'activity' }    // 48小时后死亡
         };
 
 
@@ -930,7 +940,7 @@ jQuery(async () => {
                 try {
                     if (firebase.analytics && FIREBASE_CONFIG.measurementId) {
                         firebase.analytics();
-                        console.log(`[${extensionName}] 📊 Firebase Analytics已启用`);
+                        console.log(`[${extensionName}] [STATS] Firebase Analytics已启用`);
                     }
                 } catch (analyticsError) {
                     console.warn(`[${extensionName}] ⚠️ Firebase Analytics初始化失败:`, analyticsError);
@@ -1173,7 +1183,7 @@ jQuery(async () => {
                 throw new Error('Firebase未初始化');
             }
 
-            console.log(`[${extensionName}] 🔗 尝试连接码: ${code}`);
+            console.log(`[${extensionName}] [LINK] 尝试连接码: ${code}`);
 
             // 查找连接码
             const codeDoc = firebaseDb.collection('connectionCodes').doc(code.toUpperCase());
@@ -1266,7 +1276,7 @@ jQuery(async () => {
             loadAISettings();
             loadCustomAvatar();
 
-            toastr.success('所有数据已从主设备同步完成！', '🎉 同步成功');
+            toastr.success('所有数据已从主设备同步完成！', '同步成功');
 
         } catch (error) {
             console.error(`[${extensionName}] ❌ 数据同步失败:`, error);
@@ -1283,7 +1293,7 @@ jQuery(async () => {
         if (!currentUser || !firebaseStorage) {
             throw new Error('Firebase Storage未初始化或用户未登录');
         }
-        console.log(`[${extensionName}] ☁️ 上传头像到Firebase Storage...`);
+        console.log(`[${extensionName}] [CLOUD] 上传头像到Firebase Storage...`);
 
         const storageRef = firebaseStorage.ref().child(`avatars/${currentUser.uid}/avatar.png`);
 
@@ -1309,7 +1319,7 @@ jQuery(async () => {
                 throw new Error('用户未登录');
             }
 
-            console.log(`[${extensionName}] ☁️ 备份所有数据到Firebase...`);
+            console.log(`[${extensionName}] [CLOUD] 备份所有数据到Firebase...`);
 
             const userDoc = firebaseDb.collection('users').doc(currentUser.uid);
 
@@ -1362,7 +1372,7 @@ jQuery(async () => {
             await userDoc.set(backupData, { merge: true });
 
             console.log(`[${extensionName}] ✅ 数据备份完成`);
-            toastr.success('所有数据已备份到云端！', '☁️ 备份成功');
+            toastr.success('所有数据已备份到云端！', '备份成功');
 
             return true;
         } catch (error) {
@@ -1524,7 +1534,7 @@ jQuery(async () => {
             case 'connected':
                 statusIcon.text('🟢');
                 statusText.text(message || '已连接');
-                initBtn.text('✅ 已连接').prop('disabled', true);
+                initBtn.text('已连接').prop('disabled', true);
                 primaryControls.show();
                 // 连接成功后仍然显示从设备输入框，方便其他设备连接
                 secondaryControls.show();
@@ -1540,7 +1550,7 @@ jQuery(async () => {
             case 'error':
                 statusIcon.text('🔴');
                 statusText.text(message || '连接错误');
-                initBtn.text('❌ 重试').prop('disabled', false);
+                initBtn.text('重试').prop('disabled', false);
                 primaryControls.hide();
                 managementControls.hide();
                 secondaryControls.show();
@@ -1570,7 +1580,7 @@ jQuery(async () => {
                 await signInAnonymously();
 
                 updateFirebaseStatus('connected', '已连接');
-                toastr.success('云端备份已连接！', '☁️ 连接成功');
+                toastr.success('云端备份已连接！', '连接成功');
 
             } catch (error) {
                 updateFirebaseStatus('error', '连接失败');
@@ -1594,7 +1604,7 @@ jQuery(async () => {
         $('#firebase-copy-code-btn').on('click', function() {
             const code = $('#firebase-connection-code-text').val();
             navigator.clipboard.writeText(code).then(() => {
-                toastr.success('连接码已复制！', '📋 复制成功');
+                toastr.success('连接码已复制！', '复制成功');
             }).catch(() => {
                 toastr.error('复制失败，请手动复制', '❌ 复制失败');
             });
@@ -1619,7 +1629,7 @@ jQuery(async () => {
                 await connectWithCode(code);
                 updateFirebaseStatus('connected', '已连接');
                 $('#firebase-connection-code-input').val('');
-                toastr.success('设备连接成功，数据已同步！', '🔗 连接成功');
+                toastr.success('设备连接成功，数据已同步！', '连接成功');
 
             } catch (error) {
                 updateFirebaseStatus('error', '连接失败');
@@ -1631,7 +1641,7 @@ jQuery(async () => {
         $('#firebase-backup-now-btn').on('click', async function() {
             try {
                 await backupAllDataToFirebase();
-                toastr.success('数据已备份到云端！', '☁️ 备份成功');
+                toastr.success('数据已备份到云端！', '备份成功');
             } catch (error) {
                 toastr.error(`备份失败: ${error.message}`, '❌ 备份失败');
             }
@@ -1861,7 +1871,7 @@ jQuery(async () => {
             };
 
             for (const provider of apiProviders) {
-                console.log(`[${extensionName}] 🔍 检查 ${provider.name}...`);
+                console.log(`[${extensionName}] [CHECK] 检查 ${provider.name}...`);
 
                 for (const endpoint of provider.endpoints) {
                     try {
@@ -1875,7 +1885,7 @@ jQuery(async () => {
                             console.log(`[${extensionName}] 🔑 使用API密钥进行认证`);
                         }
 
-                        console.log(`[${extensionName}] 🔗 尝试: ${endpoint}`);
+                        console.log(`[${extensionName}] [TRY] 尝试: ${endpoint}`);
 
                         const response = await fetch(endpoint, {
                             method: 'GET',
@@ -1985,7 +1995,7 @@ jQuery(async () => {
                     }
 
                     if (context.model) {
-                        console.log(`[${extensionName}] 🤖 SillyTavern当前模型: ${context.model}`);
+                        console.log(`[${extensionName}] [MODEL] SillyTavern当前模型: ${context.model}`);
                         availableAPIs.push({
                             type: 'current_model',
                             name: context.model,
@@ -2019,7 +2029,7 @@ jQuery(async () => {
                 return a.name.localeCompare(b.name);
             });
 
-            console.log(`[${extensionName}] 🎉 最终发现 ${uniqueAPIs.length} 个可用API:`, uniqueAPIs);
+            console.log(`[${extensionName}] [DONE] 最终发现 ${uniqueAPIs.length} 个可用API:`, uniqueAPIs);
 
             if (uniqueAPIs.length === 0) {
                 console.log(`[${extensionName}] ⚠️ 未发现任何API，可能的原因:`);
@@ -2036,8 +2046,8 @@ jQuery(async () => {
                     providerCount[api.provider] = (providerCount[api.provider] || 0) + 1;
                     statusCount[api.status] = (statusCount[api.status] || 0) + 1;
                 });
-                console.log(`[${extensionName}] 📊 按提供商:`, providerCount);
-                console.log(`[${extensionName}] 📊 按状态:`, statusCount);
+                console.log(`[${extensionName}] [STATS] 按提供商:`, providerCount);
+                console.log(`[${extensionName}] [STATS] 按状态:`, statusCount);
 
                 // 提供使用建议
                 const authRequiredCount = uniqueAPIs.filter(api => api.status === 'auth_required').length;
@@ -2098,7 +2108,7 @@ jQuery(async () => {
             <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
             <option value="gemini-pro">Gemini Pro</option>
             <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-            <option value="custom">🔧 自定义模型</option>
+            <option value="custom">自定义模型</option>
         `;
 
         // 按提供商分组动态模型
@@ -2167,7 +2177,7 @@ jQuery(async () => {
         const suggestedModels = models.filter(model => model.status === 'suggested').length;
 
         if (totalModels > 0) {
-            console.log(`[${extensionName}] 📊 模型统计: 总计${totalModels}个, 可用${availableModels}个, 推荐${suggestedModels}个`);
+            console.log(`[${extensionName}] [STATS] 模型统计: 总计${totalModels}个, 可用${availableModels}个, 推荐${suggestedModels}个`);
         }
     }
 
@@ -2228,7 +2238,7 @@ jQuery(async () => {
             apiKey: $('#ai-key-input').val(),
             apiModel: currentModel,
             lastTestTime: Date.now(),
-            lastTestResult: $('#ai-connection-status').text().includes('✅'),
+            lastTestResult: $('#ai-connection-status').text().includes('连接成功'),
             lastSyncTime: Date.now() // 添加同步时间戳
         };
 
@@ -2311,7 +2321,7 @@ jQuery(async () => {
                 // 显示上次测试结果
                 if (settings.lastTestResult && settings.lastTestTime) {
                     const timeAgo = Math.floor((Date.now() - settings.lastTestTime) / (1000 * 60));
-                    $('#ai-connection-status').text(`✅ 上次测试成功 (${timeAgo}分钟前)`).css('color', '#48bb78');
+                    $('#ai-connection-status').text(`上次测试成功 (${timeAgo}分钟前)`).css('color', '#48bb78');
                 }
 
                 console.log(`[${extensionName}] AI设置已加载:`, settings);
@@ -2403,7 +2413,7 @@ jQuery(async () => {
                     name: backendName
                 };
 
-                console.log(`[${extensionName}] 🔍 后端API信息:`, backendInfo);
+                console.log(`[${extensionName}] [CHECK] 后端API信息:`, backendInfo);
 
                 // 自动填充模型名称
                 $('#ai-model-input').val(backendName);
@@ -2424,7 +2434,7 @@ jQuery(async () => {
                     configMessage += '，请配置相应的URL和密钥';
                 }
 
-                toastr.info(configMessage, '🤖 模型已选择', { timeOut: 6000 });
+                toastr.info(configMessage, '模型已选择', { timeOut: 6000 });
             }
         } else if (apiType && apiType.startsWith('detected:')) {
             // 兼容旧格式
@@ -2531,7 +2541,7 @@ jQuery(async () => {
             const response = await callCustomAPI(testPrompt, settings, 25000); // 调整为25秒超时，提高跨网/中继成功率
 
             if (response && response.trim()) {
-                statusElement.text('✅ 连接成功').css('color', '#48bb78');
+                statusElement.text('连接成功').css('color', '#48bb78');
                 toastr.success(`API连接测试成功！类型: ${settings.apiType}，AI回复: ${response.substring(0, 50)}`);
 
                 // 保存测试结果
@@ -2542,7 +2552,7 @@ jQuery(async () => {
             }
 
         } catch (error) {
-            statusElement.text('❌ 连接失败').css('color', '#f56565');
+            statusElement.text('连接失败').css('color', '#f56565');
             toastr.error('连接测试失败: ' + error.message);
 
             // 提供详细的错误帮助
@@ -3291,12 +3301,12 @@ ${currentPersonality}
                 // 处理从API获取的模型
                 const modelId = selectedValue.replace('api_model:', '');
                 $('#ai-model-input').hide().val(modelId);
-                toastr.success(`已选择API模型: ${modelId}`, '🤖 模型已选择', { timeOut: 2000 });
+                toastr.success(`已选择API模型: ${modelId}`, '模型已选择', { timeOut: 2000 });
                 console.log(`[${extensionName}] 选择了API模型: ${modelId}`);
             } else if (selectedValue) {
                 // 隐藏自定义输入框，使用选择的模型
                 $('#ai-model-input').hide().val(selectedValue);
-                toastr.success(`已选择模型: ${selectedValue}`, '🤖 模型已选择', { timeOut: 2000 });
+                toastr.success(`已选择模型: ${selectedValue}`, '模型已选择', { timeOut: 2000 });
             } else {
                 // 未选择，隐藏自定义输入框
                 $('#ai-model-input').hide().val('');
@@ -3312,7 +3322,7 @@ ${currentPersonality}
             const button = $(this);
             const originalText = button.text();
 
-            button.prop('disabled', true).text('🔄 获取中...');
+            button.prop('disabled', true).text('获取中...');
 
             try {
                 console.log(`[${extensionName}] 开始刷新模型列表...`);
@@ -3343,9 +3353,9 @@ ${currentPersonality}
                 updateModelDropdown(models);
 
                 if (models.length > 0) {
-                    toastr.success(`🎉 从您的API获取到 ${models.length} 个模型！`, '模型获取成功', { timeOut: 4000 });
+                    toastr.success(`从您的API获取到 ${models.length} 个模型！`, '模型获取成功', { timeOut: 4000 });
                 } else {
-                    toastr.warning('未能从您的API获取到模型，请检查URL和密钥配置', '⚠️ 模型获取失败', { timeOut: 4000 });
+                    toastr.warning('未能从您的API获取到模型，请检查URL和密钥配置', '模型获取失败', { timeOut: 4000 });
                 }
             } catch (error) {
                 console.error(`[${extensionName}] 刷新模型列表失败:`, error);
@@ -3905,7 +3915,7 @@ ${currentPersonality}
             const coinReward = petData.level * 10;
             gainCoins(coinReward);
 
-            toastr.success(`🎉 ${petData.name} 升级了！现在是 ${petData.level} 级！获得 ${coinReward} 金币奖励！`);
+            toastr.success(`${petData.name} 升级了！现在是 ${petData.level} 级！获得 ${coinReward} 金币奖励！`);
         }
     }
 
@@ -4459,7 +4469,7 @@ ${currentPersonality}
         // 添加配置提示
         const configHint = `
             <div class="chat-config-hint" style="text-align: center; padding: 20px;">
-                <div style="font-size: 3em; margin-bottom: 15px;">🤖</div>
+                <div style="font-size: 3em; margin-bottom: 15px;">${getFeatherIcon('cpu', { color: candyColors.primary, size: 48 })}</div>
                 <h3 style="color: var(--primary-accent-color); margin-bottom: 15px;">需要配置AI API</h3>
                 <p style="margin-bottom: 15px; line-height: 1.5;">
                     要与宠物聊天，需要先配置AI API。<br>
@@ -4467,16 +4477,16 @@ ${currentPersonality}
                 <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: left;">
                     <div style="font-weight: bold; color: #007bff; margin-bottom: 10px;">📋 配置步骤：</div>
                     <ol style="margin: 0; padding-left: 20px; line-height: 1.6;">
-                        <li>点击右上角的 <strong>扩展</strong> 按钮 (🧩)</li>
-                        <li>找到 <strong>🐾 虚拟宠物系统</strong> 设置</li>
-                        <li>在 <strong>🤖 AI API 配置</strong> 部分填写：
+                        <li>点击右上角的 <strong>扩展</strong> 按钮</li>
+                        <li>找到 <strong>虚拟宠物系统</strong> 设置</li>
+                        <li>在 <strong>AI API 配置</strong> 部分填写：
                             <ul style="margin-top: 5px;">
                                 <li>选择API类型（如OpenAI、Claude等）</li>
                                 <li>填写API URL</li>
                                 <li>填写API密钥</li>
                             </ul>
                         </li>
-                        <li>点击 <strong>🔗 测试连接</strong> 验证配置</li>
+                        <li>点击 <strong>测试连接</strong> 验证配置</li>
                     </ol>
                 </div>
                 <div style="background: #fff3cd; padding: 12px; border-radius: 6px; margin-bottom: 20px; text-align: left; border-left: 4px solid #ffc107;">
@@ -4707,7 +4717,7 @@ ${currentPersonality}
 
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const isUser = sender === 'user';
-        const avatar = isUser ? '👤' : getPetEmoji();
+        const avatar = isUser ? getFeatherIcon('user', { color: '#ffffff', size: 18 }) : getDefaultPetIcon(18, '#ffd700');
 
         // 响应式尺寸参数
         const avatarSize = isSmallMobile ? '32px' : isMobile ? '36px' : '40px';
@@ -5089,7 +5099,7 @@ ${currentPersonality}
 
                     const messageHtml = `
                         <div class="chat-message ${isUser ? 'user-message' : 'pet-message'}">
-                            <div class="message-avatar">${isUser ? '👤' : getPetEmoji()}</div>
+                            <div class="message-avatar">${isUser ? getFeatherIcon('user', { color: '#ffffff', size: 18 }) : getDefaultPetIcon(18, '#ffd700')}</div>
                             <div class="message-content">
                                 <div class="message-text">${escapeHtml(item.message)}</div>
                                 <div class="message-timestamp">${timestamp}</div>
@@ -5149,25 +5159,25 @@ ${currentPersonality}
         // 创建友好的提示消息
         const message = `
             <div style="text-align: center; padding: 20px;">
-                <div style="font-size: 3em; margin-bottom: 15px;">🤖</div>
+                <div style="font-size: 3em; margin-bottom: 15px;">${getFeatherIcon('cpu', { color: candyColors.primary, size: 48 })}</div>
                 <h3 style="color: var(--primary-accent-color); margin-bottom: 15px;">需要配置AI API</h3>
                 <p style="margin-bottom: 15px; line-height: 1.5;">
                     要与宠物聊天，需要先配置AI API。<br>
                     当前缺少：<strong>${missingText}</strong>
                 </p>
                 <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: left;">
-                    <div style="font-weight: bold; color: #007bff; margin-bottom: 10px;">📋 配置步骤：</div>
+                    <div style="font-weight: bold; color: #007bff; margin-bottom: 10px;">配置步骤：</div>
                     <ol style="margin: 0; padding-left: 20px; line-height: 1.6;">
-                        <li>点击右上角的 <strong>扩展</strong> 按钮 (🧩)</li>
-                        <li>找到 <strong>🐾 虚拟宠物系统</strong> 设置</li>
-                        <li>在 <strong>🤖 AI API 配置</strong> 部分填写：
+                        <li>点击右上角的 <strong>扩展</strong> 按钮</li>
+                        <li>找到 <strong>虚拟宠物系统</strong> 设置</li>
+                        <li>在 <strong>AI API 配置</strong> 部分填写：
                             <ul style="margin-top: 5px;">
                                 <li>选择API类型（如OpenAI、Claude等）</li>
                                 <li>填写API URL</li>
                                 <li>填写API密钥</li>
                             </ul>
                         </li>
-                        <li>点击 <strong>🔗 测试连接</strong> 验证配置</li>
+                        <li>点击 <strong>测试连接</strong> 验证配置</li>
                     </ol>
                 </div>
                 <div style="background: #fff3cd; padding: 12px; border-radius: 6px; margin-bottom: 20px; text-align: left; border-left: 4px solid #ffc107;">
@@ -5276,7 +5286,7 @@ ${currentPersonality}
                         color: #7289da !important;
                         font-size: 1em !important;
                     ">${petData.isAlive ?
-                        `${LIFE_STAGES[petData.lifeStage]?.emoji || '🐾'} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` :
+                        `${getFeatherIcon(LIFE_STAGES[petData.lifeStage]?.icon || 'star', { color: '#ffd700', size: 16 })} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` :
                         `${getFeatherIcon('x', { color: '#ff4444', size: 16 })} 已死亡`
                     }</div>
                 </div>
@@ -5532,14 +5542,14 @@ ${currentPersonality}
      * 获取宠物表情符号
      */
     function getPetEmoji() {
-        const emojis = {
-            cat: "🐱",
-            dog: "🐶",
-            dragon: "🐉",
-            rabbit: "🐰",
-            bird: "🐦"
+        const icons = {
+            cat: getFeatherIcon('smile', { color: '#ffd700', size: 18 }),
+            dog: getFeatherIcon('smile', { color: '#ffd700', size: 18 }),
+            dragon: getFeatherIcon('activity', { color: '#ffd700', size: 18 }),
+            rabbit: getFeatherIcon('smile', { color: '#ffd700', size: 18 }),
+            bird: getFeatherIcon('bird', { color: '#ffd700', size: 18 })
         };
-        return emojis[petData.type] || "🐱";
+        return icons[petData.type] || getFeatherIcon('smile', { color: '#ffd700', size: 18 });
     }
 
     /**
@@ -5963,7 +5973,7 @@ ${currentPersonality}
                         togglePopup();
                     } catch (error) {
                         console.error(`[${extensionName}] Error toggling popup:`, error);
-                        alert("🐾 虚拟宠物系统\n\n弹窗功能正在加载中...\n请稍后再试！");
+                        alert("虚拟宠物系统\n\n弹窗功能正在加载中...\n请稍后再试！");
                     }
                 }
             });
@@ -6369,7 +6379,7 @@ ${currentPersonality}
             <div id="virtual-pet-settings">
                 <div class="inline-drawer">
                     <div class="inline-drawer-toggle inline-drawer-header">
-                        <b>🐾 虚拟宠物系统</b>
+                        <b>虚拟宠物系统</b>
                         <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                     </div>
                     <div class="inline-drawer-content">
@@ -6380,7 +6390,7 @@ ${currentPersonality}
                             </label>
                         </div>
                         <small class="notes">
-                            启用后会在屏幕上显示一个可拖动的宠物按钮（🐾）
+                            启用后会在屏幕上显示一个可拖动的宠物按钮
                         </small>
 
                         <hr style="margin: 15px 0; border: none; border-top: 1px solid #444;">
@@ -6515,7 +6525,7 @@ ${currentPersonality}
 
                         <div class="flex-container">
                             <label style="display: block; margin-bottom: 8px; font-weight: bold;">
-                                ☁️ 云端备份
+                                云端备份
                             </label>
                             <small class="notes" style="margin-bottom: 10px; display: block;">
                                 跨设备同步宠物数据、AI设置和头像
@@ -6530,7 +6540,7 @@ ${currentPersonality}
                                     <span id="firebase-status-text" style="font-size: 0.9em;">未连接</span>
                                 </div>
                                 <button id="firebase-init-btn" class="firebase-btn firebase-btn-primary" style="padding: 6px 12px; font-size: 0.85em;">
-                                    🔗 连接
+                                    连接
                                 </button>
                             </div>
 
@@ -6538,23 +6548,23 @@ ${currentPersonality}
                             <div id="firebase-primary-controls" style="display: none; margin-bottom: 10px;">
                                 <div style="display: flex; gap: 8px; margin-bottom: 8px;">
                                     <button id="firebase-generate-code-btn" class="firebase-btn firebase-btn-secondary" style="flex: 1; padding: 6px; font-size: 0.85em;">
-                                        🔑 生成连接码
+                                        生成连接码
                                     </button>
                                     <button id="firebase-backup-now-btn" class="firebase-btn firebase-btn-success" style="flex: 1; padding: 6px; font-size: 0.85em;">
-                                        ☁️ 备份
+                                        备份
                                     </button>
                                 </div>
 
                                 <!-- 连接码显示 -->
                                 <div id="firebase-connection-code-display" style="display: none; margin-bottom: 8px;">
                                     <label style="font-size: 0.85em; margin-bottom: 4px; display: block; color: #28a745; font-weight: bold;">
-                                        🔑 连接码（分享给其他设备）
+                                        连接码（分享给其他设备）
                                     </label>
                                     <div style="display: flex; gap: 8px; align-items: center;">
                                         <input type="text" id="firebase-connection-code-text" readonly
                                                style="flex: 1; padding: 8px; border: 2px solid #28a745; border-radius: 4px; background: #f8fff9; font-family: monospace; font-size: 16px; text-align: center; letter-spacing: 2px; font-weight: bold;">
                                         <button id="firebase-copy-code-btn" class="firebase-btn firebase-btn-outline" style="padding: 8px 12px; font-size: 0.85em;">
-                                            📋 复制
+                                            复制
                                         </button>
                                     </div>
                                     <small style="color: #28a745; margin-top: 4px; display: block; font-size: 0.8em; text-align: center;">
@@ -6813,27 +6823,23 @@ ${currentPersonality}
 
     // 强制显示按钮函数
     window.forceShowPetButton = function() {
-        console.log("🐾 强制显示宠物按钮...");
+        console.log("[VirtualPet] 强制显示宠物按钮...");
 
         // 移除现有按钮
         $(`#${BUTTON_ID}`).remove();
 
         // 创建按钮并强制设置样式，确保正确定位
         const buttonHtml = `
-            <div id="${BUTTON_ID}" style="
+            <div id="${BUTTON_ID}" class="kpop-neon" style="
                 position: fixed !important;
                 z-index: ${SAFE_Z_INDEX.button} !important;
                 cursor: grab !important;
-                width: 48px !important;
-                height: 48px !important;
-                background: linear-gradient(145deg, ${candyColors.primary}, ${candyColors.buttonHover}) !important;
-                border-radius: 50% !important;
+                width: 52px !important;
+                height: 52px !important;
+                border-radius: 14px !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
-                color: #7289da !important;
-                font-size: 24px !important;
-                box-shadow: 0 4px 8px rgba(0,0,0,0.3), inset 0 2px 2px rgba(255,255,255,0.05), 0 0 0 1px rgba(0,0,0,0.5) !important;
                 user-select: none !important;
                 opacity: 1 !important;
                 visibility: visible !important;
@@ -6844,33 +6850,39 @@ ${currentPersonality}
                 left: 20px !important;
                 bottom: auto !important;
                 right: auto !important;
-            ">🐾</div>
+                border: 1px solid rgba(164,0,255,.40) !important;
+                background: radial-gradient(120px 120px at 30% 20%, rgba(255,45,149,.22), transparent 55%),
+                            radial-gradient(180px 180px at 80% 70%, rgba(0,240,255,.18), transparent 60%),
+                            rgba(17,20,36,.72) !important;
+                backdrop-filter: blur(8px) !important;
+                box-shadow: 0 8px 24px rgba(0,0,0,.35), 0 0 18px rgba(255,45,149,.6), 0 0 28px rgba(0,240,255,.55) !important;
+            ">${getFeatherIcon('sparkles', { color: '#00F0FF', size: 22, strokeWidth: 2 })}</div>
         `;
 
         $("body").append(buttonHtml);
 
         const $button = $(`#${BUTTON_ID}`);
-        console.log("🐾 按钮创建结果:", $button.length > 0 ? "成功" : "失败");
+        console.log("[VirtualPet] 按钮创建结果:", $button.length > 0 ? "成功" : "失败");
 
         if ($button.length > 0) {
             // 绑定点击事件
             $button.off().on("click touchend", function(e) {
                 e.preventDefault();
-                console.log("🐾 按钮被点击");
+                console.log("[VirtualPet] 按钮被点击");
 
                 try {
                     // 所有平台都使用统一的showPopup函数
                     showPopup();
                 } catch (error) {
                     console.error("显示弹窗出错:", error);
-                    alert("🐾 虚拟宠物\n\n弹窗功能正在加载中...");
+                    alert("虚拟宠物\n\n弹窗功能正在加载中...");
                 }
             });
 
             // 使按钮可拖动
             makeButtonDraggable($button);
 
-            console.log("🐾 按钮应该现在可见了！");
+            console.log("[VirtualPet] 按钮应该现在可见了！");
         }
 
         return $button.length > 0;
@@ -7111,7 +7123,7 @@ ${currentPersonality}
                         showPopup();
                     } catch (error) {
                         console.error("弹窗错误:", error);
-                        alert("🐾 虚拟宠物系统\n\n弹窗功能正在加载中...");
+                        alert("虚拟宠物系统\n\n弹窗功能正在加载中...");
                     }
                 }
 
@@ -7217,11 +7229,11 @@ ${currentPersonality}
                         if (typeof showPopup === 'function') {
                             showPopup();
                         } else {
-                            alert("🐾 虚拟宠物系统\n\n弹窗功能正在加载中...");
+                            alert("虚拟宠物系统\n\n弹窗功能正在加载中...");
                         }
                     } catch (error) {
                         console.error("弹窗错误:", error);
-                        alert("🐾 虚拟宠物系统\n\n弹窗功能正在加载中...");
+                        alert("虚拟宠物系统\n\n弹窗功能正在加载中...");
                     }
                 } else {
                     // 保存位置
@@ -7284,7 +7296,7 @@ ${currentPersonality}
             button[0].style.setProperty('top', originalTop + 'px', 'important');
 
             const allGood = hasCorrectEvents && inViewport && positionWorks;
-            console.log(`\n🎉 拖动修复验证: ${allGood ? '完全成功！' : '需要进一步检查'}`);
+            console.log(`\n[DONE] 拖动修复验证: ${allGood ? '完全成功！' : '需要进一步检查'}`);
 
             if (allGood) {
                 console.log("✅ 拖动功能已完全修复并正常工作");
@@ -7379,11 +7391,11 @@ ${currentPersonality}
 
     // 验证数值修复效果
     window.verifyInitialValues = function() {
-        console.log("🔍 验证初始数值修复效果...");
+        console.log("[CHECK] 验证初始数值修复效果...");
 
         // 检查当前数值
-        console.log("\n📊 当前宠物数值:");
-        console.log(`健康: ${petData.health}/100 ${petData.health === 40 ? '✅' : '❌ 应为40'}`);
+        console.log("\n[STATS] 当前宠物数值:");
+        console.log(`健康: ${petData.health}/100 ${petData.health === 40 ? '[OK]' : '[ERR] 应为40'}`);
         console.log(`快乐度: ${petData.happiness}/100 ${petData.happiness === 30 ? '✅' : '❌ 应为30'}`);
         console.log(`饱食度: ${petData.hunger}/100 ${petData.hunger === 50 ? '✅' : '❌ 应为50'}`);
         console.log(`精力: ${petData.energy}/100 ${petData.energy === 60 ? '✅' : '❌ 应为60'}`);
@@ -7398,10 +7410,10 @@ ${currentPersonality}
 
     // 全面检查数值系统
     window.checkValueSystem = function() {
-        console.log('=== 🔍 数值系统全面检查 ===');
+        console.log('=== [CHECK] 数值系统全面检查 ===');
 
         // 1. 基本数值检查
-        console.log('\n📊 1. 基本数值状态:');
+        console.log('\n[STATS] 1. 基本数值状态:');
         console.log(`健康: ${petData.health} (${typeof petData.health})`);
         console.log(`快乐: ${petData.happiness} (${typeof petData.happiness})`);
         console.log(`饱食: ${petData.hunger} (${typeof petData.hunger})`);
@@ -7527,7 +7539,7 @@ ${currentPersonality}
         if (statusBars.length === 0) issues.push('UI显示异常');
 
         if (issues.length === 0) {
-            console.log('🎉 数值系统运行正常！');
+            console.log('[DONE] 数值系统运行正常！');
         } else {
             console.log('⚠️ 发现以下问题:');
             issues.forEach(issue => console.log(`  - ${issue}`));
@@ -7695,8 +7707,8 @@ ${currentPersonality}
                 console.log('⚠️ 无自定义头像需要同步');
             }
 
-            console.log('🎉 所有数据同步完成！');
-            toastr.success('所有数据已同步到云端！现在可以在其他设备上访问了。', '🎉 同步成功', { timeOut: 5000 });
+            console.log('[DONE] 所有数据同步完成！');
+            toastr.success('所有数据已同步到云端！现在可以在其他设备上访问了。', '同步成功', { timeOut: 5000 });
 
         } catch (error) {
             console.error('❌ 同步过程中出现错误:', error);
@@ -7806,7 +7818,7 @@ ${currentPersonality}
         const localData = localStorage.getItem(STORAGE_KEY_PET_DATA);
         const syncData = loadFromSyncStorage();
 
-        console.log('\n📱 宠物数据 - 本地:');
+        console.log('\n[DEVICE] 宠物数据 - 本地:');
         if (localData) {
             try {
                 const local = JSON.parse(localData);
@@ -7821,7 +7833,7 @@ ${currentPersonality}
             console.log('- 无本地数据');
         }
 
-        console.log('\n☁️ 宠物数据 - 同步:');
+        console.log('\n[CLOUD] 宠物数据 - 同步:');
         if (syncData) {
             try {
                 const sync = typeof syncData === 'object' ? syncData : JSON.parse(syncData);
@@ -8566,7 +8578,7 @@ ${currentPersonality}
         savePetData();
 
         console.log('✅ 所有问题修复完成！');
-        toastr.success('🎉 所有问题已修复！商店按钮和拓麻歌子系统现在应该正常工作了！');
+        toastr.success('所有问题已修复！商店按钮和拓麻歌子系统现在应该正常工作了！');
 
         return {
             fixed: true,
@@ -8602,7 +8614,7 @@ ${currentPersonality}
         console.log('✅ 统一了移动端和桌面端的颜色');
         console.log('✅ 按钮颜色与糖果色主题协调');
 
-        toastr.success('🎨 状态栏颜色已优化！重新打开宠物界面查看美丽的糖果色效果。');
+        toastr.success('状态栏颜色已优化！重新打开宠物界面查看美丽的糖果色效果。');
 
         return {
             statusColors: {
@@ -8683,22 +8695,22 @@ ${currentPersonality}
         console.log('🛒 商店: 柠檬黄背景 + 深灰文字');
         console.log('⚙️ 设置: 紫色背景 + 白色文字 ← 已修复');
 
-        console.log('\n🔍 颜色对比度分析:');
-        console.log('设置按钮: 紫色(#8B5CF6) + 白色(#FFFFFF) = 高对比度 ✅');
-        console.log('其他按钮: 浅色背景 + 深色文字 = 良好对比度 ✅');
+        console.log('\n[CHECK] 颜色对比度分析:');
+        console.log('设置按钮: 紫色(#8B5CF6) + 白色(#FFFFFF) = 高对比度 [OK]');
+        console.log('其他按钮: 浅色背景 + 深色文字 = 良好对比度 [OK]');
 
-        console.log('\n🎨 设计原则:');
-        console.log('✅ 保持拓麻歌子像素风格');
-        console.log('✅ 确保文字清晰可读');
-        console.log('✅ 与糖果色主题协调');
-        console.log('✅ 设置按钮有独特识别度');
+        console.log('\n[DESIGN] 设计原则:');
+        console.log('[OK] 保持拓麻歌子像素风格');
+        console.log('[OK] 确保文字清晰可读');
+        console.log('[OK] 与糖果色主题协调');
+        console.log('[OK] 设置按钮有独特识别度');
 
-        console.log('\n🧪 测试方法:');
+        console.log('\n[TEST] 测试方法:');
         console.log('1. 重新打开宠物界面');
         console.log('2. 检查设置按钮是否清晰可见');
         console.log('3. 确认文字与背景对比度足够');
 
-        toastr.success('🎨 设置按钮颜色已修复！现在文字清晰可见了。');
+        toastr.success('设置按钮颜色已修复！现在文字清晰可见了。');
 
         return {
             fixed: true,
@@ -9600,7 +9612,7 @@ ${currentPersonality}
                 petData.age = 0; // 重置年龄计数
 
                 const nextStageInfo = LIFE_STAGES[nextStage];
-                toastr.success(`🎉 ${petData.name} 进化了！现在是${nextStageInfo.name}阶段 ${nextStageInfo.emoji}`);
+                toastr.success(`${petData.name} 进化了！现在是${nextStageInfo.name}阶段`);
 
                 // 进化时恢复一些状态
                 petData.health = Math.min(100, petData.health + 20);
@@ -10022,7 +10034,7 @@ ${currentPersonality}
      * 测试不包含AI回复的简化互动
      */
     window.testSimpleInteraction = function() {
-        console.log('🧪 测试简化互动（不包含AI回复）...');
+        console.log('[TEST] 测试简化互动（不包含AI回复）...');
 
         if (!petData.isAlive) {
             console.log('❌ 宠物已死亡，无法测试');
@@ -10174,7 +10186,7 @@ ${currentPersonality}
             renderPetStatus();
             console.log('✅ 状态渲染完成');
 
-            console.log('\n🎉 喂食流程完全执行完毕！');
+            console.log('\n[DONE] 喂食流程完全执行完毕！');
 
         } catch (error) {
             console.error('❌ 执行过程中发生错误:', error);
@@ -10555,8 +10567,8 @@ ${currentPersonality}
             console.log(`- 金币: ${petData.coins} (变化: +${(petData.coins || 0) - beforeCoins})`);
             console.log(`- 经验: ${petData.experience} (变化: +${(petData.experience || 0) - beforeExp})`);
 
-            console.log('\n🔍 函数调用追踪:');
-            console.log(`- gainCoins被调用: ${gainCoinsWasCalled ? '✅' : '❌'}`);
+            console.log('\n[TRACE] 函数调用追踪:');
+            console.log(`- gainCoins被调用: ${gainCoinsWasCalled ? '[OK]' : '[ERR]'}`);
             console.log(`- gainExperience被调用: ${gainExpWasCalled ? '✅' : '❌'}`);
 
             if (gainCoinsWasCalled) {
@@ -11106,8 +11118,8 @@ ${currentPersonality}
                     console.log(`- 快乐: ${petData.happiness} (变化: +${petData.happiness - beforeState.happiness})`);
                     console.log(`- 健康: ${petData.health} (变化: +${petData.health - beforeState.health})`);
 
-                    console.log('\n🔍 奖励函数调用:');
-                    console.log(`- gainCoins被调用: ${coinsGained ? '✅' : '❌'}`);
+                    console.log('\n[TRACE] 奖励函数调用:');
+                    console.log(`- gainCoins被调用: ${coinsGained ? '[OK]' : '[ERR]'}`);
                     console.log(`- gainExperience被调用: ${expGained ? '✅' : '❌'}`);
 
                     // 恢复原始函数
@@ -11201,8 +11213,8 @@ ${currentPersonality}
         const button = $(`#${BUTTON_ID}`);
         if (button.length > 0) {
             const hasCustomImage = button.find('img').length > 0;
-            const hasDefaultEmoji = button.text().includes('🐾');
-            console.log(`悬浮按钮头像: ${hasCustomImage ? '自定义图片' : hasDefaultEmoji ? '默认爪子' : '未知'}`);
+            const hasFeatherIcon = button.find('svg.feather').length > 0;
+            console.log(`悬浮按钮头像: ${hasCustomImage ? '自定义图片' : hasFeatherIcon ? '默认图标' : '未知'}`);
         } else {
             console.log("❌ 悬浮按钮不存在");
         }
@@ -11740,7 +11752,7 @@ ${currentPersonality}
                     </div>
                     <div class="pet-name" style="font-size: 1.2em !important; font-weight: bold !important; margin-bottom: 3px !important;">${escapeHtml(petData.name)}</div>
                     <div class="pet-level" style="color: #7289da !important; font-size: 0.9em !important;">${petData.isAlive ?
-                        `${LIFE_STAGES[petData.lifeStage]?.emoji || '🐾'} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` :
+                        `${getFeatherIcon(LIFE_STAGES[petData.lifeStage]?.icon || 'star', { color: '#ffd700', size: 16 })} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` :
                         `${getFeatherIcon('x', { color: '#ff4444', size: 16 })} 已死亡`
                     }</div>
                 </div>
@@ -11749,7 +11761,7 @@ ${currentPersonality}
                 <div class="pet-status-section" style="
                     padding: 10px !important;
                 ">
-                    <h4 style="margin: 0 0 10px 0 !important; color: ${candyColors.primary} !important; font-size: 0.9em !important;">📊 状态</h4>
+                    <h4 style="margin: 0 0 10px 0 !important; color: ${candyColors.primary} !important; font-size: 0.9em !important;">状态</h4>
                     <div class="status-bars" style="display: flex !important; flex-direction: column !important; gap: 6px !important;">
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
@@ -12082,7 +12094,7 @@ ${currentPersonality}
                     </div>
                     <div class="pet-name" style="font-size: 1.3em !important; font-weight: bold !important; margin-bottom: 4px !important; color: ${candyColors.textPrimary} !important; cursor: pointer !important; text-decoration: underline !important;" onclick="editPetName()" title="点击编辑宠物名字">${escapeHtml(petData.name)}</div>
                     <div class="pet-level" style="color: ${candyColors.primary} !important; font-size: 1em !important;">${petData.isAlive ?
-                        `${LIFE_STAGES[petData.lifeStage]?.emoji || '🐾'} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` :
+                        `${getFeatherIcon(LIFE_STAGES[petData.lifeStage]?.icon || 'star', { color: '#ffd700', size: 16 })} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` :
                         `${getFeatherIcon('x', { color: '#ff4444', size: 16 })} 已死亡`
                     }</div>
                 </div>
@@ -12091,7 +12103,7 @@ ${currentPersonality}
                 <div class="pet-status-section" style="
                     padding: 12px !important;
                 ">
-                    <h4 style="margin: 0 0 12px 0 !important; color: ${candyColors.primary} !important; font-size: 1em !important;">📊 状态</h4>
+                    <h4 style="margin: 0 0 12px 0 !important; color: ${candyColors.primary} !important; font-size: 1em !important;">状态</h4>
                     <div class="status-bars" style="display: flex !important; flex-direction: column !important; gap: 8px !important;">
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
@@ -14042,7 +14054,7 @@ ${currentPersonality}
                             toastr.info('API URL已自动更新');
                         }
                     } else {
-                        toastr.success('📱 移动端API连接测试成功!');
+                        toastr.success('移动端API连接测试成功!');
                     }
 
                     return true;
@@ -14085,7 +14097,7 @@ ${currentPersonality}
 
         // 所有URL都失败
         console.log('\n❌ 所有URL测试都失败了');
-        toastr.error('📱 移动端API连接失败，请检查配置', '连接失败', { timeOut: 5000 });
+        toastr.error('移动端API连接失败，请检查配置', '连接失败', { timeOut: 5000 });
 
         // 提供详细的故障排除建议
         console.log('\n🔧 移动端API 404故障排除建议:');
@@ -14098,7 +14110,7 @@ ${currentPersonality}
         return false;
     };
 
-    console.log("🐾 虚拟宠物系统加载完成！");
+    console.log("[VirtualPet] 虚拟宠物系统加载完成！");
 
     /**
      * 测试URL自动构建功能
@@ -14953,6 +14965,6 @@ ${currentPersonality}
         toastr.info('随机化标记已重置', '', { timeOut: 2000 });
     };
 
-    console.log("🐾 虚拟宠物系统脚本已加载完成");
+    console.log("[VirtualPet] 虚拟宠物系统脚本已加载完成");
     console.log("🎲 智能初始化系统：首次打开随机化到50以下，后续自然衰减到100");
 });

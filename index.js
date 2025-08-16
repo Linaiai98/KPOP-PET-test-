@@ -605,6 +605,66 @@ jQuery(async () => {
         // ==============================================================
 
 
+        // Centralized AI connection helpers (minimal refactor)
+        function getRelayUrl() {
+            try {
+                const override = localStorage.getItem('virtual-pet-relay-url');
+                return (override && override.trim()) || 'http://154.12.38.33:3000/proxy';
+            } catch { return 'http://154.12.38.33:3000/proxy'; }
+        }
+        function resolveTargetUrl(settings) {
+            let base = (settings.apiUrl || '').replace(/\/+$/, '');
+            if (!base) return '';
+            if (settings.apiType === 'openai' || settings.apiType === 'deepseek') {
+                if (!base.includes('/chat/completions')) {
+                    if (base.endsWith('/v1')) base += '/chat/completions';
+                    else if (!base.includes('/v1')) base += '/v1/chat/completions';
+                    else base += '/chat/completions';
+                }
+            } else if (settings.apiType === 'claude') {
+                if (!base.includes('/messages')) {
+                    if (base.endsWith('/v1')) base += '/messages';
+                    else if (!base.includes('/v1')) base += '/v1/messages';
+                    else base += '/messages';
+                }
+            } else if (settings.apiType === 'google') {
+                if (!base.includes(':generateContent')) {
+                    let modelName = settings.apiModel || 'gemini-pro';
+                    if (modelName.startsWith('models/')) modelName = modelName.replace('models/', '');
+                    if (base.endsWith('/v1beta')) base += `/models/${modelName}:generateContent`;
+                    else if (!base.includes('/v1beta')) base += `/v1beta/models/${modelName}:generateContent`;
+                    else base += `/models/${modelName}:generateContent`;
+                }
+            } else if (settings.apiType === 'custom') {
+                if (!base.includes('/chat/completions') && !base.includes('/messages') && !base.includes(':generateContent')) {
+                    if (base.endsWith('/v1')) base += '/chat/completions';
+                    else if (!base.includes('/v1')) base += '/v1/chat/completions';
+                    else base += '/chat/completions';
+                }
+            }
+            return base;
+        }
+        function buildHeaders(settings) {
+            const h = { 'Content-Type': 'application/json' };
+            if (settings.apiType === 'google') h['x-goog-api-key'] = settings.apiKey;
+            else if (settings.apiType === 'claude') { h['x-api-key'] = settings.apiKey; h['anthropic-version'] = '2023-06-01'; }
+            else h['Authorization'] = `Bearer ${settings.apiKey}`;
+            return h;
+        }
+        function buildRequestBody(settings, prompt) {
+            if (settings.apiType === 'claude') {
+                return { model: settings.apiModel || 'claude-3-sonnet-20240229', max_tokens: 1000, messages: [{ role: 'user', content: prompt }] };
+            } else if (settings.apiType === 'google') {
+                return { contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 1000, temperature: 0.7 } };
+            } else {
+                let defaultModel = 'gpt-3.5-turbo';
+                if (settings.apiType === 'deepseek') defaultModel = 'deepseek-chat';
+                else if (settings.apiType === 'custom') defaultModel = settings.apiModel || 'gpt-3.5-turbo';
+                return { model: settings.apiModel || defaultModel, messages: [{ role: 'user', content: prompt }], max_tokens: 1000, temperature: 0.7 };
+            }
+        }
+
+
 
     // 宠物数据结构 - 智能初始化系统
     let petData = {

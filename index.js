@@ -3313,7 +3313,7 @@ ${currentPersonality}
         // 启用/禁用虚拟宠物系统的事件监听器
         $("#virtual-pet-enabled-toggle").on('change', function() {
             const enabled = $(this).is(':checked');
-            localStorage.setItem(`${extensionName}-enabled`, enabled);
+            localStorage.setItem(STORAGE_KEY_ENABLED, enabled);
 
             if (enabled) {
                 toastr.success("虚拟宠物系统已启用");
@@ -3324,8 +3324,8 @@ ${currentPersonality}
             }
         });
 
-        // 加载启用状态
-        const enabled = localStorage.getItem(`${extensionName}-enabled`) !== 'false';
+        // 加载启用状态（默认启用，除非存储为 false）
+        const enabled = localStorage.getItem(STORAGE_KEY_ENABLED) !== 'false';
         $("#virtual-pet-enabled-toggle").prop('checked', enabled);
 
         // 加载AI设置
@@ -3369,36 +3369,8 @@ ${currentPersonality}
             $('#ai-connection-status').text('未测试').css('color', '#888');
         });
 
-        // 绑定二级菜单按钮（设置视图内）
-        $(document)
-          .off('click.vp-reset','#one-click-reset-btn')
-          .on('click.vp-reset','#one-click-reset-btn', function(){
-            if (confirm('确定要一键重置宠物数据吗？这将清除当前数值并恢复到初始状态。')) {
-              try { resetPet(true); toastr.success('已重置为初始状态'); }
-              catch(e){ console.error('一键重置失败:', e); toastr.error('一键重置失败'); }
-            }
-          });
-        $(document)
-          .off('click.vp-clear','#clear-chat-history-btn')
-          .on('click.vp-clear','#clear-chat-history-btn', async function(){
-            if (!confirm('确定要清空当前会话的聊天历史吗？此操作不可恢复。')) return;
-            await clearCurrentChatHistory();
-            toastr.success('已清空当前会话聊天历史');
-          });
-        $(document)
-          .off('click.vp-newsession','#new-chat-session-btn')
-          .on('click.vp-newsession','#new-chat-session-btn', async function(){
-            await createNewChatSession();
-            toastr.success('已创建新会话');
-          });
-        $(document)
-          .off('click.vp-useravatar','#change-user-avatar-btn')
-          .on('click.vp-useravatar','#change-user-avatar-btn', function(){
-            if (typeof window.openUserAvatarSelector === 'function') window.openUserAvatarSelector();
-          });
-
-
-
+        // 移除扩展设置中的二级菜单按钮（按用户要求）
+        // 绑定已删除，改为放到主UI的设置按钮二级菜单中（后续实现）
 
         // 绑定API配置输入框事件
         $('#ai-url-input, #ai-key-input, #ai-model-input').on('input', function() {
@@ -6924,18 +6896,7 @@ ${currentPersonality}
                                 <input id="virtual-pet-enabled-toggle" type="checkbox" checked>
                                 <span>启用虚拟宠物系统</span>
                             </label>
-                            <div style="display:flex; gap:8px; align-items:center; margin: 8px 0;">
-                                <button id="one-click-reset-btn" class="pet-button" style="background:#e53e3e; color:#fff; border:none; padding:6px 10px; font-size:0.85em;">
-                                    一键重置
-                                </button>
-                                <button id="clear-chat-history-btn" class="pet-button" style="background:#718096; color:#fff; border:none; padding:6px 10px; font-size:0.85em;">
-                                    清空聊天历史
-                                </button>
-                                <button id="new-chat-session-btn" class="pet-button" style="background:#4a90e2; color:#fff; border:none; padding:6px 10px; font-size:0.85em;">
-                                    新建会话
-                                </button>
-                                <small style="color:#888;">将宠物数值与状态重置为初始值；聊天支持多会话与持久化</small>
-                            </div>
+
                         </div>
                         <small class="notes">
                             启用后会在屏幕上显示一个可拖动的宠物按钮
@@ -6955,12 +6916,7 @@ ${currentPersonality}
                                 <option value="smart">聪明 - 机智幽默的鸟</option>
                                 <option value="custom">自定义人设</option>
                             </select>
-                            <div class="settings-submenu" style="margin-top:10px; display:flex; flex-wrap:wrap; gap: 8px;">
-                                <button id="one-click-reset-btn" class="pet-button" style="background:#e53e3e; color:#fff; border:none; padding:6px 10px; font-size:0.85em;">一键重置</button>
-                                <button id="clear-chat-history-btn" class="pet-button" style="background:#718096; color:#fff; border:none; padding:6px 10px; font-size:0.85em;">清空聊天历史</button>
-                                <button id="new-chat-session-btn" class="pet-button" style="background:#4a90e2; color:#fff; border:none; padding:6px 10px; font-size:0.85em;">新建会话</button>
-                                <button id="change-user-avatar-btn" class="pet-button" style="background:#805AD5; color:#fff; border:none; padding:6px 10px; font-size:0.85em;">更换用户头像</button>
-                            </div>
+
                         </div>
 
                         <div id="virtual-pet-custom-personality-container" style="display: none; margin-top: 10px;">
@@ -12938,6 +12894,95 @@ ${currentPersonality}
 
                 <!-- 聊天视图 (隐藏) -->
                 <div id="pet-chat-view" class="pet-view" style="display: none;">
+
+    // 学习商店按钮的模式：设置按钮二级菜单（轻量浮层，不遮罩）
+    function showSettingsSubmenu(anchorEl){
+        try { $('#vp-settings-submenu').remove(); } catch{}
+        const rect = anchorEl.getBoundingClientRect();
+        const isMobile = window.innerWidth <= 767;
+        const menuHtml =
+            '<div id="vp-settings-submenu" style="'
+            + 'position: fixed !important;'
+            + ' z-index: ' + (SAFE_Z_INDEX.button + 2) + ' !important;'
+            + ' top: ' + Math.round(rect.bottom + 8) + 'px !important;'
+            + ' left: ' + Math.round(rect.left) + 'px !important;'
+            + ' background: rgba(17,20,36,0.95) !important;'
+            + ' color: #fff !important;'
+            + ' border: 1px solid rgba(164,0,255,.30) !important;'
+            + ' border-radius: 10px !important;'
+            + ' box-shadow: 0 8px 24px rgba(0,0,0,.35), 0 0 18px rgba(0,240,255,.25) !important;'
+            + ' backdrop-filter: blur(6px) !important;'
+            + ' padding: 8px !important;'
+            + ' min-width: ' + (isMobile ? 180 : 220) + 'px !important;'
+            + '">'
+            + '  <div class="vp-submenu-item" data-action="reset" style="padding:8px 10px; border-radius:8px; cursor:pointer; display:flex; gap:8px; align-items:center;">'
+            +       getFeatherIcon('refresh-cw', { color: '#ffd700', size: 16 })
+            + '    <span>一键重置</span>'
+            + '  </div>'
+            + '  <div class="vp-submenu-item" data-action="clear-chat" style="padding:8px 10px; border-radius:8px; cursor:pointer; display:flex; gap:8px; align-items:center;">'
+            +       getFeatherIcon('trash-2', { color: '#ffd700', size: 16 })
+            + '    <span>清空聊天历史</span>'
+            + '  </div>'
+            + '  <div class="vp-submenu-item" data-action="new-chat" style="padding:8px 10px; border-radius:8px; cursor:pointer; display:flex; gap:8px; align-items:center;">'
+            +       getFeatherIcon('plus', { color: '#ffd700', size: 16 })
+            + '    <span>新建会话</span>'
+            + '  </div>'
+            + '  <div class="vp-submenu-item" data-action="user-avatar" style="padding:8px 10px; border-radius:8px; cursor:pointer; display:flex; gap:8px; align-items:center;">'
+            +       getFeatherIcon('user', { color: '#ffd700', size: 16 })
+            + '    <span>更换用户头像</span>'
+            + '  </div>'
+            + '  <div class="vp-submenu-sep" style="height:1px; background: rgba(255,255,255,0.12); margin:6px 4px;"></div>'
+            + '  <div class="vp-submenu-item" data-action="open-settings" style="padding:8px 10px; border-radius:8px; cursor:pointer; display:flex; gap:8px; align-items:center;">'
+            +       getFeatherIcon('settings', { color: '#90cdf4', size: 16 })
+            + '    <span>打开完整设置</span>'
+            + '  </div>'
+            + '</div>';
+        const menu = $(menuHtml);
+        $('body').append(menu);
+
+        // hover/active 效果
+        $(document).off('mouseenter.vp-submenu mouseleave.vp-submenu', '#vp-settings-submenu .vp-submenu-item')
+          .on('mouseenter.vp-submenu', '#vp-settings-submenu .vp-submenu-item', function(){
+            $(this).css({ background: 'rgba(255,255,255,0.08)' });
+          })
+          .on('mouseleave.vp-submenu', '#vp-settings-submenu .vp-submenu-item', function(){
+            $(this).css({ background: 'transparent' });
+          });
+
+        // 点击行为
+        $(document).off('click.vp-submenu', '#vp-settings-submenu .vp-submenu-item')
+          .on('click.vp-submenu', '#vp-settings-submenu .vp-submenu-item', async function(e){
+            e.preventDefault(); e.stopPropagation();
+            const action = $(this).data('action');
+            try{
+                if (action === 'reset') {
+                    if (confirm('确定要一键重置宠物数据吗？这将清除当前数值并恢复到初始状态。')) {
+                        resetPet(true); toastr.success('已重置为初始状态');
+                    }
+                } else if (action === 'clear-chat') {
+                    if (!confirm('确定要清空当前会话的聊天历史吗？此操作不可恢复。')) return;
+                    await clearCurrentChatHistory(); toastr.success('已清空当前会话聊天历史');
+                } else if (action === 'new-chat') {
+                    await createNewChatSession(); toastr.success('已创建新会话');
+                } else if (action === 'user-avatar') {
+                    if (typeof window.openUserAvatarSelector === 'function') window.openUserAvatarSelector();
+                } else if (action === 'open-settings') {
+                    openSettings();
+                }
+            } finally {
+                $('#vp-settings-submenu').remove();
+            }
+          });
+
+        // 点击外部关闭
+        setTimeout(()=>{
+            $(document).off('click.vp-submenu-dismiss').on('click.vp-submenu-dismiss', function(){
+                $('#vp-settings-submenu').remove();
+                $(document).off('click.vp-submenu-dismiss');
+            });
+        }, 0);
+    }
+
                     <div class="pet-section">
                         <h3>💬 与 <span id="chat-pet-name"></span> 聊天</h3>
                         <div id="chat-messages-container" class="chat-messages-container">
@@ -13069,8 +13114,9 @@ ${currentPersonality}
         // 设置按钮
         $container.find(".settings-btn").on("click touchend", function(e) {
             e.preventDefault();
-            console.log("⚙️ 打开设置");
-            openSettings();
+            e.stopPropagation();
+            console.log("⚙️ 打开设置二级菜单");
+            try { showSettingsSubmenu(this); } catch(err) { console.warn('submenu failed, fallback openSettings', err); openSettings(); }
         });
 
         // 宠物名字点击事件（备用，主要通过onclick属性）

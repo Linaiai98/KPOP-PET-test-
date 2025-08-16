@@ -4542,13 +4542,21 @@ ${currentPersonality}
                 });
             }
         });
-        const levelHtml = petData.isAlive
-            ? `${getFeatherIcon(LIFE_STAGES[petData.lifeStage]?.icon || 'star', { color: '#ffd700', size: 16 })} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}`
-            : `${getFeatherIcon('x', { color: '#ff4444', size: 16 })} 已死亡`;
+        const levelText = petData.isAlive
+            ? `${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}`
+            : '已死亡';
         $('.pet-level').each(function(){
             $(this)
-              .html(levelHtml)
-              .css({ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'center', textAlign: 'center', margin: '0 auto' });
+              .text(levelText)
+              .css({
+                display: 'block',
+                textAlign: 'center',
+                margin: '0 auto',
+                color: (typeof candyColors !== 'undefined' && candyColors.textSecondary) ? candyColors.textSecondary : '#666666',
+                fontSize: '1em',
+                fontWeight: 'normal',
+                letterSpacing: '0'
+              });
         });
     }
 
@@ -5693,12 +5701,12 @@ async function createNewChatSession(){
                         color: #ffffff !important;
                     ">${escapeHtml(petData.name)}</div>
                     <div class="pet-level" style="
-                        color: #7289da !important;
+                        color: ${candyColors.textSecondary} !important;
                         font-size: 1em !important;
-                        display: flex !important; align-items: center !important; justify-content: center !important; gap: 6px !important; width: 100% !important; text-align: center !important;
+                        width: 100% !important; text-align: center !important; font-weight: normal !important;
                     ">${petData.isAlive ?
-                        `${getFeatherIcon(LIFE_STAGES[petData.lifeStage]?.icon || 'star', { color: '#ffd700', size: 16 })} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` :
-                        `${getFeatherIcon('x', { color: '#ff4444', size: 16 })} 已死亡`
+                        `${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` :
+                        `已死亡`
                     }</div>
                 </div>
             </div>
@@ -12157,10 +12165,9 @@ async function createNewChatSession(){
                     </div>
                     <div class="pet-title-wrap" style="width: 100% !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important;">
                         <div class="pet-name" style="font-size: 1.2em !important; font-weight: bold !important; margin-bottom: 3px !important;">${escapeHtml(petData.name)}</div>
-                        <div class="pet-level" style="color: #7289da !important; font-size: 0.9em !important; display: flex !important; align-items: center !important; justify-content: center !important; gap: 6px !important; width: 100% !important; text-align: center !important;">${petData.isAlive ?
-                            `${getFeatherIcon(LIFE_STAGES[petData.lifeStage]?.icon || 'star', { color: '#ffd700', size: 16 })} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` :
-                            `${getFeatherIcon('x', { color: '#ff4444', size: 16 })} 已死亡`
-                        }</div>
+                        <div class="pet-level" style="color: ${candyColors.textSecondary} !important; font-size: 1em !important; width: 100% !important; text-align: center !important; font-weight: normal !important;">
+                            ${petData.isAlive ? `${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` : `已死亡`}
+                        </div>
                     </div>
                 </div>
 
@@ -12509,10 +12516,9 @@ async function createNewChatSession(){
                     </div>
                     <div class="pet-title-wrap" style="width: 100% !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important;">
                         <div class="pet-name" style="font-size: 1.3em !important; font-weight: bold !important; margin-bottom: 4px !important; color: ${candyColors.textPrimary} !important; cursor: pointer !important; text-decoration: underline !important;" onclick="editPetName()" title="点击编辑宠物名字">${escapeHtml(petData.name)}</div>
-                        <div class="pet-level" style="color: ${candyColors.primary} !important; font-size: 1em !important; display: flex !important; align-items: center !important; justify-content: center !important; gap: 6px !important; width: 100% !important; text-align: center !important;">${petData.isAlive ?
-                            `${getFeatherIcon(LIFE_STAGES[petData.lifeStage]?.icon || 'star', { color: '#ffd700', size: 16 })} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` :
-                            `${getFeatherIcon('x', { color: '#ff4444', size: 16 })} 已死亡`
-                        }</div>
+                        <div class="pet-level" style="color: ${candyColors.textSecondary} !important; font-size: 1em !important; width: 100% !important; text-align: center !important; font-weight: normal !important;">
+                            ${petData.isAlive ? `${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` : `已死亡`}
+                        </div>
                     </div>
                 </div>
 

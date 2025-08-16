@@ -12155,18 +12155,22 @@ async function createNewChatSession(){
                     " onclick="openAvatarSelector()" oncontextmenu="showAvatarContextMenu(event)" title="点击更换头像，右键重置">
                         ${customAvatarData ? getAvatarContent() : getDefaultPetIcon(56, '#ffd700')}
                     </div>
-                    <div class="pet-name" style="font-size: 1.2em !important; font-weight: bold !important; margin-bottom: 3px !important;">${escapeHtml(petData.name)}</div>
-                    <div class="pet-level" style="color: #7289da !important; font-size: 0.9em !important; display: flex !important; align-items: center !important; justify-content: center !important; gap: 6px !important; width: 100% !important; text-align: center !important;">${petData.isAlive ?
-                        `${getFeatherIcon(LIFE_STAGES[petData.lifeStage]?.icon || 'star', { color: '#ffd700', size: 16 })} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` :
-                        `${getFeatherIcon('x', { color: '#ff4444', size: 16 })} 已死亡`
-                    }</div>
+                    <div class="pet-title-wrap" style="width: 100% !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important;">
+                        <div class="pet-name" style="font-size: 1.2em !important; font-weight: bold !important; margin-bottom: 3px !important;">${escapeHtml(petData.name)}</div>
+                        <div class="pet-level" style="color: #7289da !important; font-size: 0.9em !important; display: flex !important; align-items: center !important; justify-content: center !important; gap: 6px !important; width: 100% !important; text-align: center !important;">${petData.isAlive ?
+                            `${getFeatherIcon(LIFE_STAGES[petData.lifeStage]?.icon || 'star', { color: '#ffd700', size: 16 })} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` :
+                            `${getFeatherIcon('x', { color: '#ff4444', size: 16 })} 已死亡`
+                        }</div>
+                    </div>
                 </div>
 
                 <!-- 宠物状态栏 -->
                 <div class="pet-status-section" style="
                     padding: 10px !important;
                 ">
-                    <h4 style="margin: 0 0 10px 0 !important; color: ${candyColors.primary} !important; font-size: 0.9em !important;">状态</h4>
+                    <h4 style="margin: 0 0 10px 0 !important; color: ${candyColors.primary} !important; font-size: 0.9em !important; display: flex !important; align-items: center !important; justify-content: center !important; gap: 6px !important; text-align: center !important;">
+                        ${getFeatherIcon('activity', { color: candyColors.primary, size: 14 })} 状态
+                    </h4>
                     <div class="status-bars" style="display: flex !important; flex-direction: column !important; gap: 6px !important;">
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 3px !important;">
@@ -12210,13 +12214,16 @@ async function createNewChatSession(){
                 <!-- 金币显示 -->
                 ${petData.dataVersion >= 4.0 ? `
                 <div class="pet-coins-section" style="
-                    text-align: center !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
                     padding: 8px !important;
                     background: rgba(255,215,0,0.1) !important;
                     border-radius: 6px !important;
                     margin-bottom: 8px !important;
+                    text-align: center !important;
                 ">
-                    <span style="color: #ffd700 !important; font-weight: bold !important; font-size: 1em !important; display: flex !important; align-items: center !important; gap: 6px !important;">
+                    <span style="color: #ffd700 !important; font-weight: bold !important; font-size: 1em !important; display: inline-flex !important; align-items: center !important; gap: 6px !important;">
                         ${getFeatherIcon('star', { color: '#ffd700', size: 16 })} ${petData.coins || 100} 金币
                     </span>
                 </div>
@@ -12500,18 +12507,22 @@ async function createNewChatSession(){
                     " onclick="openAvatarSelector()" oncontextmenu="showAvatarContextMenu(event)" title="点击更换头像，右键重置">
                         ${customAvatarData ? getAvatarContent() : getDefaultPetIcon(64, '#ffd700')}
                     </div>
-                    <div class="pet-name" style="font-size: 1.3em !important; font-weight: bold !important; margin-bottom: 4px !important; color: ${candyColors.textPrimary} !important; cursor: pointer !important; text-decoration: underline !important;" onclick="editPetName()" title="点击编辑宠物名字">${escapeHtml(petData.name)}</div>
-                    <div class="pet-level" style="color: ${candyColors.primary} !important; font-size: 1em !important; display: flex !important; align-items: center !important; justify-content: center !important; gap: 6px !important; width: 100% !important; text-align: center !important;">${petData.isAlive ?
-                        `${getFeatherIcon(LIFE_STAGES[petData.lifeStage]?.icon || 'star', { color: '#ffd700', size: 16 })} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` :
-                        `${getFeatherIcon('x', { color: '#ff4444', size: 16 })} 已死亡`
-                    }</div>
+                    <div class="pet-title-wrap" style="width: 100% !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important;">
+                        <div class="pet-name" style="font-size: 1.3em !important; font-weight: bold !important; margin-bottom: 4px !important; color: ${candyColors.textPrimary} !important; cursor: pointer !important; text-decoration: underline !important;" onclick="editPetName()" title="点击编辑宠物名字">${escapeHtml(petData.name)}</div>
+                        <div class="pet-level" style="color: ${candyColors.primary} !important; font-size: 1em !important; display: flex !important; align-items: center !important; justify-content: center !important; gap: 6px !important; width: 100% !important; text-align: center !important;">${petData.isAlive ?
+                            `${getFeatherIcon(LIFE_STAGES[petData.lifeStage]?.icon || 'star', { color: '#ffd700', size: 16 })} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` :
+                            `${getFeatherIcon('x', { color: '#ff4444', size: 16 })} 已死亡`
+                        }</div>
+                    </div>
                 </div>
 
                 <!-- 宠物状态栏 -->
                 <div class="pet-status-section" style="
                     padding: 12px !important;
                 ">
-                    <h4 style="margin: 0 0 12px 0 !important; color: ${candyColors.primary} !important; font-size: 1em !important;">状态</h4>
+                    <h4 style="margin: 0 0 12px 0 !important; color: ${candyColors.primary} !important; font-size: 1em !important; display: flex !important; align-items: center !important; justify-content: center !important; gap: 6px !important; text-align: center !important;">
+                        ${getFeatherIcon('activity', { color: candyColors.primary, size: 16 })} 状态
+                    </h4>
                     <div class="status-bars" style="display: flex !important; flex-direction: column !important; gap: 8px !important;">
                         <div class="status-item">
                             <div style="display: flex !important; justify-content: space-between !important; margin-bottom: 4px !important;">
@@ -12555,13 +12566,16 @@ async function createNewChatSession(){
                 <!-- 金币显示 -->
                 ${petData.dataVersion >= 4.0 ? `
                 <div class="pet-coins-section" style="
-                    text-align: center !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
                     padding: 10px !important;
                     background: rgba(255,215,0,0.1) !important;
                     border-radius: 8px !important;
                     margin-bottom: 10px !important;
+                    text-align: center !important;
                 ">
-                    <span style="color: #ffd700 !important; font-weight: bold !important; font-size: 1.1em !important; display: flex !important; align-items: center !important; gap: 6px !important;">
+                    <span style="color: #ffd700 !important; font-weight: bold !important; font-size: 1.1em !important; display: inline-flex !important; align-items: center !important; gap: 6px !important;">
                         ${getFeatherIcon('star', { color: '#ffd700', size: 18 })} ${petData.coins || 100} 金币
                     </span>
                 </div>

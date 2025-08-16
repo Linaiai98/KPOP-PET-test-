@@ -555,6 +555,56 @@ jQuery(async () => {
         };
 
 
+        // ====== Debug helpers: detailed error logging in console ======
+        function redactHeaders(h) {
+            try {
+                const c = { ...(h || {}) };
+                if (c.Authorization) c.Authorization = 'Bearer ***';
+                if (c['x-api-key']) c['x-api-key'] = '***';
+                if (c['x-goog-api-key']) c['x-goog-api-key'] = '***';
+                return c;
+            } catch { return {}; }
+        }
+        function previewBody(body) {
+            try {
+                if (!body) return null;
+                if (body.messages) {
+                    return { model: body.model, messages: body.messages?.length, max_tokens: body.max_tokens, temperature: body.temperature };
+                }
+                if (body.contents) {
+                    return { hasContents: true, maxOutputTokens: body.generationConfig?.maxOutputTokens };
+                }
+                return body;
+            } catch { return null; }
+        }
+        function classifyNetworkError(error) {
+            const msg = (error && (error.message || String(error))) || '';
+            if (msg.includes('CORS') || msg.includes('Access-Control-Allow-Origin')) return 'CORS';
+            if (msg.includes('Failed to fetch')) return 'NETWORK';
+            if (msg.includes('ERR_CONNECTION')) return 'NETWORK_RESET';
+            if (msg.includes('aborted') || error?.name === 'AbortError') return 'TIMEOUT/ABORT';
+            if (msg.startsWith('HTTP')) return 'HTTP';
+            return 'UNKNOWN';
+        }
+        function logDetailedError(context, info, error) {
+            const tag = `[${extensionName}]`;
+            try {
+                console.groupCollapsed(`${tag} ❌ ${context}`);
+                console.log('Context:', info || {});
+                if (error) {
+                    console.log('Class:', classifyNetworkError(error));
+                    console.log('Name:', error.name);
+                    console.log('Message:', error.message);
+                    if (error.stack) console.log('Stack:', error.stack.split('\n').slice(0, 3).join('\n'));
+                }
+                console.groupEnd();
+            } catch (e) {
+                console.error(`${tag} ❌ ${context}`, error);
+            }
+        }
+        // ==============================================================
+
+
 
     // 宠物数据结构 - 智能初始化系统
     let petData = {
@@ -2325,6 +2375,7 @@ jQuery(async () => {
             }
 
         } catch (error) {
+            logDetailedError('Unified AI call failed', { stage: 'callAI', apiType: settings?.apiType, apiUrl: settings?.apiUrl }, error);
             console.error(`[${extensionName}] ❌ 统一AI调用失败:`, error);
             throw error;
         }
@@ -2446,6 +2497,12 @@ jQuery(async () => {
             const timeoutId = setTimeout(() => controller.abort(), timeout);
 
             console.log(`[${extensionName}] 🚀 开始直连请求...`);
+            console.debug(`[${extensionName}] ▶️ Direct Request`, {
+                url: targetApiUrl,
+                headers: redactHeaders(headers),
+                body: previewBody(requestBody),
+                timeout
+            });
 
             const response = await fetch(targetApiUrl, {
                 method: 'POST',
@@ -2458,10 +2515,13 @@ jQuery(async () => {
 
             if (!response.ok) {
                 const errorText = await response.text();
-                throw new Error(`HTTP ${response.status}: ${errorText}`);
+                const err = new Error(`HTTP ${response.status}: ${errorText}`);
+                logDetailedError('Direct API response not ok', { url: targetApiUrl, status: response.status }, err);
+                throw err;
             }
 
             const data = await response.json();
+            console.debug(`[${extensionName}] ◀️ Direct Response`, { status: response.status, snippet: JSON.stringify(data).slice(0, 500) });
 
             // 6. 解析响应
             let aiReply;
@@ -3022,7 +3082,7 @@ ${currentPersonality}
                     console.log(`[${extensionName}] 从第三方API获取到 ${thirdPartyModels.length} 个模型`);
                 } else {
                     // 备选：使用通用方法
-                    const userModels = await getUserConfiguredModels();
+                    const userModels = await (window.getUserConfiguredModels ? window.getUserConfiguredModels() : []);
                     if (userModels.length > 0) {
                         models = userModels;
                         console.log(`[${extensionName}] 从用户配置API获取到 ${userModels.length} 个模型`);

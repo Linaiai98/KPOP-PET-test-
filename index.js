@@ -19,6 +19,7 @@ jQuery(async () => {
     const STORAGE_KEY_ENABLED = "virtual-pet-enabled";
     const STORAGE_KEY_PET_DATA = "virtual-pet-data";
     const STORAGE_KEY_CUSTOM_AVATAR = "virtual-pet-custom-avatar";
+    const STORAGE_KEY_USER_AVATAR = "virtual-pet-user-avatar";
 
     // Firebase 相关常量
     const FIREBASE_CONFIG = {
@@ -55,6 +56,7 @@ jQuery(async () => {
 
     // 自定义头像管理
     let customAvatarData = null;
+    let customUserAvatarData = null;
 
     // 同步保存限制机制
     let lastSyncSaveTime = 0;
@@ -117,6 +119,123 @@ jQuery(async () => {
      */
     function createIsolatedStyles() {
         const styleId = `${STYLE_PREFIX}isolated-styles`;
+
+
+    // ===== Chat storage (IndexedDB) + Sessions =====
+    const CHAT_DB_NAME = 'virtual-pet-chat-db';
+    const CHAT_DB_VERSION = 1;
+    const CHAT_STORE = 'messages';
+
+    function getChatSessions(){
+        try { return JSON.parse(localStorage.getItem('virtual-pet-chat-sessions')||'["default"]'); } catch { return ['default']; }
+    }
+    function saveChatSessions(list){
+        localStorage.setItem('virtual-pet-chat-sessions', JSON.stringify(Array.from(new Set(list))));
+    }
+    function getCurrentChatSessionId(){
+        return localStorage.getItem('virtual-pet-chat-session-id') || 'default';
+    }
+    function setCurrentChatSessionId(id){
+        localStorage.setItem('virtual-pet-chat-session-id', id);
+    }
+    (function ensureDefaultSession(){
+        const list = getChatSessions();
+        if (!list.includes('default')) { list.unshift('default'); saveChatSessions(list); }
+    })();
+
+    function initChatDB(){
+        return new Promise((resolve, reject) => {
+            if (window.__chatDB) return resolve(window.__chatDB);
+            const req = indexedDB.open(CHAT_DB_NAME, CHAT_DB_VERSION);
+            req.onupgradeneeded = () => {
+                const db = req.result;
+                if (!db.objectStoreNames.contains(CHAT_STORE)){
+                    const store = db.createObjectStore(CHAT_STORE, { keyPath: 'id', autoIncrement: true });
+                    store.createIndex('sessionId', 'sessionId', { unique: false });
+                    store.createIndex('timestamp', 'timestamp', { unique: false });
+                }
+            };
+            req.onsuccess = () => { window.__chatDB = req.result; resolve(window.__chatDB); };
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async function dbSaveMessage(record){
+        try{
+            const db = await initChatDB();
+            await new Promise((resolve, reject)=>{
+                const tx = db.transaction(CHAT_STORE, 'readwrite');
+                tx.objectStore(CHAT_STORE).add(record);
+                tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+            });
+        }catch(e){ console.warn('dbSaveMessage failed', e); }
+    }
+    async function dbListMessages(sessionId, limit = 2000){
+        try{
+            const db = await initChatDB();
+            return await new Promise((resolve, reject)=>{
+                const tx = db.transaction(CHAT_STORE, 'readonly');
+                const index = tx.objectStore(CHAT_STORE).index('sessionId');
+                const req = index.getAll(IDBKeyRange.only(sessionId));
+                req.onsuccess = () => {
+                    const rows = (req.result||[]).sort((a,b)=>a.timestamp-b.timestamp);
+                    resolve(limit ? rows.slice(-limit) : rows);
+                };
+                req.onerror = () => reject(req.error);
+            });
+        }catch(e){ console.warn('dbListMessages failed', e); return []; }
+    }
+    async function dbClearSession(sessionId){
+        const db = await initChatDB();
+        await new Promise((resolve, reject)=>{
+            const tx = db.transaction(CHAT_STORE, 'readwrite');
+            const store = tx.objectStore(CHAT_STORE);
+            const idx = store.index('sessionId');
+            const req = idx.openCursor(IDBKeyRange.only(sessionId));
+            req.onsuccess = (e)=>{
+                const cur = e.target.result;
+                if (cur){ store.delete(cur.primaryKey); cur.continue(); }
+                else resolve();
+            };
+            req.onerror = ()=>reject(req.error);
+        });
+    }
+    async function dbClearAll(){
+        const db = await initChatDB();
+        await new Promise((resolve, reject)=>{
+            const tx = db.transaction(CHAT_STORE, 'readwrite');
+            tx.objectStore(CHAT_STORE).clear();
+            tx.oncomplete = resolve; tx.onerror = ()=>reject(tx.error);
+        });
+    }
+    async function migrateChatFromLocalStorage(){
+        try{
+            const saved = localStorage.getItem('virtual-pet-chat-history');
+            if (!saved) return;
+            const arr = JSON.parse(saved);
+            const sessionId = getCurrentChatSessionId();
+            for (const item of arr){
+                await dbSaveMessage({ sessionId, sender: item.sender, message: item.message, timestamp: item.timestamp||Date.now() });
+            }
+            localStorage.removeItem('virtual-pet-chat-history');
+        }catch(e){ console.warn('migrateChatFromLocalStorage failed', e); }
+    }
+
+    // Pet-type based SVG avatars
+    function getPetTypeIcon(type = 'cat', size = 18, color = '#ffd700'){
+        const sz = Number(size)||18;
+        if(type==='dog'){
+            return `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12c0-5 4-7 8-7s8 2 8 7"/><path d="M7 14v2a4 4 0 0 0 4 4h2a4 4 0 0 0 4-4v-2"/><circle cx="9" cy="11" r="1"/><circle cx="15" cy="11" r="1"/></svg>`;
+        }
+        if(type==='bird'){
+            return `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12s4-6 9-6 9 6 9 6-4 6-9 6-9-6-9-6z"/><path d="M12 8l3 2-3 2-3-2 3-2z"/></svg>`;
+        }
+        if(type==='rabbit'){
+            return `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3c2 2 2 5 2 5"/><path d="M18 3c-2 2-2 5-2 5"/><circle cx="12" cy="12" r="6"/></svg>`;
+        }
+        // default cat
+        return `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8l2-3 3 2 3-2 3 2 3-2 2 3"/><circle cx="12" cy="13" r="6"/></svg>`;
+    }
 
         // 如果已经存在，先移除
         $(`#${styleId}`).remove();
@@ -414,7 +533,7 @@ jQuery(async () => {
         // Default pet SVG icon (for main UI and chat avatars)
         function getDefaultPetIcon(size = 48, color = '#ffd700') {
             try {
-                return getFeatherIcon('smile', { color, size, strokeWidth: 2 });
+                return getPetTypeIcon(petData.type || 'cat', size, color);
             } catch (e) {
                 return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>`;
             }
@@ -868,9 +987,9 @@ jQuery(async () => {
         level: 1,
         experience: 0,
         health: 100,     // 初始健康，无压力开局
-        happiness: 30,   // 保持较低值以鼓励互动
-        hunger: 40,      // 保持较低值以鼓励互动
-        energy: 45,      // 保持较低值以鼓励互动
+        happiness: 50,   // 初始快乐
+        hunger: 40,      // 初始饱食
+        energy: 50,      // 初始精力
 
         // 拓麻歌子式生命状态
         lifeStage: "baby",    // baby, child, teen, adult, senior
@@ -3188,6 +3307,32 @@ ${currentPersonality}
             savePersonalitySettings('custom', customText);
         });
 
+        // 一键重置按钮
+        $('#one-click-reset-btn').off('click').on('click', function() {
+            if (confirm('确定要一键重置宠物数据吗？这将清除当前数值并恢复到初始状态。')) {
+                try {
+                    resetPet();
+                    toastr.success('已重置为初始状态');
+                } catch (e) {
+                    console.error('一键重置失败:', e);
+                    toastr.error('一键重置失败');
+                }
+            }
+        });
+
+        // 清空聊天历史
+        $('#clear-chat-history-btn').off('click').on('click', async function(){
+            if (!confirm('确定要清空当前会话的聊天历史吗？此操作不可恢复。')) return;
+            await clearCurrentChatHistory();
+            toastr.success('已清空当前会话聊天历史');
+        });
+        // 新建会话
+        $('#new-chat-session-btn').off('click').on('click', async function(){
+            await createNewChatSession();
+            toastr.success('已创建新会话');
+        });
+
+
         // 启用/禁用虚拟宠物系统的事件监听器
         $("#virtual-pet-enabled-toggle").on('change', function() {
             const enabled = $(this).is(':checked');
@@ -3550,11 +3695,11 @@ ${currentPersonality}
     function applyFirstTimeRandomization() {
         console.log(`[${extensionName}] 应用首次打开随机化...`);
 
-        // 随机化数值，但不超过50，且保证一定的平衡性
-        petData.health = Math.floor(Math.random() * 20) + 30;      // 30-49
-        petData.happiness = Math.floor(Math.random() * 20) + 25;   // 25-44
-        petData.hunger = Math.floor(Math.random() * 20) + 30;      // 30-49
-        petData.energy = Math.floor(Math.random() * 20) + 25;      // 25-44
+        // 设置为固定的默认初始值，以符合新的初始化需求
+        petData.health = 100;
+        petData.happiness = 50;
+        // 保持当前饱食度（不在此处修改），默认来自初始为40
+        petData.energy = 50
 
         // 标记已经随机化过
         petData.hasBeenRandomized = true;
@@ -3895,6 +4040,70 @@ ${currentPersonality}
         }
     }
 
+    /**
+     * 数值系统自检与自修复（顶层定义，初始化即可用）
+     * @param {Object} options
+     * @param {boolean} options.autoFix 是否自动修复（默认 true）
+     * @param {boolean} options.save 是否在修复后保存（默认 true）
+     * @param {boolean} options.silent 是否静默（默认 true）
+     */
+    window.runValueSelfCheck = function(options = {}) {
+        const { autoFix = true, save = true, silent = true } = options;
+        const issues = [];
+        const fixes = [];
+        const before = JSON.parse(JSON.stringify(petData));
+        const now = Date.now();
+
+        // 1) 范围与类型
+        const keys = ['health','happiness','hunger','energy','experience','level'];
+        keys.forEach(k => {
+            const v = petData[k];
+            if (typeof v !== 'number' || isNaN(v)) {
+                issues.push(`${k} 非数字: ${v}`);
+                if (autoFix) { petData[k] = (k === 'level') ? 1 : 0; fixes.push(`修复 ${k} → ${petData[k]}`); }
+            }
+        });
+
+        // 2) 范围 clamp
+        const clamp = (x, min, max) => Math.max(min, Math.min(max, x));
+        ['health','happiness','hunger','energy'].forEach(k => {
+            const old = petData[k];
+            const nv = clamp(Number(old)||0, 0, 100);
+            if (nv !== old) { issues.push(`${k} 越界: ${old} → ${nv}`); if (autoFix) { petData[k] = nv; fixes.push(`修复 ${k} → ${nv}`); } }
+        });
+        if (petData.level < 1) { issues.push(`level < 1: ${petData.level}`); if (autoFix) { petData.level = 1; fixes.push('修复 level → 1'); } }
+        if (petData.experience < 0) { issues.push(`experience < 0: ${petData.experience}`); if (autoFix) { petData.experience = 0; fixes.push('修复 experience → 0'); } }
+
+        // 3) 时间戳有效性
+        ['lastUpdateTime','lastFeedTime','lastPlayTime','lastSleepTime'].forEach(tk => {
+            const tv = petData[tk];
+            if (!tv || typeof tv !== 'number' || tv > now) { issues.push(`${tk} 无效: ${tv}`); if (autoFix) { petData[tk] = now; fixes.push(`修复 ${tk} → now`); } }
+        });
+
+        // 4) 生死一致性
+        if (petData.isAlive === false && petData.health > 0) { issues.push('死亡标记与健康矛盾'); if (autoFix) { petData.isAlive = true; fixes.push('修复 isAlive → true'); } }
+        if (petData.isAlive !== false && petData.health <= 0) { issues.push('健康<=0但未标记死亡'); if (autoFix) { petData.isAlive = false; petData.deathReason = petData.deathReason || 'sickness'; fixes.push('修复 isAlive → false'); } }
+
+        // 5) 辅助：首次互动标记
+        if (!petData.hasInteracted && !petData.lastUpdateTime) { petData.lastUpdateTime = now; fixes.push('补充 lastUpdateTime'); }
+
+        // 6) 统一校验
+        validateAndFixValues();
+        if (save && autoFix && fixes.length) savePetData();
+
+        const after = JSON.parse(JSON.stringify(petData));
+        if (!silent) { console.log('[SelfCheck] issues:', issues); console.log('[SelfCheck] fixes:', fixes); console.log('[SelfCheck] before→after:', before, after); }
+        return { issues, fixes, before, after };
+    };
+
+    // 去重的定时器守卫
+    if (!window.__vpsSelfCheckInterval) {
+        window.__vpsSelfCheckInterval = setInterval(() => {
+            try { window.runValueSelfCheck({ autoFix: true, save: true, silent: true }); } catch (e) {}
+        }, 5 * 60 * 1000);
+    }
+
+
 
 
 
@@ -3947,6 +4156,105 @@ ${currentPersonality}
 
         const now = Date.now();
         const lastNotification = localStorage.getItem(`${extensionName}-last-notification`) || 0;
+
+
+    /**
+     * 数值系统自检与自修复
+     * - 检查数值范围、时间戳有效性、冷却时间倒退、死亡状态一致性等
+     * - 可选自动修复并保存
+     * @param {Object} options
+     * @param {boolean} options.autoFix 是否自动修复（默认 true）
+     * @param {boolean} options.save 是否在修复后保存（默认 true）
+     * @param {boolean} options.silent 是否静默（默认 true，控制台简要输出）
+     * @returns {{issues: string[], fixes: string[], before: any, after: any}}
+     */
+    window.runValueSelfCheck = function(options = {}) {
+        const {
+            autoFix = true,
+            save = true,
+            silent = true,
+        } = options;
+
+        const issues = [];
+        const fixes = [];
+        const before = JSON.parse(JSON.stringify(petData));
+
+        const now = Date.now();
+        // 1) 范围与类型
+        const keys = ['health','happiness','hunger','energy','experience','level'];
+        keys.forEach(k => {
+            const v = petData[k];
+            if (typeof v !== 'number' || isNaN(v)) {
+                issues.push(`${k} 非数字: ${v}`);
+                if (autoFix) {
+                    if (k === 'level') petData[k] = 1; else petData[k] = 0;
+                    fixes.push(`修复 ${k} → ${petData[k]}`);
+                }
+            }
+        });
+
+        // 2) 范围 clamp
+        const clamp = (x, min, max) => Math.max(min, Math.min(max, x));
+        const ranged = ['health','happiness','hunger','energy'];
+        ranged.forEach(k => {
+            const old = petData[k];
+            const nv = clamp(Number(old)||0, 0, 100);
+            if (nv !== old) {
+                issues.push(`${k} 越界: ${old} → ${nv}`);
+                if (autoFix) {
+                    petData[k] = nv; fixes.push(`修复 ${k} → ${nv}`);
+                }
+            }
+        });
+        if (petData.level < 1) { issues.push(`level < 1: ${petData.level}`); if (autoFix) { petData.level = 1; fixes.push('修复 level → 1'); } }
+        if (petData.experience < 0) { issues.push(`experience < 0: ${petData.experience}`); if (autoFix) { petData.experience = 0; fixes.push('修复 experience → 0'); } }
+
+        // 3) 时间戳有效性与单调性
+        const timeKeys = ['lastUpdateTime','lastFeedTime','lastPlayTime','lastSleepTime'];
+        timeKeys.forEach(tk => {
+            const tv = petData[tk];
+            if (!tv || typeof tv !== 'number' || tv > now) {
+                issues.push(`${tk} 无效: ${tv}`);
+                if (autoFix) { petData[tk] = now; fixes.push(`修复 ${tk} → now`); }
+            }
+        });
+        // 冷却时间倒退（未来时间）已在 tv>now 分支修复
+
+        // 4) 死亡状态一致性
+        if (petData.isAlive === false && petData.health > 0) {
+            issues.push('死亡标记与健康矛盾');
+            if (autoFix) { petData.isAlive = true; fixes.push('修复 isAlive → true'); }
+        }
+        if (petData.isAlive !== false && petData.health <= 0) {
+            issues.push('健康<=0但未标记死亡');
+            if (autoFix) { petData.isAlive = false; petData.deathReason = petData.deathReason || 'sickness'; fixes.push('修复 isAlive → false'); }
+        }
+
+        // 5) 辅助：首次互动标记逻辑（若从未互动但有历史时间，补上lastUpdateTime）
+        if (!petData.hasInteracted && !petData.lastUpdateTime) {
+            petData.lastUpdateTime = now; fixes.push('补充 lastUpdateTime');
+        }
+
+        // 6) 统一校验
+        validateAndFixValues();
+
+        if (save && (autoFix && (fixes.length > 0))) {
+            savePetData();
+        }
+
+        const after = JSON.parse(JSON.stringify(petData));
+        if (!silent) {
+            console.log('[SelfCheck] issues:', issues);
+            console.log('[SelfCheck] fixes:', fixes);
+            console.log('[SelfCheck] before→after:', before, after);
+        }
+        return { issues, fixes, before, after };
+    };
+
+    // 每5分钟自动自检一次（静默+自动修复+保存）
+    setInterval(() => {
+        try { window.runValueSelfCheck({ autoFix: true, save: true, silent: true }); } catch(e) { /* ignore */ }
+    }, 5 * 60 * 1000);
 
         // 限制通知频率，至少间隔10分钟
         if (now - lastNotification < 600000) return;
@@ -4400,7 +4708,150 @@ ${currentPersonality}
         const config = getAIConfiguration();
         if (!config.isConfigured) {
             toastr.warning('请先在扩展设置中配置AI API信息（类型、URL和密钥）', '聊天功能需要配置', { timeOut: 5000 });
+            // 仍允许打开聊天弹窗，但会显示配置提示
+            openChatModal();
+            // 初始化聊天存储相关功能（迁移历史），并在聊天窗中提示配置
+            try { migrateChatFromLocalStorage && migrateChatFromLocalStorage(); } catch(e) {}
             return;
+
+        // ===== Chat storage (IndexedDB) + Sessions =====
+        const CHAT_DB_NAME = 'virtual-pet-chat-db';
+        const CHAT_DB_VERSION = 1;
+        const CHAT_STORE = 'messages';
+
+        function getChatSessions(){
+            try { return JSON.parse(localStorage.getItem('virtual-pet-chat-sessions')||'["default"]'); } catch { return ['default']; }
+        }
+        function saveChatSessions(list){
+            localStorage.setItem('virtual-pet-chat-sessions', JSON.stringify(Array.from(new Set(list))));
+        }
+        function getCurrentChatSessionId(){
+            return localStorage.getItem('virtual-pet-chat-session-id') || 'default';
+        }
+        function setCurrentChatSessionId(id){
+            localStorage.setItem('virtual-pet-chat-session-id', id);
+        }
+        (function ensureDefaultSession(){
+            const list = getChatSessions();
+            if (!list.includes('default')) { list.unshift('default'); saveChatSessions(list); }
+        })();
+
+        function initChatDB(){
+            return new Promise((resolve, reject) => {
+                if (window.__chatDB) return resolve(window.__chatDB);
+                const req = indexedDB.open(CHAT_DB_NAME, CHAT_DB_VERSION);
+                req.onupgradeneeded = () => {
+                    const db = req.result;
+                    if (!db.objectStoreNames.contains(CHAT_STORE)){
+                        const store = db.createObjectStore(CHAT_STORE, { keyPath: 'id', autoIncrement: true });
+                        store.createIndex('sessionId', 'sessionId', { unique: false });
+                        store.createIndex('timestamp', 'timestamp', { unique: false });
+                    }
+                };
+                req.onsuccess = () => { window.__chatDB = req.result; resolve(window.__chatDB); };
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        // 清空当前会话历史
+        async function clearCurrentChatHistory(){
+            try{
+                const id = getCurrentChatSessionId();
+                await dbClearSession(id);
+                chatHistory = [];
+                const container = $('#chat-modal-messages').length ? $('#chat-modal-messages') : $('#chat-messages-container');
+                container && container.length && container.empty();
+            }catch(e){ console.error('清空聊天历史失败', e); }
+        }
+
+        // 新建会话
+        async function createNewChatSession(){
+            const id = prompt('请输入新的会话名称（例如：默认/任务/闲聊）', '会话-'+Date.now());
+            if (!id) return;
+            const list = getChatSessions();
+            if (!list.includes(id)) { list.push(id); saveChatSessions(list); }
+            setCurrentChatSessionId(id);
+            await loadChatHistoryFromDB();
+        }
+
+        async function dbSaveMessage(record){
+            try{
+                const db = await initChatDB();
+                await new Promise((resolve, reject)=>{
+                    const tx = db.transaction(CHAT_STORE, 'readwrite');
+                    tx.objectStore(CHAT_STORE).add(record);
+                    tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+                });
+            }catch(e){ console.warn('dbSaveMessage failed', e); }
+        }
+        async function dbListMessages(sessionId, limit = 1000){
+            try{
+                const db = await initChatDB();
+                return await new Promise((resolve, reject)=>{
+                    const tx = db.transaction(CHAT_STORE, 'readonly');
+                    const index = tx.objectStore(CHAT_STORE).index('sessionId');
+                    const req = index.getAll(IDBKeyRange.only(sessionId));
+                    req.onsuccess = () => {
+                        const rows = (req.result||[]).sort((a,b)=>a.timestamp-b.timestamp);
+                        resolve(limit ? rows.slice(-limit) : rows);
+                    };
+                    req.onerror = () => reject(req.error);
+                });
+            }catch(e){ console.warn('dbListMessages failed', e); return []; }
+        }
+        async function dbClearSession(sessionId){
+            const db = await initChatDB();
+            await new Promise((resolve, reject)=>{
+                const tx = db.transaction(CHAT_STORE, 'readwrite');
+                const store = tx.objectStore(CHAT_STORE);
+                const idx = store.index('sessionId');
+                const req = idx.openCursor(IDBKeyRange.only(sessionId));
+                req.onsuccess = (e)=>{
+                    const cur = e.target.result;
+                    if (cur){ store.delete(cur.primaryKey); cur.continue(); }
+                    else resolve();
+                };
+                req.onerror = ()=>reject(req.error);
+            });
+        }
+        async function dbClearAll(){
+            const db = await initChatDB();
+            await new Promise((resolve, reject)=>{
+                const tx = db.transaction(CHAT_STORE, 'readwrite');
+                tx.objectStore(CHAT_STORE).clear();
+                tx.oncomplete = resolve; tx.onerror = ()=>reject(tx.error);
+            });
+        }
+        async function migrateChatFromLocalStorage(){
+            try{
+                const saved = localStorage.getItem('virtual-pet-chat-history');
+                if (!saved) return;
+                const arr = JSON.parse(saved);
+                const sessionId = getCurrentChatSessionId();
+                for (const item of arr){
+                    await dbSaveMessage({ sessionId, sender: item.sender, message: item.message, timestamp: item.timestamp||Date.now() });
+                }
+                localStorage.removeItem('virtual-pet-chat-history');
+            }catch(e){ console.warn('migrateChatFromLocalStorage failed', e); }
+        }
+
+        // Pet-type based SVG avatars
+        function getPetTypeIcon(type = 'cat', size = 18, color = '#ffd700'){
+            // 极简SVG：根据type渲染不同轮廓
+            const sz = Number(size)||18;
+            if(type==='dog'){
+                return `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12c0-5 4-7 8-7s8 2 8 7"/><path d="M7 14v2a4 4 0 0 0 4 4h2a4 4 0 0 0 4-4v-2"/><circle cx="9" cy="11" r="1"/><circle cx="15" cy="11" r="1"/></svg>`;
+            }
+            if(type==='bird'){
+                return `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12s4-6 9-6 9 6 9 6-4 6-9 6-9-6-9-6z"/><path d="M12 8l3 2-3 2-3-2 3-2z"/></svg>`;
+            }
+            if(type==='rabbit'){
+                return `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3c2 2 2 5 2 5"/><path d="M18 3c-2 2-2 5-2 5"/><circle cx="12" cy="12" r="6"/></svg>`;
+            }
+            // default cat
+            return `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8l2-3 3 2 3-2 3 2 3-2 2 3"/><circle cx="12" cy="13" r="6"/></svg>`;
+        }
+
         }
 
         // 打开独立的聊天模态弹窗
@@ -4536,8 +4987,8 @@ ${currentPersonality}
         // 启用聊天输入
         $('#chat-input').prop('disabled', false).attr('placeholder', '输入消息...');
 
-        // 加载聊天历史
-        loadChatHistory();
+        // 加载聊天历史（IndexedDB，会话持久化）
+        loadChatHistoryFromDB && loadChatHistoryFromDB();
     }
 
     /**
@@ -4704,7 +5155,7 @@ ${currentPersonality}
      * @param {string} sender 'user' 或 'pet'
      * @param {string} message 消息内容
      */
-    function addMessageToChat(sender, message) {
+    async function addMessageToChat(sender, message) {
         const container = $('#chat-modal-messages');
         if (container.length === 0) {
             console.log(`[${extensionName}] 聊天消息容器不存在，无法添加消息`);
@@ -4717,7 +5168,9 @@ ${currentPersonality}
 
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const isUser = sender === 'user';
-        const avatar = isUser ? getFeatherIcon('user', { color: '#ffffff', size: 18 }) : getDefaultPetIcon(18, '#ffd700');
+        const avatar = isUser
+            ? (customUserAvatarData ? `<img src="${customUserAvatarData}" alt="用户头像" style="width:100% !important;height:100% !important;object-fit:cover !important;border-radius:50% !important;">` : getFeatherIcon('user', { color: '#ffffff', size: 18 }))
+            : (customAvatarData ? getAvatarContent() : getDefaultPetIcon(18, '#ffd700'));
 
         // 响应式尺寸参数
         const avatarSize = isSmallMobile ? '32px' : isMobile ? '36px' : '40px';
@@ -4771,7 +5224,7 @@ ${currentPersonality}
                 ${isUser ? 'flex-direction: row-reverse !important;' : ''}
                 animation: messageSlideIn 0.3s ease-out !important;
             ">
-                <div style="
+                <div class="message-avatar" data-sender="${isUser ? 'user' : 'pet'}" style="
                     width: ${avatarSize} !important;
                     height: ${avatarSize} !important;
                     border-radius: 50% !important;
@@ -4817,8 +5270,10 @@ ${currentPersonality}
 
         // 保存聊天历史（不保存打字指示器）
         if (message !== '...') {
-            chatHistory.push({ sender, message, timestamp: Date.now() });
-            if (chatHistory.length > 50) chatHistory.shift();
+            const rec = { sessionId: getCurrentChatSessionId(), sender, message, timestamp: Date.now() };
+            chatHistory.push({ sender: rec.sender, message: rec.message, timestamp: rec.timestamp });
+            if (chatHistory.length > 1000) chatHistory.shift();
+            try { await dbSaveMessage(rec); } catch (e) { console.warn('保存聊天历史失败', e); }
         }
 
         console.log(`[${extensionName}] 已添加${isUser ? '用户' : '宠物'}消息: ${message.substring(0, 20)}...`);
@@ -4827,7 +5282,7 @@ ${currentPersonality}
     /**
      * 打开独立的聊天模态弹窗 - 学习商店设计模式
      */
-    function openChatModal() {
+    async function openChatModal() {
         console.log(`[${extensionName}] 打开聊天模态弹窗...`);
 
         // 确保只有一个聊天弹窗
@@ -4919,6 +5374,23 @@ ${currentPersonality}
                         gap: ${isMobile ? '12px' : '16px'} !important;
                     ">
 
+                            <!-- 简短引导提示 -->
+                            <div class="chat-tip" style="
+                                display: flex !important;
+                                align-items: center !important;
+                                gap: 8px !important;
+                                padding: 10px 12px !important;
+                                border-radius: 12px !important;
+                                background: rgba(255,255,255,0.8) !important;
+                                color: #4A5568 !important;
+                                font-size: 0.85em !important;
+                                border: 1px dashed rgba(74,85,104,0.25) !important;
+                            ">
+                                <span style="font-size: 1.1em !important;">💡</span>
+                                <span>提示：点击头像即可更换，点击你自己的头像可设置“用户聊天头像”。</span>
+                            </div>
+
+
                     </div>
 
                     <!-- 输入区域 -->
@@ -4965,8 +5437,11 @@ ${currentPersonality}
 
         $('body').append(chatModal);
 
+        // 初始化聊天存储并迁移旧历史
+        try { await migrateChatFromLocalStorage(); } catch(e) { console.warn('migrate failed', e); }
+
         // 加载历史记录
-        loadChatHistory();
+        await loadChatHistoryFromDB();
 
         // 绑定事件 - 学习商店的事件绑定方式
         // 关闭按钮事件
@@ -5088,10 +5563,10 @@ ${currentPersonality}
             if (saved) {
                 chatHistory = JSON.parse(saved);
 
-                // 渲���历史消息
-                const container = $('#chat-messages-container');
-                // 清空除了欢迎消息之外的所有消息
-                container.find('.chat-message').not('.chat-welcome-message .chat-message').remove();
+                // 渲染历史消息到当前激活容器（优先模态弹窗）
+                const container = $('#chat-modal-messages').length ? $('#chat-modal-messages') : $('#chat-messages-container');
+                if (container.length === 0) return;
+                container.find('.chat-message').remove();
 
                 chatHistory.forEach(item => {
                     const timestamp = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -5099,7 +5574,7 @@ ${currentPersonality}
 
                     const messageHtml = `
                         <div class="chat-message ${isUser ? 'user-message' : 'pet-message'}">
-                            <div class="message-avatar">${isUser ? getFeatherIcon('user', { color: '#ffffff', size: 18 }) : getDefaultPetIcon(18, '#ffd700')}</div>
+                            <div class="message-avatar" data-sender="${isUser ? 'user' : 'pet'}" style="cursor: pointer !important;">${isUser ? (customUserAvatarData ? `<img src="${customUserAvatarData}" alt="用户头像" style="width:100% !important;height:100% !important;object-fit:cover !important;border-radius:50% !important;">` : getFeatherIcon('user', { color: '#ffffff', size: 18 })) : (customAvatarData ? getAvatarContent() : getDefaultPetIcon(18, '#ffd700'))}</div>
                             <div class="message-content">
                                 <div class="message-text">${escapeHtml(item.message)}</div>
                                 <div class="message-timestamp">${timestamp}</div>
@@ -5607,6 +6082,57 @@ ${currentPersonality}
             } else {
                 console.log(`[${extensionName}] No custom avatar found`);
             }
+
+    // 用户头像：加载/保存/清除
+    function loadUserAvatar(){
+        try{
+            const local = localStorage.getItem(STORAGE_KEY_USER_AVATAR);
+            if (local){ customUserAvatarData = local; }
+        }catch(e){ console.warn('加载用户头像失败', e); }
+    }
+    function saveUserAvatar(imageData){
+        try{
+            localStorage.setItem(STORAGE_KEY_USER_AVATAR, imageData);
+            customUserAvatarData = imageData;
+            console.log('[VirtualPet] 用户头像已保存');
+            return true;
+        }catch(e){ console.error('保存用户头像失败', e); return false; }
+    }
+    function clearUserAvatar(){
+        try{
+            localStorage.removeItem(STORAGE_KEY_USER_AVATAR);
+            customUserAvatarData = null;
+            console.log('[VirtualPet] 用户头像已清除');
+            return true;
+        }catch(e){ console.error('清除用户头像失败', e); return false; }
+    }
+
+    // 在设置里提供用户头像更换入口（沿用宠物头像交互样式）
+    window.openUserAvatarSelector = function(){
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'image/*';
+        fileInput.style.display = 'none';
+        document.body.appendChild(fileInput);
+        fileInput.addEventListener('change', (e)=>{
+            const file = e.target.files[0];
+            if (file){
+                const reader = new FileReader();
+                reader.onload = (ev)=>{
+                    const img = ev.target.result;
+                    if (saveUserAvatar(img)){
+                        toastr.success('用户头像已更新');
+                    } else {
+                        toastr.error('用户头像保存失败');
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+        fileInput.click();
+        setTimeout(()=>fileInput.remove(), 0);
+    };
+
         } catch (error) {
             console.warn(`[${extensionName}] Failed to load custom avatar:`, error);
         }
@@ -5781,9 +6307,11 @@ ${currentPersonality}
     /**
      * 重置宠物
      */
-    function resetPet() {
-        if (!confirm("确定要重置宠物吗？这将清除所有数据！")) {
-            return;
+    function resetPet(skipConfirm = false) {
+        if (!skipConfirm) {
+            if (!confirm("确定要重置宠物吗？这将清除所有数据！")) {
+                return;
+            }
         }
 
         // 重置为智能初始化系统
@@ -5792,10 +6320,10 @@ ${currentPersonality}
             type: "cat",
             level: 1,
             experience: 0,
-            health: 35,    // 智能系统：会在首次打开时随机化
-            happiness: 30, // 智能系统：会在首次打开时随机化
-            hunger: 40,    // 智能系统：会在首次打开时随机化
-            energy: 45,    // 智能系统：会在首次打开时随机化
+            health: 100,
+            happiness: 50,
+            hunger: 40,
+            energy: 50,
 
             // 拓麻歌子式属性
             lifeStage: "baby",
@@ -5819,7 +6347,7 @@ ${currentPersonality}
             sicknessDuration: 0,
 
             dataVersion: 4.0, // 拓麻歌子系统版本
-            hasBeenRandomized: false // 重置后需要重新随机化
+            hasBeenRandomized: false // 重置后仍会执行初始化流程
         };
 
         // 应用拓麻歌子系统和随机化
@@ -5828,7 +6356,7 @@ ${currentPersonality}
 
         savePetData();
         renderSettings();
-        toastr.success("🥚 新的拓麻歌子宠物诞生了！请好好照顾它！");
+        toastr.success("新的拓麻歌子宠物诞生了！请好好照顾它！");
     }
 
     /**
@@ -6388,6 +6916,18 @@ ${currentPersonality}
                                 <input id="virtual-pet-enabled-toggle" type="checkbox" checked>
                                 <span>启用虚拟宠物系统</span>
                             </label>
+                            <div style="display:flex; gap:8px; align-items:center; margin: 8px 0;">
+                                <button id="one-click-reset-btn" class="pet-button" style="background:#e53e3e; color:#fff; border:none; padding:6px 10px; font-size:0.85em;">
+                                    一键重置
+                                </button>
+                                <button id="clear-chat-history-btn" class="pet-button" style="background:#718096; color:#fff; border:none; padding:6px 10px; font-size:0.85em;">
+                                    清空聊天历史
+                                </button>
+                                <button id="new-chat-session-btn" class="pet-button" style="background:#4a90e2; color:#fff; border:none; padding:6px 10px; font-size:0.85em;">
+                                    新建会话
+                                </button>
+                                <small style="color:#888;">将宠物数值与状态重置为初始值；聊天支持多会话与持久化</small>
+                            </div>
                         </div>
                         <small class="notes">
                             启用后会在屏幕上显示一个可拖动的宠物按钮
@@ -6673,6 +7213,7 @@ ${currentPersonality}
 
         // 5. 加载自定义头像数据
         loadCustomAvatar();
+        loadUserAvatar && loadUserAvatar();
 
         // 5. 只在非iOS设备上初始化原始弹窗功能
         if (!isIOS) {
@@ -7395,11 +7936,11 @@ ${currentPersonality}
 
         // 检查当前数值
         console.log("\n[STATS] 当前宠物数值:");
-        console.log(`健康: ${petData.health}/100 ${petData.health === 40 ? '[OK]' : '[ERR] 应为40'}`);
-        console.log(`快乐度: ${petData.happiness}/100 ${petData.happiness === 30 ? '✅' : '❌ 应为30'}`);
-        console.log(`饱食度: ${petData.hunger}/100 ${petData.hunger === 50 ? '✅' : '❌ 应为50'}`);
-        console.log(`精力: ${petData.energy}/100 ${petData.energy === 60 ? '✅' : '❌ 应为60'}`);
-        console.log(`数据版本: ${petData.dataVersion} ${petData.dataVersion === 2.0 ? '✅' : '❌ 应为2.0'}`);
+        console.log(`健康: ${petData.health}/100 ${petData.health === 100 ? '[OK]' : '[ERR] 应为100'}`);
+        console.log(`快乐度: ${petData.happiness}/100 ${petData.happiness === 50 ? '[OK]' : '[ERR] 应为50'}`);
+        console.log(`饱食度: ${petData.hunger}/100 ${petData.hunger === 40 ? '[OK]' : '[ERR] 应为40'}`);
+        console.log(`精力: ${petData.energy}/100 ${petData.energy === 50 ? '[OK]' : '[ERR] 应为50'}`);
+        console.log(`数据版本: ${petData.dataVersion}`)
 
         // 检查UI显示
         console.log("\n🖥️ UI显示检查:");
@@ -9698,8 +10239,8 @@ ${currentPersonality}
 
             // 显示复活选项
             setTimeout(() => {
-                if (confirm("💀 你的宠物死亡了！\n\n是否要重新开始养育新的宠物？\n（点击确定重新开始，取消保持当前状态）")) {
-                    resetPet();
+                if (confirm("你的宠物死亡了！\n\n是否要重新开始养育新的宠物？\n（点击确定重新开始，取消保持当前状态）")) {
+                    resetPet(true);
                 }
             }, 3000);
         }
@@ -10932,7 +11473,7 @@ ${currentPersonality}
         }
 
         return {
-            startValues: { health: 35, happiness: 30, hunger: 40, energy: 45 },
+            startValues: { health: 100, happiness: 50, hunger: 40, energy: 50 },
             endValues: {
                 health: petData.health,
                 happiness: petData.happiness,
@@ -11257,7 +11798,7 @@ ${currentPersonality}
             console.log("    - 无背景框架，元素融入背景");
             console.log("    - 实时数值更新，状态条动画");
             console.log("  ⚖️ 数值平衡:");
-            console.log("    - 初始数值：健康40, 快乐30, 饱食50, 精力60");
+            console.log("    - 初始数值：健康100, 快乐50, 饱食40, 精力50");
             console.log("    - 时间衰减：每12分钟更新，速度减缓");
             console.log("    - 操作冷却：喂食20s, 玩耍40s, 睡觉80s");
         }

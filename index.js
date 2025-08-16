@@ -20,6 +20,7 @@ jQuery(async () => {
     const STORAGE_KEY_PET_DATA = "virtual-pet-data";
     const STORAGE_KEY_CUSTOM_AVATAR = "virtual-pet-custom-avatar";
     const STORAGE_KEY_USER_AVATAR = "virtual-pet-user-avatar";
+    const CHAT_TIP_KEY = "virtual-pet-chat-tip-shown";
 
     // Firebase 相关常量
     const FIREBASE_CONFIG = {
@@ -5374,7 +5375,8 @@ ${currentPersonality}
                         gap: ${isMobile ? '12px' : '16px'} !important;
                     ">
 
-                            <!-- 简短引导提示 -->
+                            <!-- 简短引导提示（仅首次展示） -->
+                            ${localStorage.getItem(CHAT_TIP_KEY) ? '' : `
                             <div class="chat-tip" style="
                                 display: flex !important;
                                 align-items: center !important;
@@ -5388,7 +5390,7 @@ ${currentPersonality}
                             ">
                                 <span style="font-size: 1.1em !important;">💡</span>
                                 <span>提示：点击头像即可更换，点击你自己的头像可设置“用户聊天头像”。</span>
-                            </div>
+                            </div>`}
 
 
                     </div>

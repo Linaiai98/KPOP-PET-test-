@@ -545,6 +545,16 @@ jQuery(async () => {
             } catch (e) { /* ignore */ }
         })();
 
+        // 拓麻歌子式生命阶段定义 - moved earlier to avoid TDZ when used in UI builders
+        const LIFE_STAGES = {
+            baby:   { name: "幼体",  duration: 24,  emoji: "🥚" },   // 24小时
+            child:  { name: "儿童",  duration: 48,  emoji: "🐣" },   // 48小时
+            teen:   { name: "少年",  duration: 72,  emoji: "🐤" },   // 72小时
+            adult:  { name: "成年",  duration: 120, emoji: "🐦" },   // 120小时
+            senior: { name: "老年",  duration: 48,  emoji: "🦅" }    // 48小时后死亡
+        };
+
+
 
     // 宠物数据结构 - 智能初始化系统
     let petData = {
@@ -8798,14 +8808,7 @@ ${currentPersonality}
         };
     }
 
-    // 拓麻歌子式生命阶段定义
-    const LIFE_STAGES = {
-        baby: { name: "幼体", duration: 24, emoji: "🥚" },      // 24小时
-        child: { name: "儿童", duration: 48, emoji: "🐣" },     // 48小时
-        teen: { name: "少年", duration: 72, emoji: "🐤" },      // 72小时
-        adult: { name: "成年", duration: 120, emoji: "🐦" },    // 120小时
-        senior: { name: "老年", duration: 48, emoji: "🦅" }     // 48小时后死亡
-    };
+    // LIFE_STAGES is defined earlier (moved up to avoid TDZ)
 
     // 商店物品定义
     const SHOP_ITEMS = {

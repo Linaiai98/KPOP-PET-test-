@@ -4548,7 +4548,7 @@ ${currentPersonality}
         $('.pet-level').each(function(){
             $(this)
               .html(levelHtml)
-              .css({ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'center' });
+              .css({ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center', width: '100%', textAlign: 'center' });
         });
     }
 

@@ -3362,6 +3362,11 @@ ${currentPersonality}
                     // 其他情况不自动填充
                     break;
             }
+
+            toggleApiConfigInputs(apiType);
+            saveAISettings();
+            // 清除之前的测试结果
+            $('#ai-connection-status').text('未测试').css('color', '#888');
         });
 
         // 绑定二级菜单按钮（设置视图内）
@@ -3392,25 +3397,8 @@ ${currentPersonality}
             if (typeof window.openUserAvatarSelector === 'function') window.openUserAvatarSelector();
           });
 
-                case 'ollama':
-                    $('#ai-url-input').val('http://localhost:11434/v1');
-                    break;
-                case 'lmstudio':
-                    $('#ai-url-input').val('http://localhost:1234/v1');
-                    break;
-                case 'custom':
-                    // 自定义API不自动填充，保持用户输入
-                    break;
-                default:
-                    // 其他情况不自动填充
-                    break;
-            }
 
-            toggleApiConfigInputs(apiType);
-            saveAISettings();
-            // 清除之前的测试结果
-            $('#ai-connection-status').text('未测试').css('color', '#888');
-        });
+
 
         // 绑定API配置输入框事件
         $('#ai-url-input, #ai-key-input, #ai-model-input').on('input', function() {

@@ -3317,14 +3317,10 @@ ${currentPersonality}
 
             if (enabled) {
                 toastr.success("虚拟宠物系统已启用");
-                // 如果当前没有显示宠物按钮，重新创建
-                if ($("#virtual-pet-button").length === 0) {
-                    createPetButton();
-                }
+                initializeFloatingButton();
             } else {
                 toastr.info("虚拟宠物系统已禁用");
-                // 隐藏宠物按钮
-                $("#virtual-pet-button").hide();
+                destroyFloatingButton();
             }
         });
 
@@ -3395,13 +3391,7 @@ ${currentPersonality}
           .on('click.vp-useravatar','#change-user-avatar-btn', function(){
             if (typeof window.openUserAvatarSelector === 'function') window.openUserAvatarSelector();
           });
-                    break;
-                case 'google':
-                    $('#ai-url-input').val('https://generativelanguage.googleapis.com/v1beta');
-                    break;
-                case 'deepseek':
-                    $('#ai-url-input').val('https://api.deepseek.com/v1');
-                    break;
+
                 case 'ollama':
                     $('#ai-url-input').val('http://localhost:11434/v1');
                     break;
@@ -5470,6 +5460,9 @@ ${currentPersonality}
         // 加载历史记录
         await loadChatHistoryFromDB();
 
+        // 首次展示提示后，标记不再显示
+        try { localStorage.setItem(CHAT_TIP_KEY, '1'); } catch(e) {}
+
         // 绑定事件 - 学习商店的事件绑定方式
         // 关闭按钮事件
         $('#chat-modal-close-btn').on('click', function(e) {
@@ -7173,11 +7166,26 @@ ${currentPersonality}
                 </div>
             </div>
         `;
-        $("#extensions_settings2").append(simpleSettingsHtml);
-        console.log(`[${extensionName}] Settings panel created`);
-
-        // 初始化设置面板
-        initializeSettingsPanel();
+        try { $("#virtual-pet-settings").remove(); } catch(e) {}
+        function appendSettingsPanel() {
+            const $target = $("#extensions_settings2").length ? $("#extensions_settings2") : $("#extensions_settings");
+            if ($target.length) {
+                $target.append(simpleSettingsHtml);
+                console.log(`[${extensionName}] Settings panel created`);
+                initializeSettingsPanel();
+                return true;
+            }
+            return false;
+        }
+        if (!appendSettingsPanel()) {
+            setTimeout(() => {
+                if (!appendSettingsPanel()) {
+                    $('body').prepend(simpleSettingsHtml);
+                    console.warn(`[${extensionName}] Settings container not found. Fallback mount to <body>.`);
+                    try { initializeSettingsPanel(); } catch(e) { console.error('Init settings failed after fallback', e); }
+                }
+            }, 1000);
+        }
 
         // 3. 加载弹窗HTML（如果失败就使用简单版本）
         // 检测是否为iOS设备，如果是则跳过原始弹窗创建

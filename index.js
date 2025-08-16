@@ -86,6 +86,63 @@ jQuery(async () => {
         notification: 10002 // 通知
     };
 
+
+    // 作者信息与水印
+    const AUTHOR_NAME = "一禄柒柒";
+
+
+    // 作者水印：可视徽标 + 复制水印
+    function installAuthorBadge(){
+        if ($('#vp-author-badge').length) return;
+        const $badge = $('<div id="vp-author-badge"/>').text(`作者：${AUTHOR_NAME}`).css({
+            position:'fixed', right:'10px', bottom:'6px', zIndex: SAFE_Z_INDEX.popup,
+            background:'rgba(0,0,0,0.35)', color:'#fff', fontSize:'11px',
+            padding:'2px 6px', borderRadius:'4px', pointerEvents:'none',
+            backdropFilter:'blur(2px)', boxShadow:'0 2px 6px rgba(0,0,0,0.25)'
+        });
+        $('body').append($badge);
+    }
+    function removeAuthorBadge(){ $('#vp-author-badge').remove(); }
+
+    function setupCopyWatermarkProtection(){
+        try{ if (window.__vpCopyHandlerAttached) return; } catch{}
+        const handler = function(e){
+            try{
+                // 仅对插件相关区域的复制加水印，避免影响宿主全局
+                const $target = $(e.target);
+                const inScope = $target.closest('#virtual-pet-popup-overlay,#chat-modal-overlay,#virtual-pet-settings').length>0;
+                if (!inScope) return; // 不在插件DOM内则不处理
+                const sel = window.getSelection();
+                const text = sel && sel.toString();
+                if (!text) return;
+                const url = location.href;
+                const mark = `\n\n—— 复制来源：虚拟宠物系统 · 作者：${AUTHOR_NAME} · ${new Date().toLocaleString()} · ${url}`;
+                e.clipboardData.setData('text/plain', text + mark);
+                // HTML版本（在末尾附加一个淡色小字）
+                const htmlSel = sel ? sel.getRangeAt(0).cloneContents() : null;
+                let html = '';
+                if (htmlSel){ const div = document.createElement('div'); div.appendChild(htmlSel); html = div.innerHTML; }
+                const htmlMark = `<div style="margin-top:8px;font-size:11px;color:#888;opacity:.8;">—— 复制来源：虚拟宠物系统 · 作者：${AUTHOR_NAME}</div>`;
+                e.clipboardData.setData('text/html', html + htmlMark);
+                e.preventDefault();
+            }catch(err){ /* 忽略 */ }
+        };
+        document.addEventListener('copy', handler, true);
+        window.__vpCopyHandlerAttached = true;
+        window.__vpCopyHandler = handler;
+    }
+    function teardownCopyWatermarkProtection(){
+        try{
+            if (window.__vpCopyHandlerAttached && window.__vpCopyHandler){
+                document.removeEventListener('copy', window.__vpCopyHandler, true);
+            }
+        }catch{}
+        window.__vpCopyHandlerAttached = false;
+        window.__vpCopyHandler = null;
+    }
+    function enableAuthorWatermarks(){ installAuthorBadge(); setupCopyWatermarkProtection(); }
+    function disableAuthorWatermarks(){ removeAuthorBadge(); teardownCopyWatermarkProtection(); }
+
     // ============ 初始化管线（第一阶段：守护 + 悬浮按钮优先） ============
     function tryGuard(name, fn){
         try { return fn(); } catch(e){ console.warn(`[${extensionName}] [init-guard] ${name} failed:`, e); return null; }
@@ -12764,6 +12821,27 @@ async function createNewChatSession(){
         $menu.append($('<div/>').css({ height:1, background:'rgba(255,255,255,0.12)', margin:'6px 4px' }));
         addItem('open-settings','settings','打开完整设置','#90cdf4');
         $('body').append($menu);
+        // 智能定位：避免超出屏幕
+        const vw = window.innerWidth, vh = window.innerHeight;
+        let menuW = $menu.outerWidth(), menuH = $menu.outerHeight();
+        const pad = 8;
+        // 计算垂直位置：优先放在下方，放不下则放上方，再进行夹取
+        let top = Math.round(rect.bottom + 8);
+        const canPlaceAbove = (rect.top - 8 - menuH) >= pad;
+        if (top + menuH > vh - pad && canPlaceAbove) {
+            top = Math.max(pad, Math.round(rect.top - menuH - 8));
+        } else {
+            top = Math.min(top, vh - pad - menuH);
+        }
+        // 计算水平位置，并在过宽时自适应宽度
+        if (menuW > vw - pad * 2) {
+            $menu.css({ width: vw - pad * 2 });
+            menuW = $menu.outerWidth();
+        }
+        let left = Math.round(rect.left);
+        left = Math.max(pad, Math.min(left, vw - pad - menuW));
+        // 应用最终位置与高度限制
+        $menu.css({ top, left, maxHeight: Math.min(vh - pad * 2, isMobile ? 360 : 480), overflowY: 'auto' });
         $(document)
           .off('mouseenter.vp-submenu mouseleave.vp-submenu', '#vp-settings-submenu .vp-submenu-item')
           .on('mouseenter.vp-submenu', '#vp-settings-submenu .vp-submenu-item', function(){ $(this).css({ background: 'rgba(255,255,255,0.08)' }); })

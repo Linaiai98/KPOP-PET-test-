@@ -3308,30 +3308,6 @@ ${currentPersonality}
             savePersonalitySettings('custom', customText);
         });
 
-        // 一键重置按钮
-        $('#one-click-reset-btn').off('click').on('click', function() {
-            if (confirm('确定要一键重置宠物数据吗？这将清除当前数值并恢复到初始状态。')) {
-                try {
-                    resetPet();
-                    toastr.success('已重置为初始状态');
-                } catch (e) {
-                    console.error('一键重置失败:', e);
-                    toastr.error('一键重置失败');
-                }
-            }
-        });
-
-        // 清空聊天历史
-        $('#clear-chat-history-btn').off('click').on('click', async function(){
-            if (!confirm('确定要清空当前会话的聊天历史吗？此操作不可恢复。')) return;
-            await clearCurrentChatHistory();
-            toastr.success('已清空当前会话聊天历史');
-        });
-        // 新建会话
-        $('#new-chat-session-btn').off('click').on('click', async function(){
-            await createNewChatSession();
-            toastr.success('已创建新会话');
-        });
 
 
         // 启用/禁用虚拟宠物系统的事件监听器
@@ -3370,6 +3346,55 @@ ${currentPersonality}
                     break;
                 case 'claude':
                     $('#ai-url-input').val('https://api.anthropic.com/v1');
+                    break;
+                case 'google':
+                    $('#ai-url-input').val('https://generativelanguage.googleapis.com/v1beta');
+                    break;
+                case 'deepseek':
+                    $('#ai-url-input').val('https://api.deepseek.com/v1');
+                    break;
+                case 'ollama':
+                    $('#ai-url-input').val('http://localhost:11434/v1');
+                    break;
+                case 'lmstudio':
+                    $('#ai-url-input').val('http://localhost:1234/v1');
+                    break;
+                case 'custom':
+                    // 自定义API不自动填充，保持用户输入
+                    break;
+                default:
+                    // 其他情况不自动填充
+                    break;
+            }
+        });
+
+        // 绑定二级菜单按钮（设置视图内）
+        $(document)
+          .off('click.vp-reset','#one-click-reset-btn')
+          .on('click.vp-reset','#one-click-reset-btn', function(){
+            if (confirm('确定要一键重置宠物数据吗？这将清除当前数值并恢复到初始状态。')) {
+              try { resetPet(true); toastr.success('已重置为初始状态'); }
+              catch(e){ console.error('一键重置失败:', e); toastr.error('一键重置失败'); }
+            }
+          });
+        $(document)
+          .off('click.vp-clear','#clear-chat-history-btn')
+          .on('click.vp-clear','#clear-chat-history-btn', async function(){
+            if (!confirm('确定要清空当前会话的聊天历史吗？此操作不可恢复。')) return;
+            await clearCurrentChatHistory();
+            toastr.success('已清空当前会话聊天历史');
+          });
+        $(document)
+          .off('click.vp-newsession','#new-chat-session-btn')
+          .on('click.vp-newsession','#new-chat-session-btn', async function(){
+            await createNewChatSession();
+            toastr.success('已创建新会话');
+          });
+        $(document)
+          .off('click.vp-useravatar','#change-user-avatar-btn')
+          .on('click.vp-useravatar','#change-user-avatar-btn', function(){
+            if (typeof window.openUserAvatarSelector === 'function') window.openUserAvatarSelector();
+          });
                     break;
                 case 'google':
                     $('#ai-url-input').val('https://generativelanguage.googleapis.com/v1beta');
@@ -6949,6 +6974,12 @@ ${currentPersonality}
                                 <option value="smart">聪明 - 机智幽默的鸟</option>
                                 <option value="custom">自定义人设</option>
                             </select>
+                            <div class="settings-submenu" style="margin-top:10px; display:flex; flex-wrap:wrap; gap: 8px;">
+                                <button id="one-click-reset-btn" class="pet-button" style="background:#e53e3e; color:#fff; border:none; padding:6px 10px; font-size:0.85em;">一键重置</button>
+                                <button id="clear-chat-history-btn" class="pet-button" style="background:#718096; color:#fff; border:none; padding:6px 10px; font-size:0.85em;">清空聊天历史</button>
+                                <button id="new-chat-session-btn" class="pet-button" style="background:#4a90e2; color:#fff; border:none; padding:6px 10px; font-size:0.85em;">新建会话</button>
+                                <button id="change-user-avatar-btn" class="pet-button" style="background:#805AD5; color:#fff; border:none; padding:6px 10px; font-size:0.85em;">更换用户头像</button>
+                            </div>
                         </div>
 
                         <div id="virtual-pet-custom-personality-container" style="display: none; margin-top: 10px;">

@@ -665,6 +665,142 @@ jQuery(async () => {
         }
 
 
+        // ===== AIConnector: unified, resilient AI + Models connection layer =====
+        const AIConnector = (() => {
+            async function fetchJson(url, options = {}, timeout = 15000) {
+                const controller = new AbortController();
+                const id = setTimeout(() => controller.abort(), timeout);
+                try {
+                    const resp = await fetch(url, { ...options, signal: controller.signal });
+                    const text = await resp.text();
+                    let data = null; try { data = text ? JSON.parse(text) : null; } catch { /* non-json */ }
+                    return { ok: resp.ok, status: resp.status, data, text };
+                } finally { clearTimeout(id); }
+            }
+
+            function classify(err){ return classifyNetworkError(err); }
+
+            async function relayRequest(relayUrl, targetUrl, method, headers, body, timeout = 20000) {
+                console.debug(`[${extensionName}] ▶️ Relay Request`, {
+                    relayUrl, targetUrl, headers: redactHeaders(headers), body: previewBody(body), timeout
+                });
+                const payload = { targetUrl, method, headers, body };
+                const r = await fetchJson(relayUrl, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                }, timeout);
+                if (!r.ok) throw new Error(`Relay HTTP ${r.status}: ${r.text || ''}`);
+                return r.data;
+            }
+
+            function parseModels(data, endpoint, apiType) {
+                if (typeof parseModelsFromResponseNew === 'function') {
+                    try { return parseModelsFromResponseNew(data, endpoint, apiType) || []; } catch {}
+                }
+                // Fallback generic parsing
+                const out = [];
+                const pushId = (id, name) => { if (id && !out.find(m=>m.id===id)) out.push({ id, name: name||id }); };
+                const candidates = data?.data || data?.models || data?.items || data;
+                if (Array.isArray(candidates)) {
+                    for (const item of candidates) {
+                        if (!item) continue;
+                        if (typeof item === 'string') pushId(item);
+                        else if (item.id) pushId(item.id, item.name||item.id);
+                        else if (item.model) pushId(item.model);
+                        else if (item.engine_id) pushId(item.engine_id);
+                        else if (item.name) pushId(item.name, item.name);
+                    }
+                }
+                return out;
+            }
+
+            function buildModelEndpoints(apiUrl, apiType){
+                const base = (apiUrl||'').replace(/\/+$/,'');
+                const arr = [];
+                if (apiType === 'google') {
+                    if (base.includes('/v1beta')) arr.push(`${base}/models`); else arr.push(`${base}/v1beta/models`);
+                } else if (apiType === 'claude') {
+                    if (base.includes('/v1')) arr.push(`${base}/models`); else arr.push(`${base}/v1/models`);
+                } else if (apiType === 'custom') {
+                    if (base.includes('/v1')) arr.push(`${base}/models`); else arr.push(`${base}/v1/models`);
+                    arr.push(`${base}/models`, `${base}/engines`, `${base}/v1/engines`, `${base}/api/models`, `${base}/api/v1/models`);
+                } else {
+                    if (base.includes('/v1')) arr.push(`${base}/models`); else arr.push(`${base}/v1/models`);
+                }
+                return [...new Set(arr)];
+            }
+
+            async function fetchModels(settings) {
+                const apiType = settings.apiType; const apiUrl = settings.apiUrl; const apiKey = settings.apiKey;
+                const endpoints = buildModelEndpoints(apiUrl, apiType);
+                const headers = buildHeaders(settings);
+
+                // Try direct
+                for (const ep of endpoints) {
+                    try {
+                        console.debug(`[${extensionName}] ▶️ Models Direct`, { url: ep, headers: redactHeaders(headers) });
+                        const r = await fetchJson(ep, { method: 'GET', headers }, 12000);
+                        if (r.ok && r.data) {
+                            const models = parseModels(r.data, ep, apiType);
+                            if (models?.length) return models;
+                        } else if (r.status === 401 || r.status === 403) {
+                            // auth error: stop trying others, surface error
+                            throw new Error(`HTTP ${r.status}: Unauthorized`);
+                        }
+                    } catch (e) {
+                        const c = classify(e);
+                        if (c === 'HTTP') continue; // try next endpoint
+                        if (c === 'CORS' || c === 'NETWORK' || c === 'NETWORK_RESET' || c === 'TIMEOUT/ABORT' || String(e).includes('Failed to fetch')) {
+                            // Will fallback to relay after loop
+                            console.warn(`[${extensionName}] Direct models fetch error on ${apiUrl}: ${e.message}`);
+                            break;
+                        }
+                    }
+                }
+
+                // Fallback via relay
+                const relayUrl = getRelayUrl();
+                for (const ep of endpoints) {
+                    try {
+                        const data = await relayRequest(relayUrl, ep, 'GET', headers, undefined, 15000);
+                        const models = parseModels(data, ep, apiType);
+                        if (models?.length) return models;
+                    } catch (e) {
+                        console.warn(`[${extensionName}] Relay models fetch error: ${e.message}`);
+                    }
+                }
+
+                // Fallback to recommended
+                if (typeof getRecommendedModels === 'function') {
+                    return getRecommendedModels(apiType);
+                }
+                return [];
+            }
+
+            async function chat(settings, prompt, timeout){
+                const url = resolveTargetUrl(settings);
+                const headers = buildHeaders(settings);
+                const body = buildRequestBody(settings, prompt);
+                // Direct
+                try {
+                    const r = await fetchJson(url, { method: 'POST', headers, body: JSON.stringify(body) }, timeout);
+                    if (!r.ok) throw new Error(`HTTP ${r.status}: ${r.text}`);
+                    return r.data;
+                } catch (e) {
+                    const cls = classify(e);
+                    if (!(cls==='CORS'||cls==='NETWORK'||cls==='NETWORK_RESET'||cls==='TIMEOUT/ABORT'||String(e).includes('Failed to fetch'))) throw e;
+                }
+                // Relay
+                const relayUrl = getRelayUrl();
+                const data = await relayRequest(relayUrl, url, 'POST', headers, body, Math.max(timeout, 25000));
+                return data;
+            }
+
+            return { fetchModels, chat };
+        })();
+        window.AIConnector = AIConnector;
+        // ==========================================================================
+
+
 
     // 宠物数据结构 - 智能初始化系统
     let petData = {
@@ -3145,17 +3281,13 @@ ${currentPersonality}
                 console.log(`[${extensionName}] 从配置的API获取模型列表...`);
 
                 // 使用第三方API专用方法获取模型
-                const thirdPartyModels = await (window.getThirdPartyModels ? window.getThirdPartyModels() : []);
-                if (thirdPartyModels.length > 0) {
-                    models = thirdPartyModels;
-                    console.log(`[${extensionName}] 从第三方API获取到 ${thirdPartyModels.length} 个模型`);
-                } else {
-                    // 备选：使用通用方法
-                    const userModels = await (window.getUserConfiguredModels ? window.getUserConfiguredModels() : []);
-                    if (userModels.length > 0) {
-                        models = userModels;
-                        console.log(`[${extensionName}] 从用户配置API获取到 ${userModels.length} 个模型`);
-                    }
+                // 统一改为 AIConnector.fetchModels，内部处理直连/中继/回退
+                try {
+                    const settings = loadAISettings();
+                    models = await AIConnector.fetchModels(settings);
+                } catch (e) {
+                    console.warn(`[${extensionName}] 获取模型失败: ${e.message}`);
+                    models = [];
                 }
 
                 // 更新模型下拉列表

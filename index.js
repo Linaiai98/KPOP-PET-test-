@@ -2233,7 +2233,7 @@ jQuery(async () => {
             const testPrompt = "请简单回复'测试成功'，不超过10个字。";
             console.log(`[${extensionName}] 开始测试API连接...`);
 
-            const response = await callCustomAPI(testPrompt, settings, 10000); // 10秒超时用于测试
+            const response = await callCustomAPI(testPrompt, settings, 25000); // 调整为25秒超时，提高跨网/中继成功率
 
             if (response && response.trim()) {
                 statusElement.text('✅ 连接成功').css('color', '#48bb78');
@@ -2316,7 +2316,9 @@ jQuery(async () => {
                     return await callDirectAPI(prompt, settings, timeout);
                 } catch (directError) {
                     console.log(`[${extensionName}] ⚠️ 自定义API直连失败，退回中继服务器: ${directError.message}`);
-                    return await callViaRelay(prompt, settings, timeout);
+                    // 自定义API在跨网或中转下耗时更久，这里给中继更充足的时间（不小于 25s）
+                    const relayTimeout = Math.max(timeout, 25000);
+                    return await callViaRelay(prompt, settings, relayTimeout);
                 }
             } else {
                 throw new Error(`不支持的API类型: ${settings.apiType}`);

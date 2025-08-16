@@ -4548,7 +4548,7 @@ ${currentPersonality}
         $('.pet-level').each(function(){
             $(this)
               .html(levelHtml)
-              .css({ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center', width: '100%', textAlign: 'center' });
+              .css({ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'center', textAlign: 'center', margin: '0 auto' });
         });
     }
 
@@ -12475,7 +12475,10 @@ async function createNewChatSession(){
             ">
                 <!-- 宠物头像和基本信息 -->
                 <div class="pet-avatar-section" style="
-                    text-align: center !important;
+                    display: flex !important;
+                    flex-direction: column !important;
+                    align-items: center !important;
+                    justify-content: center !important;
                     padding: 20px !important;
                 ">
                     <!-- 圆形头像框 -->

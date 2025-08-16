@@ -488,6 +488,49 @@ jQuery(async () => {
                           radial-gradient(1200px 800px at 90% 20%, rgba(0,240,255,.08), transparent 45%),
                           rgba(0,0,0,.50) !important;
             }
+
+            /* Settings UI Neon restyle */
+            #${POPUP_ID}.kpop-neon #ai-config-container {
+              background: linear-gradient(180deg, rgba(30,34,58,.78) 0%, rgba(18,22,40,.78) 100%);
+              border: 1px solid var(--vp-border);
+              border-radius: 14px; padding: 14px !important; margin-top: 12px !important;
+              box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.04), 0 0 20px rgba(0,243,255,.10);
+              backdrop-filter: blur(6px);
+            }
+            #${POPUP_ID}.kpop-neon label { color: var(--vp-text) !important; text-shadow: 0 0 6px rgba(0,243,255,.25); }
+            #${POPUP_ID}.kpop-neon small.notes { color: var(--vp-muted) !important; }
+            #${POPUP_ID}.kpop-neon select#ai-api-select,
+            #${POPUP_ID}.kpop-neon select#ai-model-select,
+            #${POPUP_ID}.kpop-neon input#ai-url-input,
+            #${POPUP_ID}.kpop-neon input#ai-key-input,
+            #${POPUP_ID}.kpop-neon input#ai-model-input {
+              background: rgba(11,14,26,.6) !important; color: var(--vp-text) !important;
+              border: 1px solid rgba(0,243,255,.25) !important; border-radius: 10px !important;
+              outline: none !important; box-shadow: 0 0 0 0 rgba(0,243,255,.0) !important;
+            }
+            #${POPUP_ID}.kpop-neon select#ai-api-select:focus,
+            #${POPUP_ID}.kpop-neon select#ai-model-select:focus,
+            #${POPUP_ID}.kpop-neon input#ai-url-input:focus,
+            #${POPUP_ID}.kpop-neon input#ai-key-input:focus,
+            #${POPUP_ID}.kpop-neon input#ai-model-input:focus {
+              border-color: var(--vp-neon2) !important;
+              box-shadow: 0 0 0 2px rgba(0,243,255,.18), 0 0 18px rgba(0,243,255,.18) !important;
+            }
+            #${POPUP_ID}.kpop-neon #ai-url-reset-btn,
+            #${POPUP_ID}.kpop-neon #refresh-models-btn,
+            #${POPUP_ID}.kpop-neon #test-ai-connection-btn {
+              background: linear-gradient(90deg, var(--vp-neon1) 0%, var(--vp-neon2) 100%) !important;
+              color: #0b0e1a !important; border: none !important; border-radius: 10px !important;
+              padding: 8px 12px !important; cursor: pointer !important;
+              box-shadow: 0 6px 18px rgba(0,0,0,.35), 0 0 18px var(--vp-neon1) !important;
+              transition: transform var(--vp-fast) var(--vp-ease), box-shadow var(--vp-fast) var(--vp-ease) !important;
+            }
+            #${POPUP_ID}.kpop-neon #ai-url-reset-btn:hover,
+            #${POPUP_ID}.kpop-neon #refresh-models-btn:hover,
+            #${POPUP_ID}.kpop-neon #test-ai-connection-btn:hover {
+              transform: translateY(-1px) !important; box-shadow: 0 10px 22px rgba(0,0,0,.38), 0 0 26px var(--vp-neon2) !important;
+            }
+            #${POPUP_ID}.kpop-neon #ai-connection-status { color: var(--vp-muted) !important; }
             `;
             const style = document.createElement('style');
             style.id = 'virtual-pet-kpop-neon';

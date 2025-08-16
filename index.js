@@ -4542,7 +4542,14 @@ ${currentPersonality}
                 });
             }
         });
-        $('.pet-level').text('Lv.' + petData.level);
+        const levelHtml = petData.isAlive
+            ? `${getFeatherIcon(LIFE_STAGES[petData.lifeStage]?.icon || 'star', { color: '#ffd700', size: 16 })} ${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}`
+            : `${getFeatherIcon('x', { color: '#ff4444', size: 16 })} 已死亡`;
+        $('.pet-level').each(function(){
+            $(this)
+              .html(levelHtml)
+              .css({ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'center' });
+        });
     }
 
     /**
@@ -4863,6 +4870,12 @@ ${currentPersonality}
         });
     }
 
+        // 聊天消息中点击用户头像 → 打开头像选择器
+        $('#chat-modal-messages').off('click.vp-avatar', '.message-avatar[data-sender="user"]').on('click.vp-avatar', '.message-avatar[data-sender="user"]', function(){
+            if (typeof window.openUserAvatarSelector === 'function') window.openUserAvatarSelector();
+        });
+
+
     /**
      * 构建聊天Prompt
      * @param {string} userInput - 用户的输入
@@ -5148,12 +5161,13 @@ async function createNewChatSession(){
                     display: flex !important;
                     align-items: center !important;
                     justify-content: center !important;
-                    font-size: ${avatarFontSize} !important;
                     background: linear-gradient(145deg, ${isUser ? '#FF9EC7, #FF7FB3' : '#A8E6CF, #87CEEB'}) !important;
                     border: 2px solid white !important;
                     box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
                     flex-shrink: 0 !important;
-                ">${avatar}</div>
+                    overflow: hidden !important;
+                    cursor: ${isUser ? 'pointer' : 'default'} !important;
+                " title="${isUser ? '点击更换我的头像' : ''}">${avatar}</div>
                 <div style="
                     max-width: ${messageMaxWidth} !important;
                     background: ${isUser ? 'linear-gradient(135deg, #87CEEB, #A8E6CF)' : 'white'} !important;
@@ -12817,7 +12831,6 @@ async function createNewChatSession(){
         addItem('reset','refresh-cw','一键重置');
         addItem('clear-chat','trash-2','清空聊天历史');
         addItem('new-chat','plus','新建会话');
-        addItem('user-avatar','user','更换用户头像');
         $menu.append($('<div/>').css({ height:1, background:'rgba(255,255,255,0.12)', margin:'6px 4px' }));
         addItem('open-settings','settings','打开完整设置','#90cdf4');
         $('body').append($menu);
@@ -12858,8 +12871,6 @@ async function createNewChatSession(){
                     await clearCurrentChatHistory(); toastr.success('已清空当前会话聊天历史');
                 } else if (action === 'new-chat') {
                     await createNewChatSession(); toastr.success('已创建新会话');
-                } else if (action === 'user-avatar') {
-                    if (typeof window.openUserAvatarSelector === 'function') window.openUserAvatarSelector();
                 } else if (action === 'open-settings') { openSettings(); }
             } finally { $('#vp-settings-submenu').remove(); }
           });

@@ -5130,7 +5130,7 @@ async function createNewChatSession(){
             </div>
             <div id="chat-modal-messages"></div>
             <div id="chat-modal-input-area">
-              <input type="text" id="chat-modal-input" placeholder="输入消息..." maxlength="500" />
+              <textarea id="chat-modal-input" placeholder="输入消息... (Enter 发送 / Shift+Enter 换行)" rows="2" maxlength="1000"></textarea>
               <button id="chat-modal-send-btn">发送</button>
             </div>
           </div>
@@ -5169,38 +5169,8 @@ async function createNewChatSession(){
 
         // 处理打字指示器
         const messageContent = message === '...'
-            ? `<div style="
-                display: flex !important;
-                align-items: center !important;
-                gap: 4px !important;
-                padding: 8px 0 !important;
-            ">
-                <span style="
-                    width: 8px !important;
-                    height: 8px !important;
-                    background: #A0AEC0 !important;
-                    border-radius: 50% !important;
-                    animation: typingBounce 1.4s infinite ease-in-out !important;
-                    animation-delay: 0s !important;
-                "></span>
-                <span style="
-                    width: 8px !important;
-                    height: 8px !important;
-                    background: #A0AEC0 !important;
-                    border-radius: 50% !important;
-                    animation: typingBounce 1.4s infinite ease-in-out !important;
-                    animation-delay: 0.2s !important;
-                "></span>
-                <span style="
-                    width: 8px !important;
-                    height: 8px !important;
-                    background: #A0AEC0 !important;
-                    border-radius: 50% !important;
-                    animation: typingBounce 1.4s infinite ease-in-out !important;
-                    animation-delay: 0.4s !important;
-                "></span>
-            </div>`
-            : escapeHtml(message);
+            ? `<div class="typing-dots"><i></i><i></i><i></i></div>`
+            : (isUser ? escapeHtml(message) : formatMarkdown(message));
 
         // 学习商店风格的消息HTML结构
         const messageHtml = `
@@ -5265,6 +5235,50 @@ async function createNewChatSession(){
         }
 
         console.log(`[${extensionName}] 已添加${isUser ? '用户' : '宠物'}消息: ${message.substring(0, 20)}...`);
+    }
+    // 全局：注入聊天样式（重写版）
+    function injectChatStyles(){
+        if (document.getElementById('vp-chat-styles')) return;
+        const css = `
+        #chat-modal-overlay{position:fixed;inset:0;width:100vw;height:100vh;background:rgba(0,0,0,.6);z-index:1000001;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}
+        #chat-modal-container{background:${candyColors.backgroundSolid};color:${candyColors.textPrimary};width:100%;max-width:420px;max-height:72vh;display:flex;flex-direction:column;border:3px solid ${candyColors.border};border-radius:16px;box-shadow:0 20px 40px ${candyColors.shadowGlow},0 8px 16px ${candyColors.shadow};overflow:hidden}
+        .vp-chat-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid ${candyColors.border}}
+        .vp-chat-header h3{margin:0;font-size:1.1em;color:${candyColors.textPrimary}}
+        #chat-modal-messages{flex:1;overflow-y:auto;padding:12px 16px;background:${candyColors.background}}
+        #chat-modal-input-area{display:flex;gap:10px;align-items:center;padding:12px 16px;border-top:1px solid ${candyColors.border};background:${candyColors.backgroundSolid}}
+        #chat-modal-input{flex:1;border:1px solid ${candyColors.border};border-radius:12px;padding:10px 12px;font-size:14px;background:#fff;color:${candyColors.textPrimary};outline:none;min-height:44px;max-height:140px;resize:vertical}
+        #chat-modal-send-btn{background:${candyColors.buttonPrimary};color:${candyColors.textPrimary};border:2px solid ${candyColors.border};border-radius:12px;padding:10px 14px;cursor:pointer;font-weight:600}
+        #chat-modal-send-btn:disabled{opacity:.5;cursor:not-allowed}
+        .chat-message{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px}
+        .chat-message.user-message{flex-direction:row-reverse}
+        .message-avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:${candyColors.screen};border:2px solid #fff;overflow:hidden;flex-shrink:0}
+        .message-bubble{max-width:75%;padding:10px 12px;border:1px solid ${candyColors.border};border-radius:12px;background:#fff;color:${candyColors.textPrimary};box-shadow:0 2px 6px rgba(0,0,0,.06)}
+        .user-message .message-bubble{background:${candyColors.info};color:${candyColors.textWhite}}
+        .message-time{margin-top:4px;font-size:.75em;color:${candyColors.textLight};text-align:right}
+        .chat-config-hint{border:1px dashed ${candyColors.border};border-radius:12px;padding:12px;color:${candyColors.textPrimary};background:${candyColors.backgroundSolid}}
+        `;
+        const style = document.createElement('style');
+        style.id = 'vp-chat-styles';
+        style.textContent = css;
+        document.head.appendChild(style);
+    }
+
+    // 全局：渲染聊天模态模板（使用 textarea）
+    function renderChatModal(){
+        return `
+        <div id="chat-modal-overlay">
+          <div id="chat-modal-container">
+            <div class="vp-chat-header">
+              <h3>💬 与 ${escapeHtml(petData.name)} 聊天</h3>
+              <button id="chat-modal-close-btn" aria-label="关闭" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:${candyColors.textPrimary}">×</button>
+            </div>
+            <div id="chat-modal-messages"></div>
+            <div id="chat-modal-input-area">
+              <textarea id="chat-modal-input" placeholder="输入消息... (Enter 发送 / Shift+Enter 换行)" rows="2" maxlength="1000"></textarea>
+              <button id="chat-modal-send-btn">发送</button>
+            </div>
+          </div>
+        </div>`;
     }
 
     /**
@@ -5524,7 +5538,8 @@ async function createNewChatSession(){
         $('#chat-modal-overlay').on('click', function(e){ if(e.target===this) closeChatModal(); });
         $('#chat-modal-container').on('click', e=>e.stopPropagation());
         $('#chat-modal-send-btn').on('click', handleSendMessage);
-        $('#chat-modal-input').on('keypress', function(e){ if(e.which===13 && !e.shiftKey){ e.preventDefault(); handleSendMessage(); }});
+        // Enter 发送，Shift+Enter 换行
+        $('#chat-modal-input').on('keydown', function(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); handleSendMessage(); }});
         // 用户头像点击更换（兜底绑定）
         $('#chat-modal-messages').off('click.vp-avatar2', '.message-avatar[data-sender="user"]').on('click.vp-avatar2', '.message-avatar[data-sender="user"]', function(){
             if (typeof window.openUserAvatarSelector === 'function') window.openUserAvatarSelector();
@@ -5532,6 +5547,8 @@ async function createNewChatSession(){
         // 历史
         try { await migrateChatFromLocalStorage(); } catch{}
         await loadChatHistoryFromDB();
+        // 配置提示
+        ensureChatConfigHint($('#chat-modal-messages'));
         setTimeout(()=>$('#chat-modal-input').focus(), 50);
     };
 
@@ -5584,6 +5601,19 @@ async function createNewChatSession(){
                     const timestamp = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                     const isUser = item.sender === 'user';
 
+    // 轻量 Markdown/链接 格式化（用于AI消息）
+    function formatMarkdown(text){
+        if (typeof text !== 'string') return '';
+        let s = escapeHtml(text);
+        // 链接高亮
+        s = s.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+        // 粗体与斜体（简单版）
+        s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1<\/strong>');
+        s = s.replace(/\*([^*]+)\*/g, '<em>$1<\/em>');
+        // 换行
+        s = s.replace(/\n/g, '<br>');
+        return s;
+    }
                     const messageHtml = `
                         <div class="chat-message ${isUser ? 'user-message' : 'pet-message'}">
                             <div class="message-avatar" data-sender="${isUser ? 'user' : 'pet'}" style="cursor: pointer !important;">${isUser ? (customUserAvatarData ? `<img src="${customUserAvatarData}" alt="用户头像" style="width:100% !important;height:100% !important;object-fit:cover !important;border-radius:50% !important;">` : getFeatherIcon('user', { color: '#ffffff', size: 18 })) : (customAvatarData ? getAvatarContent() : getDefaultPetIcon(18, '#ffd700'))}</div>

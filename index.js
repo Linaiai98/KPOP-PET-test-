@@ -3014,7 +3014,7 @@ ${currentPersonality}
                 console.log(`[${extensionName}] 从配置的API获取模型列表...`);
 
                 // 使用第三方API专用方法获取模型
-                const thirdPartyModels = await getThirdPartyModels();
+                const thirdPartyModels = await (window.getThirdPartyModels ? window.getThirdPartyModels() : []);
                 if (thirdPartyModels.length > 0) {
                     models = thirdPartyModels;
                     console.log(`[${extensionName}] 从第三方API获取到 ${thirdPartyModels.length} 个模型`);

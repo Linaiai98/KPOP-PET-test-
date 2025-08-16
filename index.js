@@ -5087,6 +5087,55 @@ async function createNewChatSession(){
     chatHistory = [];
     try { localStorage.setItem('virtual-pet-chat-history','[]'); } catch{}
     try { await loadChatHistoryFromDB(); } catch{}
+    // 统一注入聊天样式（仅一次）
+    function injectChatStyles(){
+        if (document.getElementById('vp-chat-styles')) return;
+        const css = `
+        #chat-modal-overlay{position:fixed;inset:0;width:100vw;height:100vh;background:rgba(0,0,0,.6);z-index:1000001;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}
+        #chat-modal-container{background:${candyColors.backgroundSolid};color:${candyColors.textPrimary};width:100%;max-width:420px;max-height:72vh;display:flex;flex-direction:column;border:3px solid ${candyColors.border};border-radius:16px;box-shadow:0 20px 40px ${candyColors.shadowGlow},0 8px 16px ${candyColors.shadow};overflow:hidden}
+        .vp-chat-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid ${candyColors.border}}
+        .vp-chat-header h3{margin:0;font-size:1.1em;color:${candyColors.textPrimary}}
+        #chat-modal-messages{flex:1;overflow-y:auto;padding:12px 16px;background:${candyColors.background}}
+        #chat-modal-input-area{display:flex;gap:10px;align-items:center;padding:12px 16px;border-top:1px solid ${candyColors.border};background:${candyColors.backgroundSolid}}
+        #chat-modal-input{flex:1;border:1px solid ${candyColors.border};border-radius:12px;padding:10px 12px;font-size:14px;background:#fff;color:${candyColors.textPrimary};outline:none}
+        #chat-modal-input:focus{border-color:${candyColors.primary};box-shadow:0 0 0 3px rgba(0,0,0,0.04)}
+        #chat-modal-send-btn{background:${candyColors.buttonPrimary};color:${candyColors.textPrimary};border:2px solid ${candyColors.border};border-radius:12px;padding:10px 14px;cursor:pointer;font-weight:600}
+        #chat-modal-send-btn:disabled{opacity:.5;cursor:not-allowed}
+        .chat-message{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px}
+        .chat-message.user-message{flex-direction:row-reverse}
+        .message-avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:${candyColors.screen};border:2px solid #fff;overflow:hidden;flex-shrink:0}
+        .message-bubble{max-width:75%;padding:10px 12px;border:1px solid ${candyColors.border};border-radius:12px;background:#fff;color:${candyColors.textPrimary};box-shadow:0 2px 6px rgba(0,0,0,.06)}
+        .user-message .message-bubble{background:${candyColors.info};color:${candyColors.textWhite}}
+        .message-time{margin-top:4px;font-size:.75em;color:${candyColors.textLight};text-align:right}
+        .typing-dots{display:inline-flex;gap:4px;align-items:center}
+        .typing-dots i{width:6px;height:6px;border-radius:50%;background:${candyColors.textLight};display:inline-block;animation:vpTyping 1.4s infinite ease-in-out}
+        .typing-dots i:nth-child(2){animation-delay:.2s}
+        .typing-dots i:nth-child(3){animation-delay:.4s}
+        @keyframes vpTyping{0%,80%,100%{opacity:.3;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+        `;
+        const style = document.createElement('style');
+        style.id = 'vp-chat-styles';
+        style.textContent = css;
+        document.head.appendChild(style);
+    }
+
+    // 渲染聊天模态的HTML骨架
+    function renderChatModal(){
+        return `
+        <div id="chat-modal-overlay">
+          <div id="chat-modal-container">
+            <div class="vp-chat-header">
+              <h3>💬 与 ${escapeHtml(petData.name)} 聊天</h3>
+              <button id="chat-modal-close-btn" aria-label="关闭" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:${candyColors.textPrimary}">×</button>
+            </div>
+            <div id="chat-modal-messages"></div>
+            <div id="chat-modal-input-area">
+              <input type="text" id="chat-modal-input" placeholder="输入消息..." maxlength="500" />
+              <button id="chat-modal-send-btn">发送</button>
+            </div>
+          </div>
+        </div>`;
+    }
     toastr && toastr.success('已创建新会话');
 }
 
@@ -5465,6 +5514,26 @@ async function createNewChatSession(){
 
         console.log(`[${extensionName}] 聊天模态弹窗已打开`);
     }
+    // 覆盖旧版 openChatModal 为重写版（使用统一样式与模板）
+    openChatModal = async function(){
+        try{ $('#chat-modal-overlay').remove(); }catch{}
+        try{ injectChatStyles(); }catch(e){ console.warn('聊天样式注入失败', e); }
+        $('body').append(renderChatModal());
+        // 事件
+        $('#chat-modal-close-btn').on('click', (e)=>{ e.preventDefault(); e.stopPropagation(); closeChatModal(); });
+        $('#chat-modal-overlay').on('click', function(e){ if(e.target===this) closeChatModal(); });
+        $('#chat-modal-container').on('click', e=>e.stopPropagation());
+        $('#chat-modal-send-btn').on('click', handleSendMessage);
+        $('#chat-modal-input').on('keypress', function(e){ if(e.which===13 && !e.shiftKey){ e.preventDefault(); handleSendMessage(); }});
+        // 用户头像点击更换（兜底绑定）
+        $('#chat-modal-messages').off('click.vp-avatar2', '.message-avatar[data-sender="user"]').on('click.vp-avatar2', '.message-avatar[data-sender="user"]', function(){
+            if (typeof window.openUserAvatarSelector === 'function') window.openUserAvatarSelector();
+        });
+        // 历史
+        try { await migrateChatFromLocalStorage(); } catch{}
+        await loadChatHistoryFromDB();
+        setTimeout(()=>$('#chat-modal-input').focus(), 50);
+    };
 
     /**
      * 关闭聊天模态弹窗 - 学习商店的关闭方式

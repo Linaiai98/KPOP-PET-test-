@@ -84,6 +84,7 @@ jQuery(async () => {
         popup: 10001,       // 弹窗
         overlay: 10000,     // 遮罩层
         notification: 10002 // 通知
+    };
 
     // ============ 初始化管线（第一阶段：守护 + 悬浮按钮优先） ============
     function tryGuard(name, fn){
@@ -4597,6 +4598,33 @@ ${currentPersonality}
     }
 
     // showChatView函数已被移除，现在使用openChatModal()替代
+
+    // 打开扩展设置面板并定位到虚拟宠物系统（如果容器存在）
+    function openSettings() {
+        try {
+            const $target = $("#extensions_settings2").length ? $("#extensions_settings2") : $("#extensions_settings");
+            let $panel = $("#virtual-pet-settings");
+            if ($target.length) {
+                if ($panel.length) {
+                    if (!$panel.closest($target).length) { $target.append($panel); }
+                    const $drawer = $panel.find('.inline-drawer');
+                    const $toggle = $drawer.find('.inline-drawer-toggle');
+                    const $content = $drawer.find('.inline-drawer-content');
+                    if ($content.length && $content.is(':hidden')) { $toggle.trigger('click'); }
+                    $panel[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    try { toastr && toastr.info('已定位到“虚拟宠物系统”扩展设置'); } catch{}
+                    return;
+                }
+            }
+            // 若未找到容器或面板，退回弹窗内设置视图
+            showSettingsView();
+            try { toastr && toastr.info('未找到扩展设置面板，已打开弹窗内的设置视图'); } catch{}
+        } catch (e) {
+            console.warn('openSettings failed, fallback to in-popup settings', e);
+            try { showSettingsView(); } catch{}
+        }
+    }
+
 
 
 

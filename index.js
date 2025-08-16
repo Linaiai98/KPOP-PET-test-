@@ -562,7 +562,7 @@ jQuery(async () => {
                 // If no avatar/img present, ensure we show a neon icon
                 const hasVisual = btn.querySelector('img, svg');
                 if (!hasVisual) {
-                    btn.innerHTML = getFeatherIcon('sparkles', { color: kpopNeonTheme.cyan, size: 22, strokeWidth: 2 });
+                    btn.innerHTML = getFeatherIcon('heart', { color: kpopNeonTheme.cyan, size: 20, strokeWidth: 2 });
                 }
             }
             const popup = document.getElementById(POPUP_ID);
@@ -4323,7 +4323,7 @@ ${currentPersonality}
                 ">`);
             } else {
                 // 显示默认SVG图标
-                button.html(getFeatherIcon('sparkles', { color: '#00F0FF', size: 22, strokeWidth: 2 }));
+                button.html(getFeatherIcon('heart', { color: '#FF69B4', size: 20, strokeWidth: 2 }));
             }
         }
     }
@@ -6074,19 +6074,19 @@ ${currentPersonality}
         // 创建按钮
         console.log(`[${extensionName}] Creating floating button with ID: ${BUTTON_ID}`);
 
-        // 使用内联样式确保按钮可见，强制使用fixed定位（重构为霓虹玻璃风格）
+        // 使用内联样式确保按钮可见，强制使用fixed定位（圆形霓虹玻璃风格）
         const avatarHTML = customAvatarData ?
-            `<img src="${customAvatarData}" alt="宠物头像" style="width: 70% !important; height: 70% !important; object-fit: cover !important; border-radius: 12px !important;">` :
-            getFeatherIcon('sparkles', { color: '#00F0FF', size: 22, strokeWidth: 2 });
+            `<img src="${customAvatarData}" alt="宠物头像" style="width: 70% !important; height: 70% !important; object-fit: cover !important; border-radius: 50% !important;">` :
+            getFeatherIcon('heart', { color: '#FF69B4', size: 20, strokeWidth: 2 });
 
         const buttonHtml = `
             <div id="${BUTTON_ID}" class="kpop-neon" style="
                 position: fixed !important;
                 z-index: ${SAFE_Z_INDEX.button} !important;
                 cursor: grab !important;
-                width: 52px !important;
-                height: 52px !important;
-                border-radius: 14px !important;
+                width: 50px !important;
+                height: 50px !important;
+                border-radius: 50% !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
@@ -6397,15 +6397,15 @@ ${currentPersonality}
 
                         <div class="flex-container">
                             <label for="virtual-pet-personality-select" style="display: block; margin-bottom: 8px; font-weight: bold;">
-                                🎭 宠物人设选择
+                                宠物人设
                             </label>
                             <select id="virtual-pet-personality-select" style="width: 100%; padding: 8px; margin-bottom: 8px; border-radius: 4px;">
-                                <option value="default">🐱 默认 - 高冷但温柔的猫</option>
-                                <option value="cheerful">🐶 活泼 - 热情洋溢的小狗</option>
-                                <option value="elegant">🐉 优雅 - 古典文雅的龙</option>
-                                <option value="shy">🐰 害羞 - 轻声细语的兔子</option>
-                                <option value="smart">🐦 聪明 - 机智幽默的鸟</option>
-                                <option value="custom">✏️ 自定义人设</option>
+                                <option value="default">默认 - 高冷但温柔的猫</option>
+                                <option value="cheerful">活泼 - 热情洋溢的小狗</option>
+                                <option value="elegant">优雅 - 古典文雅的龙</option>
+                                <option value="shy">害羞 - 轻声细语的兔子</option>
+                                <option value="smart">聪明 - 机智幽默的鸟</option>
+                                <option value="custom">自定义人设</option>
                             </select>
                         </div>
 

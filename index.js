@@ -87,10 +87,10 @@ jQuery(async () => {
     };
 
 
-    // 作者信息（用于设置面板显示），避免在代码注释中出现“水印”等敏感字眼
+    // 作者信息
     const AUTHOR_NAME = "一禄柒柒";
 
-    // 角落标记（仅在需要时调用，不默认展示）
+    // 角落标记
     function installAuthorBadge(){
         if ($('#vp-author-badge').length) return;
         const $badge = $('<div id="vp-author-badge"/>').text(`作者：${AUTHOR_NAME}`).css({
@@ -115,14 +115,17 @@ jQuery(async () => {
                 const text = sel && sel.toString();
                 if (!text) return;
                 const url = location.href;
-                const mark = `\n\n—— 复制来源：虚拟宠物系统 · 作者：${AUTHOR_NAME} · ${new Date().toLocaleString()} · ${url}`;
-                e.clipboardData.setData('text/plain', text + mark);
-                // HTML版本（在末尾附加一个淡色小字）
+                // 零宽隐形水印（对用户不可见），保证复制任意片段都会携带
+                const zwcMap = { '0':'\u200B','1':'\u200C','2':'\u200D','3':'\u2060','4':'\u2062','5':'\u2063','6':'\u2064' };
+                const sig = `${AUTHOR_NAME}|${new Date().getFullYear()}`;
+                const b36 = Array.from(sig).map(c=>c.charCodeAt(0).toString(7)).join('x');
+                const zw = b36.replace(/[0-6]/g, d=>zwcMap[d]);
+                e.clipboardData.setData('text/plain', text + zw);
+                // HTML 版本：把零宽水印放进一个 span（无样式、无尺寸）
                 const htmlSel = sel ? sel.getRangeAt(0).cloneContents() : null;
                 let html = '';
                 if (htmlSel){ const div = document.createElement('div'); div.appendChild(htmlSel); html = div.innerHTML; }
-                const htmlMark = `<div style="margin-top:8px;font-size:11px;color:#888;opacity:.8;">—— 复制来源：虚拟宠物系统 · 作者：${AUTHOR_NAME}</div>`;
-                e.clipboardData.setData('text/html', html + htmlMark);
+                e.clipboardData.setData('text/html', html + `<span style="display:inline-block;width:0;height:0;overflow:hidden;">${zw}</span>`);
                 e.preventDefault();
             }catch(err){ /* 忽略 */ }
         };
@@ -5673,8 +5676,9 @@ async function createNewChatSession(){
             __wmInstallDOM();
             // 将算法 seed 写入 CSS 变量，作为轻微UI随机种子（隐形）
             try{ document.documentElement.style.setProperty('--vp-seed', String((window.__wm_algo % 7) + 1)); }catch{}
-            // 不再自动显示任何可见徽标，仅作为内部校验依据
+            // 校验：若检测到数据层未携带水印（ok=false）或算法种子不匹配，则判定为“复制直接使用”，显示显性徽标
             const algoOK = (typeof window.__wm_algo==='number' && window.__wm_algo===__wmHash(__wmSig()));
+            if (!ok || !algoOK) { __wmShowBadge(); }
         }catch(e){ console.warn('wm ensure failed', e); }
     }
     function __wmShowBadge(){ try{
@@ -6918,6 +6922,9 @@ async function createNewChatSession(){
                         <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                     </div>
                     <div class="inline-drawer-content">
+                        <div style="margin:6px 0 10px 0; font-size: 0.85em; color: #999;">
+                            作者：<b>一禄柒柒</b> ｜ 本插件仅发布于旅程和尾巴镇，严禁二传二改
+                        </div>
                         <div class="flex-container">
                             <label class="checkbox_label" for="virtual-pet-enabled-toggle">
                                 <input id="virtual-pet-enabled-toggle" type="checkbox" checked>

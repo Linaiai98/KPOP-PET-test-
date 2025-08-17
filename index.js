@@ -8729,13 +8729,19 @@ async function createNewChatSession(){
     function generateShopItems(category) {
         let itemsHtml = '';
 
-        Object.entries(SHOP_ITEMS).forEach(([itemId, item]) => {
+        Object.entries(getShopItems()).forEach(([itemId, item]) => {
             if (category === 'all' || item.category === category) {
                 const canAfford = (petData.coins || 100) >= item.price;
                 const ownedCount = petData.inventory[itemId] || 0;
 
                 itemsHtml += `
                     <div class="shop-item" style="
+
+        // 统一获取商店物品，避免 SHOP_ITEMS 初始化顺序导致的 TDZ 问题
+        function getShopItems(){
+            try{ return window.shopItems || window['SHOP_ITEMS'] || {}; }catch{ return {}; }
+        }
+
                         background: rgba(255,255,255,0.08) !important;
                         border-radius: 12px !important;
                         padding: 14px !important;
@@ -8776,7 +8782,7 @@ async function createNewChatSession(){
     }
 
     window.buyItem = function(itemId) {
-        const item = SHOP_ITEMS[itemId];
+        const item = getShopItems()[itemId];
         if (!item) return;
 
         if ((petData.coins || 100) < item.price) {
@@ -8983,7 +8989,7 @@ async function createNewChatSession(){
         // 显示背包物品
         Object.entries(inventory).forEach(([itemId, quantity]) => {
             if (quantity > 0) {
-                const item = SHOP_ITEMS[itemId];
+                const item = getShopItems()[itemId];
                 if (item) {
                     const $item = $(`
                         <div class="backpack-item" data-item-id="${itemId}" style="
@@ -9047,7 +9053,7 @@ async function createNewChatSession(){
 
     // 使用背包物品
     function useBackpackItem(itemId) {
-        const item = SHOP_ITEMS[itemId];
+        const item = getShopItems()[itemId];
         const quantity = petData.inventory[itemId] || 0;
 
         if (quantity <= 0) {
@@ -9937,6 +9943,10 @@ async function createNewChatSession(){
 
             console.log(`测试后快乐值: ${Math.round(afterHappiness)}`);
             console.log(`快乐值变化: ${Math.round(change * 100) / 100} (预期: -0.8)`);
+
+    // 暴露给全局，保证 getShopItems() 能拿到即使导入顺序不同
+    window.shopItems = SHOP_ITEMS;
+
             console.log(`衰减是否正常: ${Math.abs(change + 0.8) < 0.1 ? '✅' : '❌'}`);
 
             // 恢复原始时间戳

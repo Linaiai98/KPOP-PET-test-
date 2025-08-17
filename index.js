@@ -8500,14 +8500,21 @@ async function createNewChatSession(){
     function injectShopStyles(){
         if (document.getElementById('vp-shop-styles')) return;
         const css = `
-        #shop-modal{z-index:1000001 !important; background: rgba(0,0,0,.65) !important}
-        #shop-modal .shop-panel{padding-bottom: max(20px, env(safe-area-inset-bottom)) !important; border:1px solid rgba(255,255,255,.2) !important; backdrop-filter: blur(8px) !important}
-        #shop-modal .shop-header h2{margin:0 !important}
-        #shop-modal .shop-category-btn{transition:all .15s ease !important}
-        #shop-modal .shop-category-btn.active{background:#ffd700 !important;color:#1d1d1f !important}
-        #shop-modal .shop-category-btn:not(.active){background:rgba(255,255,255,.18) !important;color:#fff !important}
+        #shop-modal{z-index:1000001 !important; background: rgba(5,8,20,.72) !important}
+        #shop-modal .shop-panel{padding-bottom: max(20px, env(safe-area-inset-bottom)) !important; border:1px solid rgba(255,255,255,.18) !important; backdrop-filter: blur(10px) !important; background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)) !important}
+        #shop-modal .shop-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,.12)}
+        #shop-modal .shop-title{display:flex;align-items:center;gap:10px;color:#fff;font-weight:800;letter-spacing:.5px}
+        #shop-modal .shop-coins{display:flex;align-items:center;gap:6px;color:#ffd700;font-weight:800;background:rgba(255,215,0,.1);border:1px solid rgba(255,215,0,.35);padding:6px 10px;border-radius:999px}
+        #shop-modal .shop-tools{display:flex;align-items:center;gap:8px}
+        #shop-modal .shop-search{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:6px 10px}
+        #shop-modal .shop-search input{background:transparent;border:none;outline:none;color:#fff;font-size:12px;width:140px}
+        #shop-modal .shop-sort{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:6px 10px;color:#eaf4ff}
+        #shop-modal .shop-categories{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+        #shop-modal .shop-category-btn{transition:all .15s ease; padding:8px 14px;border-radius:999px;border:none}
+        #shop-modal .shop-category-btn.active{background:#ffd700;color:#1d1d1f}
+        #shop-modal .shop-category-btn:not(.active){background:rgba(255,255,255,.18);color:#fff}
         #shop-modal .shop-item{transition:transform .15s ease, box-shadow .15s ease}
-        #shop-modal .shop-item:hover{transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,.25)}
+        #shop-modal .shop-item:hover{transform: translateY(-2px); box-shadow: 0 10px 24px rgba(0,0,0,.28)}
         #shop-modal .shop-item button{transition:opacity .15s ease, transform .06s ease}
         #shop-modal .shop-item button:active{transform: scale(.98)}
         `;
@@ -8741,6 +8748,15 @@ async function createNewChatSession(){
         function getShopItems(){
             try{ return window.shopItems || window['SHOP_ITEMS'] || {}; }catch{ return {}; }
         }
+        function resolveIconName(item){
+            if (!item) return 'gift';
+            if (item.icon && typeof item.icon === 'string') return item.icon;
+            const v = String(item.emoji || '').trim();
+            const charMap = { '⏰':'clock', '💎':'gem', '🥤':'coffee', '🎩':'award', '🎀':'gift' };
+            if (charMap[v]) return charMap[v];
+            // 若 emoji 值本身是我们已内置的图标名
+            return /^[a-z0-9-]+$/.test(v) ? v : 'gift';
+        }
 
                         background: rgba(255,255,255,0.08) !important;
                         border-radius: 12px !important;
@@ -8755,7 +8771,7 @@ async function createNewChatSession(){
                         align-items: center !important;
                     ">
                         <div style="grid-row: 1 / span 2; display:flex; align-items:center; justify-content:center; width:56px; height:56px; border-radius:10px; background: rgba(255,255,255,0.12);">
-                            ${/^[a-z0-9-]+$/.test(String(item.emoji)) ? getFeatherIcon(item.emoji, { color: '#ffd700', size: 28 }) : `<span style="font-size:24px;line-height:1">${escapeHtml(String(item.emoji))}</span>`}
+                            ${getFeatherIcon(resolveIconName(item), { color: '#ffd700', size: 28 })}
                         </div>
                         <div style="font-weight: 700; font-size: 14px;">${item.name}</div>
                         <div style="color: #ffd700; font-weight: 700; display:flex; align-items:center; gap:6px;">${getFeatherIcon('star', { color: '#ffd700', size: 14 })} ${item.price}</div>

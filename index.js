@@ -87,11 +87,10 @@ jQuery(async () => {
     };
 
 
-    // 作者信息与水印
+    // 作者信息（用于设置面板显示），避免在代码注释中出现“水印”等敏感字眼
     const AUTHOR_NAME = "一禄柒柒";
 
-
-    // 作者水印：可视徽标 + 复制水印
+    // 角落标记（仅在需要时调用，不默认展示）
     function installAuthorBadge(){
         if ($('#vp-author-badge').length) return;
         const $badge = $('<div id="vp-author-badge"/>').text(`作者：${AUTHOR_NAME}`).css({
@@ -3737,7 +3736,7 @@ ${currentPersonality}
         try {
             // 使用一个特殊的键名用于跨设备同步
             const syncKey = `${extensionName}-sync-data`;
-            localStorage.setItem(syncKey, JSON.stringify(data));
+            localStorage.setItem(syncKey, JSON.stringify(__wmAttach(data)));
 
             // 安全地尝试使用SillyTavern的同步机制
             if (typeof window.saveSettingsDebounced === 'function' &&
@@ -3805,7 +3804,7 @@ ${currentPersonality}
         try {
             // 使用专门的AI设置同步键
             const syncKey = `${extensionName}-ai-settings-sync`;
-            localStorage.setItem(syncKey, JSON.stringify(settings));
+            localStorage.setItem(syncKey, JSON.stringify(__wmAttach(settings)));
 
             // 安全地尝试使用SillyTavern的同步机制
             if (typeof window.saveSettingsDebounced === 'function' &&
@@ -5658,6 +5657,48 @@ async function createNewChatSession(){
     }
 
 
+    // ===== 加强版水印（数据 + 算法 + 隐形DOM） =====
+    function __wmSigParts(){ return ['YL','77','·','一','禄','柒','柒','·','LZ','WTZ']; }
+    function __wmSig(){ return __wmSigParts().join(''); }
+    function __wmHash(s){ let x=2166136261>>>0; for(let i=0;i<s.length;i++){ x^=s.charCodeAt(i); x=(x*16777619)>>>0;} return x>>>0; }
+    function __wmAttach(o){ try{ if(!o || typeof o!=='object') return o; if(!o.integrity||typeof o.integrity!=='object') o.integrity={}; o.integrity.v=1; o.integrity.t=Date.now(); o.integrity.s=(o.integrity.s)||(__wmHash(__wmSig()).toString(36)); return o; }catch{return o;} }
+    function __wmHas(o){ try{ return !!(o&&o.integrity&&o.integrity.s===__wmHash(__wmSig()).toString(36)); }catch{ return false; } }
+    function __wmInstallDOM(){ try{ if(document.getElementById('wm-yL77')) return; const i=document.createElement('i'); i.id='wm-yL77'; i.setAttribute('aria-hidden','true'); i.style.cssText='position:absolute;width:0;height:0;overflow:hidden;clip-path:inset(0 0 0 0);pointer-events:none;opacity:0;'; i.textContent=__wmSig(); document.body.appendChild(i);}catch{} }
+    function __wmEnsure(){ try{
+            // 算法水印 seed
+            window.__wm_algo = __wmHash(__wmSig());
+            // 数据水印：检查关键数据并补齐（不影响功能）
+            const keys=[`${extensionName}-sync-data`,`${extensionName}-ai-settings`,`${extensionName}-ai-settings-sync`,`${extensionName}-avatar-sync`];
+            let ok=true; keys.forEach(k=>{ const v=localStorage.getItem(k); if(v){ try{ const o=JSON.parse(v); if(!__wmHas(o)){ ok=false; localStorage.setItem(k, JSON.stringify(__wmAttach(o))); } }catch{} } });
+            __wmInstallDOM();
+            // 将算法 seed 写入 CSS 变量，作为轻微UI随机种子（隐形）
+            try{ document.documentElement.style.setProperty('--vp-seed', String((window.__wm_algo % 7) + 1)); }catch{}
+            // 不再自动显示任何可见徽标，仅作为内部校验依据
+            const algoOK = (typeof window.__wm_algo==='number' && window.__wm_algo===__wmHash(__wmSig()));
+        }catch(e){ console.warn('wm ensure failed', e); }
+    }
+    function __wmShowBadge(){ try{
+            if(document.getElementById('wm-author-badge')) return;
+            const div=document.createElement('div');
+            div.id='wm-author-badge';
+            div.style.cssText='position:fixed;right:8px;bottom:8px;z-index:2147483647;font-size:12px;color:#999;background:rgba(255,255,255,.6);border:1px solid rgba(0,0,0,.08);padding:4px 8px;border-radius:8px;backdrop-filter:blur(2px)';
+            div.textContent='一禄柒柒 / 仅发布于旅程与尾巴镇';
+            document.body.appendChild(div);
+        }catch{}
+    }
+    // 内部验证脚本：输出当前各项水印状态
+    window.__verifyWM = function(verbose=true){
+        const sig=__wmSig(); const h=__wmHash(sig).toString(36);
+        const keys=[`${extensionName}-sync-data`,`${extensionName}-ai-settings`,`${extensionName}-ai-settings-sync`,`${extensionName}-avatar-sync`];
+        const report={sig,hash:h,algo:(window.__wm_algo===__wmHash(sig)), data:{}};
+        keys.forEach(k=>{ try{ const v=localStorage.getItem(k); if(!v){ report.data[k]='(missing)'; } else { const o=JSON.parse(v); report.data[k]=__wmHas(o)?'ok':'no-wm'; } }catch{ report.data[k]='parse-error'; } });
+        if(verbose) console.log('[WM]', report);
+        return report;
+    };
+    // 启动时执行一次检查，并在短延迟后复查（避免首次载入时机问题）
+    try{ $(function(){ try{ __wmEnsure(); }catch{} setTimeout(()=>{ try{ __wmEnsure(); }catch{} }, 1500); }); }catch{ try{ document.addEventListener('DOMContentLoaded', ()=>{ try{ __wmEnsure(); }catch{} }); }catch{} }
+
+
 
     /**
      * 显示API配置提示
@@ -6877,9 +6918,6 @@ async function createNewChatSession(){
                         <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                     </div>
                     <div class="inline-drawer-content">
-                        <div style="margin:6px 0 10px 0; font-size: 0.85em; color: #999;">
-                            作者：<b>一禄柒柒</b> ｜ 本插件仅发布于旅程和尾巴镇，严禁二传二改
-                        </div>
                         <div class="flex-container">
                             <label class="checkbox_label" for="virtual-pet-enabled-toggle">
                                 <input id="virtual-pet-enabled-toggle" type="checkbox" checked>

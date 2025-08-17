@@ -5797,7 +5797,7 @@ async function createNewChatSession(){
                         font-size: 1.3em !important;
                         font-weight: bold !important;
                         margin-bottom: 4px !important;
-                        color: #ffffff !important;
+                        color: ${candyColors.textPrimary} !important;
                     ">${escapeHtml(petData.name)}</div>
                     <div class="pet-level" style="
                         color: ${candyColors.textSecondary} !important;
@@ -6877,6 +6877,9 @@ async function createNewChatSession(){
                         <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                     </div>
                     <div class="inline-drawer-content">
+                        <div style="margin:6px 0 10px 0; font-size: 0.85em; color: #999;">
+                            作者：<b>一禄柒柒</b> ｜ 本插件仅发布于旅程和尾巴镇，严禁二传二改
+                        </div>
                         <div class="flex-container">
                             <label class="checkbox_label" for="virtual-pet-enabled-toggle">
                                 <input id="virtual-pet-enabled-toggle" type="checkbox" checked>
@@ -12263,7 +12266,7 @@ async function createNewChatSession(){
                         ${customAvatarData ? getAvatarContent() : getDefaultPetIcon(56, '#ffd700')}
                     </div>
                     <div class="pet-title-wrap" style="width: 100% !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important;">
-                        <div class="pet-name" style="font-size: 1.2em !important; font-weight: bold !important; margin-bottom: 3px !important;">${escapeHtml(petData.name)}</div>
+                        <div class="pet-name" style="font-size: 1.2em !important; font-weight: bold !important; margin-bottom: 3px !important; color: ${candyColors.textPrimary} !important;">${escapeHtml(petData.name)}</div>
                         <div class="pet-level" style="color: ${candyColors.textSecondary} !important; font-size: 1em !important; width: 100% !important; text-align: center !important; font-weight: normal !important;">
                             ${petData.isAlive ? `${LIFE_STAGES[petData.lifeStage]?.name || '未知'} Lv.${petData.level}` : `已死亡`}
                         </div>

@@ -8500,12 +8500,16 @@ async function createNewChatSession(){
     function injectShopStyles(){
         if (document.getElementById('vp-shop-styles')) return;
         const css = `
-        #shop-modal{z-index:1000001 !important}
-        #shop-modal .shop-panel{padding-bottom: max(20px, env(safe-area-inset-bottom)) !important}
+        #shop-modal{z-index:1000001 !important; background: rgba(0,0,0,.65) !important}
+        #shop-modal .shop-panel{padding-bottom: max(20px, env(safe-area-inset-bottom)) !important; border:1px solid rgba(255,255,255,.2) !important; backdrop-filter: blur(8px) !important}
         #shop-modal .shop-header h2{margin:0 !important}
         #shop-modal .shop-category-btn{transition:all .15s ease !important}
-        #shop-modal .shop-category-btn.active{background:#ffd700 !important;color:#333 !important}
-        #shop-modal .shop-category-btn:not(.active){background:rgba(255,255,255,.2) !important;color:#fff !important}
+        #shop-modal .shop-category-btn.active{background:#ffd700 !important;color:#1d1d1f !important}
+        #shop-modal .shop-category-btn:not(.active){background:rgba(255,255,255,.18) !important;color:#fff !important}
+        #shop-modal .shop-item{transition:transform .15s ease, box-shadow .15s ease}
+        #shop-modal .shop-item:hover{transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,.25)}
+        #shop-modal .shop-item button{transition:opacity .15s ease, transform .06s ease}
+        #shop-modal .shop-item button:active{transform: scale(.98)}
         `;
         const style=document.createElement('style'); style.id='vp-shop-styles'; style.textContent=css; document.head.appendChild(style);
     }
@@ -8653,17 +8657,7 @@ async function createNewChatSession(){
                         <!-- items will be rendered after modal mounts -->
                     </div>
 
-                    <div style="text-align: center !important;">
-                        <button id="shop-close-btn" style="
-                            padding: 10px 30px !important;
-                            background: #f04747 !important;
-                            color: white !important;
-                            border: none !important;
-                            border-radius: 25px !important;
-                            cursor: pointer !important;
-                            font-size: 1em !important;
-                        ">关闭商店</button>
-                    </div>
+
                 </div>
             </div>
         // 延后渲染商品列表，避免 SHOP_ITEMS 定义顺序问题
@@ -8677,13 +8671,12 @@ async function createNewChatSession(){
         }, 0);
 
         `);
-        // 关闭按钮事件与Esc关闭（使用本地函数，避免未初始化引用）
+        // 关闭逻辑与Esc关闭（不再使用可见按钮）
         function closeShopLocal(){
             try{ $('#shop-modal').remove(); }catch{}
             $(document).off('keydown.shopEsc');
             setTimeout(()=>{ try{ $("#shop-modal,#chat-modal-overlay,.virtual-pet-popup-overlay,#virtual-pet-popup-overlay").filter(':hidden').remove(); }catch{} }, 0);
         }
-        $('#shop-close-btn').on('click', closeShopLocal);
         $(document).off('keydown.shopEsc').on('keydown.shopEsc', function(e){ if(e.key==='Escape'){ closeShopLocal(); }});
 
         // 更新金币显示函数
@@ -8703,7 +8696,7 @@ async function createNewChatSession(){
             petData.inventory[itemId] = (petData.inventory[itemId] || 0) + 1;
             savePetData();
             // 刷新当前分类与金币显示
-            const currentCategory = ($('.shop-category-btn').filter(function(){ return $(this).css('background-color') === 'rgb(255, 215, 0)'; }).data('category')) || 'all';
+            const currentCategory = ($('.shop-category-btn.active').data('category')) || 'all';
             $('#shop-items').html(generateShopItems(currentCategory));
             updateShopCoinDisplay();
             toastr.success(`购买成功！${item.name} 已添加到背包。`);
@@ -8713,20 +8706,16 @@ async function createNewChatSession(){
 
 
         try { $('#shop-modal').remove(); } catch{}
+        try{ injectShopStyles(); }catch{}
         $('body').append(shopModal);
 
-        // 绑定分类按钮事件
+        // 绑定分类按钮事件（使用 active 类控制样式）
         $('.shop-category-btn').on('click', function() {
             const category = $(this).data('category');
-            $('.shop-category-btn').css({
-                'background': 'rgba(255,255,255,0.2)',
-                'color': 'white'
-            });
-            $(this).css({
-                'background': '#ffd700',
-                'color': '#333'
-            });
+            $('.shop-category-btn').removeClass('active');
+            $(this).addClass('active');
             $('#shop-items').html(generateShopItems(category));
+            try{ updateShopCoinDisplay(); }catch{}
         });
 
         // 点击外部关闭
@@ -8747,29 +8736,25 @@ async function createNewChatSession(){
 
                 itemsHtml += `
                     <div class="shop-item" style="
-                        background: rgba(255,255,255,0.1) !important;
-                        border-radius: 10px !important;
-                        padding: 15px !important;
-                        text-align: center !important;
-                        border: 2px solid ${canAfford ? 'rgba(255,215,0,0.5)' : 'rgba(255,255,255,0.2)'} !important;
+                        background: rgba(255,255,255,0.08) !important;
+                        border-radius: 12px !important;
+                        padding: 14px !important;
+                        text-align: left !important;
+                        border: 1px solid ${canAfford ? 'rgba(255,215,0,0.6)' : 'rgba(255,255,255,0.18)'} !important;
+                        backdrop-filter: blur(4px) !important;
+                        display: grid !important;
+                        grid-template-columns: 56px 1fr auto !important;
+                        grid-template-rows: auto auto !important;
+                        gap: 8px 12px !important;
+                        align-items: center !important;
                     ">
-                        <div style="font-size: 2em !important; margin-bottom: 8px !important; display: flex !important; justify-content: center !important; align-items: center !important;">
-                            ${getFeatherIcon(item.emoji, { color: '#ffd700', size: 32 })}
+                        <div style="grid-row: 1 / span 2; display:flex; align-items:center; justify-content:center; width:56px; height:56px; border-radius:10px; background: rgba(255,255,255,0.12);">
+                            ${/^[a-z0-9-]+$/.test(String(item.emoji)) ? getFeatherIcon(item.emoji, { color: '#ffd700', size: 28 }) : `<span style="font-size:24px;line-height:1">${escapeHtml(String(item.emoji))}</span>`}
                         </div>
-                        <div style="font-weight: bold !important; margin-bottom: 5px !important;">
-                            ${item.name}
-                        </div>
-                        <div style="font-size: 0.8em !important; color: rgba(255,255,255,0.8) !important; margin-bottom: 8px !important; min-height: 32px !important;">
-                            ${item.description}
-                        </div>
-                        <div style="color: #ffd700 !important; font-weight: bold !important; margin-bottom: 8px !important; display: flex !important; align-items: center !important; justify-content: center !important; gap: 6px !important;">
-                            ${getFeatherIcon('star', { color: '#ffd700', size: 16 })} ${item.price} 金币
-                        </div>
-                        ${ownedCount > 0 ? `
-                        <div style="color: #4ecdc4 !important; font-size: 0.8em !important; margin-bottom: 8px !important;">
-                            拥有: ${ownedCount}
-                        </div>
-                        ` : ''}
+                        <div style="font-weight: 700; font-size: 14px;">${item.name}</div>
+                        <div style="color: #ffd700; font-weight: 700; display:flex; align-items:center; gap:6px;">${getFeatherIcon('star', { color: '#ffd700', size: 14 })} ${item.price}</div>
+                        <div style="grid-column: 2 / span 2; color: rgba(255,255,255,0.85); font-size: 12px; min-height:32px;">${item.description}</div>
+                        ${ownedCount > 0 ? `<div style="grid-column: 2 / span 1; color:#4ecdc4; font-size:12px;">拥有: ${ownedCount}</div>` : '<div></div>'}
                         <button onclick="buyItem('${itemId}')" style="
                             padding: 8px 16px !important;
                             background: ${canAfford ? '#43b581' : '#99aab5'} !important;

@@ -8590,7 +8590,7 @@ async function createNewChatSession(){
         const isMobile = window.innerWidth <= 768;
         const containerMaxWidth = isMobile ? '300px' : '380px'; // 与主UI保持一致
 
-        // 创建商店弹窗 - 使用糖果色配色方案
+        // 创建商店弹窗 - 极简中性色主题
         const shopModal = $(`
             <div id="shop-modal" style="
                 position: fixed !important;
@@ -8598,43 +8598,34 @@ async function createNewChatSession(){
                 left: 0 !important;
                 width: 100vw !important;
                 height: 100vh !important;
-                background: radial-gradient(1200px 800px at 10% 10%, rgba(255,107,107,0.15), transparent 40%),
-                           radial-gradient(1200px 800px at 90% 20%, rgba(72,209,204,0.12), transparent 45%),
-                           rgba(0,0,0,0.75) !important;
+                background: rgba(0,0,0,0.6) !important;
                 z-index: 1000000 !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
-                padding: 20px !important;
+                padding: 16px !important;
                 box-sizing: border-box !important;
-                backdrop-filter: blur(8px) !important;
+                backdrop-filter: blur(2px) !important;
             ">
-                <div style="
-                    background: linear-gradient(135deg, ${candyColors.backgroundSolid} 0%, ${candyColors.screen} 50%, ${candyColors.screenDark} 100%) !important;
-                    border: 2px solid ${candyColors.borderAccent} !important;
-                    border-radius: 20px !important;
-                    padding: 24px !important;
+                <div class="shop-modal" style="
+                    background: #1e2128 !important;
+                    border: 1px solid rgba(255,255,255,0.08) !important;
+                    border-radius: 14px !important;
+                    padding: 18px !important;
                     max-width: ${containerMaxWidth} !important;
                     width: 100% !important;
                     max-height: 75vh !important;
                     overflow-y: auto !important;
-                    color: ${candyColors.textPrimary} !important;
-                    box-shadow: 0 25px 50px rgba(255,107,107,0.25),
-                               0 15px 35px rgba(0,0,0,0.15),
-                               inset 0 1px 0 rgba(255,255,255,0.1) !important;
-                    backdrop-filter: blur(12px) !important;
+                    color: #eaf4ff !important;
+                    box-shadow: 0 20px 50px rgba(0,0,0,0.45) !important;
                 ">
                     <div style="
                         display: flex !important;
                         justify-content: space-between !important;
                         align-items: center !important;
-                        margin-bottom: 24px !important;
-                        border-bottom: 2px solid ${candyColors.borderAccent} !important;
-                        padding-bottom: 20px !important;
-                        background: linear-gradient(90deg, rgba(255,107,107,0.1) 0%, rgba(72,209,204,0.1) 100%) !important;
-                        border-radius: 12px 12px 0 0 !important;
-                        padding: 20px 20px 20px 20px !important;
-                        margin: -24px -24px 24px -24px !important;
+                        margin-bottom: 16px !important;
+                        border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+                        padding-bottom: 12px !important;
                     ">
                         <h2 style="
                             margin: 0 !important;
@@ -8748,26 +8739,11 @@ async function createNewChatSession(){
                         gap: 15px !important;
                         margin-bottom: 20px !important;
                     ">
-                        ${generateShopItems('all')}
+
                     </div>
 
-                    <div style="text-align: center !important; margin-top: 20px !important;">
-                        <button onclick="closeShopModal()" style="
-                            padding: 12px 32px !important;
-                            background: linear-gradient(135deg, ${candyColors.textMuted}, ${candyColors.textSecondary}) !important;
-                            color: ${candyColors.textWhite} !important;
-                            border: 2px solid rgba(255,255,255,0.2) !important;
-                            border-radius: 30px !important;
-                            cursor: pointer !important;
-                            font-size: 1em !important;
-                            font-weight: bold !important;
-                            box-shadow: 0 4px 15px rgba(0,0,0,0.2) !important;
-                            transition: all 0.3s ease !important;
-                            display: inline-flex !important;
-                            align-items: center !important;
-                            gap: 8px !important;
-                        ">${getFeatherIcon('x', { color: 'currentColor', size: 18 })} 关闭商店</button>
-                    </div>
+                        <!-- 空容器，稍后渲染商品列表 -->
+
                 </div>
             </div>
         `);
@@ -8778,24 +8754,39 @@ async function createNewChatSession(){
         $('.shop-category-btn').on('click', function() {
             const category = $(this).data('category');
 
-            // 重置所有按钮样式
-            $('.shop-category-btn').css({
-                'background': 'rgba(255,255,255,0.15)',
-                'color': candyColors.textPrimary,
-                'border': '2px solid rgba(255,255,255,0.2)',
-                'box-shadow': 'none'
-            });
+            // 重置所有按钮样式并清除选中标记
+            $('.shop-category-btn')
+                .removeAttr('data-selected')
+                .css({
+                    'background': 'rgba(255,255,255,0.15)',
+                    'color': candyColors.textPrimary,
+                    'border': '2px solid rgba(255,255,255,0.2)',
+                    'box-shadow': 'none'
+                });
 
-            // 设置当前选中按钮样式
-            $(this).css({
-                'background': `linear-gradient(135deg, ${candyColors.buttonPrimary}, ${candyColors.buttonSecondary})`,
-                'color': candyColors.textWhite,
-                'border': `2px solid ${candyColors.borderAccent}`,
-                'box-shadow': '0 4px 15px rgba(255, 107, 107, 0.3)'
-            });
+            // 设置当前选中按钮样式并打标
+            $(this)
+                .attr('data-selected', 'true')
+                .css({
+                    'background': `linear-gradient(135deg, ${candyColors.buttonPrimary}, ${candyColors.buttonSecondary})`,
+                    'color': candyColors.textWhite,
+                    'border': `2px solid ${candyColors.borderAccent}`,
+                    'box-shadow': '0 4px 15px rgba(255, 107, 107, 0.3)'
+                });
 
+            // 渲染商品
             $('#shop-items').html(generateShopItems(category));
         });
+
+        // 初始化默认分类：渲染“全部”
+        const $allBtn = $('.shop-category-btn[data-category="all"]');
+        if ($allBtn.length) {
+            $allBtn.attr('data-selected', 'true');
+            $allBtn.trigger('click');
+        } else {
+            $('#shop-items').html(generateShopItems('all'));
+        }
+
 
         // 点击外部关闭
         shopModal.on('click', function(e) {

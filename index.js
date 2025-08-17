@@ -8573,19 +8573,37 @@ async function createNewChatSession(){
         }
     };
 
+	    // 暴露到全局，避免作用域问题
+	    window.SHOP_ITEMS = SHOP_ITEMS;
+
+
     // 安全访问商店物品，避免初始化顺序导致的引用错误
     function getShopItems() {
         try {
-            return SHOP_ITEMS;
+            if (typeof SHOP_ITEMS !== 'undefined' && SHOP_ITEMS && Object.keys(SHOP_ITEMS).length) {
+                return SHOP_ITEMS;
+            }
         } catch (e) {
-            console.warn('[virtual-pet-system] SHOP_ITEMS 暂未初始化，使用空集合占位');
-            return {};
+            // 忽略 ReferenceError
         }
+        if (typeof window !== 'undefined' && window.SHOP_ITEMS && Object.keys(window.SHOP_ITEMS).length) {
+            return window.SHOP_ITEMS;
+        }
+        console.warn('[virtual-pet-system] SHOP_ITEMS 未就绪，返回空集合');
+        return {};
     }
 
 
+
+            // 安全获取金币与库存，避免未初始化导致渲染中断
+            const safePet = (typeof window !== 'undefined' && window.petData) ? window.petData : {};
+            const coins = (typeof safePet.coins === 'number') ? safePet.coins : 100;
+
     // 商店系统功能
     function showShopModal() {
+        // 内部关闭函数，避免依赖全局
+        const closeNow = () => { try { $('#shop-modal').remove(); } catch(e){} };
+
         // 检测移动端状态
         const isMobile = window.innerWidth <= 768;
         const containerMaxWidth = isMobile ? '300px' : '380px'; // 与主UI保持一致
@@ -8649,7 +8667,7 @@ async function createNewChatSession(){
                             border: 2px solid ${candyColors.gold} !important;
                             font-size: 1.1em !important;
                         ">
-                            ${getFeatherIcon('star', { color: candyColors.gold, size: 20 })} ${petData.coins || 100} 金币
+                            ${getFeatherIcon('star', { color: candyColors.gold, size: 20 })} ${(typeof window !== 'undefined' && window.petData && typeof window.petData.coins === 'number') ? window.petData.coins : 100} 金币
                         </div>
                     </div>
 
@@ -8750,12 +8768,12 @@ async function createNewChatSession(){
 
         $('body').append(shopModal);
 
-        // 绑定分类按钮事件
-        $('.shop-category-btn').on('click', function() {
+        // 绑定分类按钮事件（作用域限定在当前弹窗）
+        shopModal.find('.shop-category-btn').on('click', function() {
             const category = $(this).data('category');
 
             // 重置所有按钮样式并清除选中标记
-            $('.shop-category-btn')
+            shopModal.find('.shop-category-btn')
                 .removeAttr('data-selected')
                 .css({
                     'background': 'rgba(255,255,255,0.12)',
@@ -8774,24 +8792,24 @@ async function createNewChatSession(){
                     'box-shadow': '0 6px 16px rgba(0,0,0,0.25)'
                 });
 
-            // 渲染商品
-            $('#shop-items').html(generateShopItems(category));
+            // 渲染商品（限定当前弹窗作用域）
+            shopModal.find('#shop-items').html(generateShopItems(category));
         });
 
         // 初始化默认分类：渲染“全部”
-        const $allBtn = $('.shop-category-btn[data-category="all"]');
+        const $allBtn = shopModal.find('.shop-category-btn[data-category="all"]');
         if ($allBtn.length) {
             $allBtn.attr('data-selected', 'true');
             $allBtn.trigger('click');
+            shopModal.find('#shop-items').html(generateShopItems('all'));
         } else {
-            $('#shop-items').html(generateShopItems('all'));
+            shopModal.find('#shop-items').html(generateShopItems('all'));
         }
 
-
-        // 点击外部关闭
+        // 点击空白（非内容区域）关闭
         shopModal.on('click', function(e) {
-            if (e.target === this) {
-                closeShopModal();
+            if (e.target && e.target.id === 'shop-modal') {
+                (typeof closeNow === 'function' ? closeNow() : window.closeShopModal && window.closeShopModal());
             }
         });
     }
@@ -8799,10 +8817,14 @@ async function createNewChatSession(){
     function generateShopItems(category) {
         let itemsHtml = '';
 
+        const data = (typeof window !== 'undefined' && window.petData) ? window.petData : {};
+        const coins = (typeof data.coins === 'number') ? data.coins : 100;
+        const inventory = data.inventory || {};
+
         Object.entries(getShopItems()).forEach(([itemId, item]) => {
             if (category === 'all' || item.category === category) {
-                const canAfford = (petData.coins || 100) >= item.price;
-                const ownedCount = petData.inventory[itemId] || 0;
+                const canAfford = coins >= item.price;
+                const ownedCount = inventory[itemId] || 0;
 
                 itemsHtml += `
                     <div class="shop-item" style="
@@ -8918,13 +8940,12 @@ async function createNewChatSession(){
         // 保存数据
         savePetData();
 
-        // 更新商店显示
-        const currentCategory = $('.shop-category-btn').filter(function() {
-            return $(this).css('background-color') === 'rgb(255, 215, 0)' || $(this).css('background') === '#ffd700';
-        }).data('category') || 'all';
+        // 更新商店显示（作用域限定到当前弹窗）
+        const $modal = $('#shop-modal');
+        const currentCategory = $modal.find('.shop-category-btn[data-selected="true"]').data('category') || 'all';
 
-        $('#shop-items').html(generateShopItems(currentCategory));
-        $('.shop-modal h2').next().html(`${getFeatherIcon('star', { color: '#ffd700', size: 18 })} ${petData.coins} 金币`);
+        $modal.find('#shop-items').html(generateShopItems(currentCategory));
+        $modal.find('h2').next().html(`${getFeatherIcon('star', { color: candyColors.gold, size: 18 })} ${petData.coins} 金币`);
 
         toastr.success(`购买成功！${item.name} 已添加到背包。`);
     };

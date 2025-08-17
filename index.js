@@ -8650,7 +8650,7 @@ async function createNewChatSession(){
                         gap: 15px !important;
                         margin-bottom: 20px !important;
                     ">
-                        ${generateShopItems('all')}
+                        <!-- items will be rendered after modal mounts -->
                     </div>
 
                     <div style="text-align: center !important;">
@@ -8666,6 +8666,16 @@ async function createNewChatSession(){
                     </div>
                 </div>
             </div>
+        // 延后渲染商品列表，避免 SHOP_ITEMS 定义顺序问题
+        setTimeout(()=>{
+            try{
+                $('#shop-items').html(generateShopItems('all'));
+                // 默认高亮“全部”分类
+                $('.shop-category-btn').removeClass('active');
+                $('.shop-category-btn[data-category="all"]').addClass('active');
+            }catch(e){ console.warn('render shop items failed', e); }
+        }, 0);
+
         `);
         // 关闭按钮事件与Esc关闭
         $('#shop-close-btn').on('click', closeShopModal);
@@ -8692,6 +8702,8 @@ async function createNewChatSession(){
             $('#shop-items').html(generateShopItems(currentCategory));
             updateShopCoinDisplay();
             toastr.success(`购买成功！${item.name} 已添加到背包。`);
+            // 背包实时联动：若背包已打开则刷新背包列表
+            try{ if ($('#backpack-modal').length){ renderBackpackItems(); } }catch{}
         };
 
 

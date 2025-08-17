@@ -494,6 +494,9 @@ jQuery(async () => {
             'star': '<polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"></polygon>',
             'award': '<circle cx="12" cy="8" r="7"></circle><polyline points="8.21,13.89 7,23 12,20 17,23 15.79,13.88"></polyline>',
             'trending-up': '<polyline points="23,6 13.5,15.5 8.5,10.5 1,18"></polyline><polyline points="17,6 23,6 23,12"></polyline>',
+            'grid': '<rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect>',
+            'circle': '<circle cx="12" cy="12" r="10"></circle>',
+            'cpu': '<rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line>',
 
             // 商店物品图标
             'apple': '<path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06Z"></path><path d="M10 2c1 .5 2 2 2 5"></path>',
@@ -8467,7 +8470,7 @@ async function createNewChatSession(){
         const isMobile = window.innerWidth <= 768;
         const containerMaxWidth = isMobile ? '300px' : '380px'; // 与主UI保持一致
 
-        // 创建商店弹窗
+        // 创建商店弹窗 - 使用糖果色配色方案
         const shopModal = $(`
             <div id="shop-modal" style="
                 position: fixed !important;
@@ -8475,90 +8478,147 @@ async function createNewChatSession(){
                 left: 0 !important;
                 width: 100vw !important;
                 height: 100vh !important;
-                background-color: rgba(0, 0, 0, 0.8) !important;
+                background: radial-gradient(1200px 800px at 10% 10%, rgba(255,107,107,0.15), transparent 40%),
+                           radial-gradient(1200px 800px at 90% 20%, rgba(72,209,204,0.12), transparent 45%),
+                           rgba(0,0,0,0.75) !important;
                 z-index: 1000000 !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
                 padding: 20px !important;
                 box-sizing: border-box !important;
+                backdrop-filter: blur(8px) !important;
             ">
                 <div style="
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-                    border-radius: 15px !important;
-                    padding: 20px !important;
+                    background: linear-gradient(135deg, ${candyColors.backgroundSolid} 0%, ${candyColors.screen} 50%, ${candyColors.screenDark} 100%) !important;
+                    border: 2px solid ${candyColors.borderAccent} !important;
+                    border-radius: 20px !important;
+                    padding: 24px !important;
                     max-width: ${containerMaxWidth} !important;
                     width: 100% !important;
-                    max-height: 70vh !important;
+                    max-height: 75vh !important;
                     overflow-y: auto !important;
-                    color: white !important;
-                    box-shadow: 0 20px 40px rgba(0,0,0,0.3) !important;
+                    color: ${candyColors.textPrimary} !important;
+                    box-shadow: 0 25px 50px rgba(255,107,107,0.25),
+                               0 15px 35px rgba(0,0,0,0.15),
+                               inset 0 1px 0 rgba(255,255,255,0.1) !important;
+                    backdrop-filter: blur(12px) !important;
                 ">
                     <div style="
                         display: flex !important;
                         justify-content: space-between !important;
                         align-items: center !important;
-                        margin-bottom: 20px !important;
-                        border-bottom: 1px solid rgba(255,255,255,0.2) !important;
-                        padding-bottom: 15px !important;
+                        margin-bottom: 24px !important;
+                        border-bottom: 2px solid ${candyColors.borderAccent} !important;
+                        padding-bottom: 20px !important;
+                        background: linear-gradient(90deg, rgba(255,107,107,0.1) 0%, rgba(72,209,204,0.1) 100%) !important;
+                        border-radius: 12px 12px 0 0 !important;
+                        padding: 20px 20px 20px 20px !important;
+                        margin: -24px -24px 24px -24px !important;
                     ">
-                        <h2 style="margin: 0 !important; color: #ffd700 !important; display: flex !important; align-items: center !important; gap: 8px !important;">${getFeatherIcon('shopping-bag', { color: '#ffd700', size: 24 })} 宠物商店</h2>
-                        <div style="color: #ffd700 !important; font-weight: bold !important; display: flex !important; align-items: center !important; gap: 6px !important;">
-                            ${getFeatherIcon('star', { color: '#ffd700', size: 18 })} ${petData.coins || 100} 金币
+                        <h2 style="
+                            margin: 0 !important;
+                            color: ${candyColors.textPrimary} !important;
+                            display: flex !important;
+                            align-items: center !important;
+                            gap: 10px !important;
+                            font-size: 1.4em !important;
+                            font-weight: bold !important;
+                            text-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+                        ">${getFeatherIcon('shopping-bag', { color: candyColors.buttonPrimary, size: 28 })} 宠物商店</h2>
+                        <div style="
+                            color: ${candyColors.gold} !important;
+                            font-weight: bold !important;
+                            display: flex !important;
+                            align-items: center !important;
+                            gap: 8px !important;
+                            background: rgba(255,215,0,0.1) !important;
+                            padding: 8px 16px !important;
+                            border-radius: 20px !important;
+                            border: 2px solid ${candyColors.gold} !important;
+                            font-size: 1.1em !important;
+                        ">
+                            ${getFeatherIcon('star', { color: candyColors.gold, size: 20 })} ${petData.coins || 100} 金币
                         </div>
                     </div>
 
                     <div id="shop-categories" style="
                         display: flex !important;
-                        gap: 10px !important;
-                        margin-bottom: 15px !important;
+                        gap: 8px !important;
+                        margin-bottom: 20px !important;
                         flex-wrap: wrap !important;
+                        justify-content: center !important;
                     ">
                         <button class="shop-category-btn" data-category="all" style="
-                            padding: 8px 15px !important;
-                            background: #ffd700 !important;
-                            color: #333 !important;
-                            border: none !important;
-                            border-radius: 20px !important;
+                            padding: 10px 16px !important;
+                            background: linear-gradient(135deg, ${candyColors.buttonPrimary}, ${candyColors.buttonSecondary}) !important;
+                            color: ${candyColors.textWhite} !important;
+                            border: 2px solid ${candyColors.borderAccent} !important;
+                            border-radius: 25px !important;
                             cursor: pointer !important;
                             font-size: 0.9em !important;
                             font-weight: bold !important;
-                        ">全部</button>
+                            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3) !important;
+                            transition: all 0.3s ease !important;
+                            display: flex !important;
+                            align-items: center !important;
+                            gap: 6px !important;
+                        ">${getFeatherIcon('grid', { color: 'currentColor', size: 16 })} 全部</button>
                         <button class="shop-category-btn" data-category="food" style="
-                            padding: 8px 15px !important;
-                            background: rgba(255,255,255,0.2) !important;
-                            color: white !important;
-                            border: none !important;
-                            border-radius: 20px !important;
+                            padding: 10px 16px !important;
+                            background: rgba(255,255,255,0.15) !important;
+                            color: ${candyColors.textPrimary} !important;
+                            border: 2px solid rgba(255,255,255,0.2) !important;
+                            border-radius: 25px !important;
                             cursor: pointer !important;
                             font-size: 0.9em !important;
-                        ">🍎 食物</button>
+                            font-weight: bold !important;
+                            transition: all 0.3s ease !important;
+                            display: flex !important;
+                            align-items: center !important;
+                            gap: 6px !important;
+                        ">${getFeatherIcon('apple', { color: 'currentColor', size: 16 })} 食物</button>
                         <button class="shop-category-btn" data-category="medicine" style="
-                            padding: 8px 15px !important;
-                            background: rgba(255,255,255,0.2) !important;
-                            color: white !important;
-                            border: none !important;
-                            border-radius: 20px !important;
+                            padding: 10px 16px !important;
+                            background: rgba(255,255,255,0.15) !important;
+                            color: ${candyColors.textPrimary} !important;
+                            border: 2px solid rgba(255,255,255,0.2) !important;
+                            border-radius: 25px !important;
                             cursor: pointer !important;
                             font-size: 0.9em !important;
-                        ">💊 药品</button>
+                            font-weight: bold !important;
+                            transition: all 0.3s ease !important;
+                            display: flex !important;
+                            align-items: center !important;
+                            gap: 6px !important;
+                        ">${getFeatherIcon('pill', { color: 'currentColor', size: 16 })} 药品</button>
                         <button class="shop-category-btn" data-category="toy" style="
-                            padding: 8px 15px !important;
-                            background: rgba(255,255,255,0.2) !important;
-                            color: white !important;
-                            border: none !important;
-                            border-radius: 20px !important;
+                            padding: 10px 16px !important;
+                            background: rgba(255,255,255,0.15) !important;
+                            color: ${candyColors.textPrimary} !important;
+                            border: 2px solid rgba(255,255,255,0.2) !important;
+                            border-radius: 25px !important;
                             cursor: pointer !important;
                             font-size: 0.9em !important;
-                        ">🎮 玩具</button>
+                            font-weight: bold !important;
+                            transition: all 0.3s ease !important;
+                            display: flex !important;
+                            align-items: center !important;
+                            gap: 6px !important;
+                        ">${getFeatherIcon('gamepad-2', { color: 'currentColor', size: 16 })} 玩具</button>
                         <button class="shop-category-btn" data-category="special" style="
-                            padding: 8px 15px !important;
-                            background: rgba(255,255,255,0.2) !important;
-                            color: white !important;
-                            border: none !important;
-                            border-radius: 20px !important;
+                            padding: 10px 16px !important;
+                            background: rgba(255,255,255,0.15) !important;
+                            color: ${candyColors.textPrimary} !important;
+                            border: 2px solid rgba(255,255,255,0.2) !important;
+                            border-radius: 25px !important;
                             cursor: pointer !important;
                             font-size: 0.9em !important;
+                            font-weight: bold !important;
+                            transition: all 0.3s ease !important;
+                            display: flex !important;
+                            align-items: center !important;
+                            gap: 6px !important;
                         ">${getFeatherIcon('sparkles', { color: 'currentColor', size: 16 })} 特殊</button>
                     </div>
 
@@ -8571,16 +8631,22 @@ async function createNewChatSession(){
                         ${generateShopItems('all')}
                     </div>
 
-                    <div style="text-align: center !important;">
+                    <div style="text-align: center !important; margin-top: 20px !important;">
                         <button onclick="closeShopModal()" style="
-                            padding: 10px 30px !important;
-                            background: #f04747 !important;
-                            color: white !important;
-                            border: none !important;
-                            border-radius: 25px !important;
+                            padding: 12px 32px !important;
+                            background: linear-gradient(135deg, ${candyColors.textMuted}, ${candyColors.textSecondary}) !important;
+                            color: ${candyColors.textWhite} !important;
+                            border: 2px solid rgba(255,255,255,0.2) !important;
+                            border-radius: 30px !important;
                             cursor: pointer !important;
                             font-size: 1em !important;
-                        ">关闭商店</button>
+                            font-weight: bold !important;
+                            box-shadow: 0 4px 15px rgba(0,0,0,0.2) !important;
+                            transition: all 0.3s ease !important;
+                            display: inline-flex !important;
+                            align-items: center !important;
+                            gap: 8px !important;
+                        ">${getFeatherIcon('x', { color: 'currentColor', size: 18 })} 关闭商店</button>
                     </div>
                 </div>
             </div>
@@ -8591,14 +8657,23 @@ async function createNewChatSession(){
         // 绑定分类按钮事件
         $('.shop-category-btn').on('click', function() {
             const category = $(this).data('category');
+
+            // 重置所有按钮样式
             $('.shop-category-btn').css({
-                'background': 'rgba(255,255,255,0.2)',
-                'color': 'white'
+                'background': 'rgba(255,255,255,0.15)',
+                'color': candyColors.textPrimary,
+                'border': '2px solid rgba(255,255,255,0.2)',
+                'box-shadow': 'none'
             });
+
+            // 设置当前选中按钮样式
             $(this).css({
-                'background': '#ffd700',
-                'color': '#333'
+                'background': `linear-gradient(135deg, ${candyColors.buttonPrimary}, ${candyColors.buttonSecondary})`,
+                'color': candyColors.textWhite,
+                'border': `2px solid ${candyColors.borderAccent}`,
+                'box-shadow': '0 4px 15px rgba(255, 107, 107, 0.3)'
             });
+
             $('#shop-items').html(generateShopItems(category));
         });
 
@@ -8620,38 +8695,84 @@ async function createNewChatSession(){
 
                 itemsHtml += `
                     <div class="shop-item" style="
-                        background: rgba(255,255,255,0.1) !important;
-                        border-radius: 10px !important;
-                        padding: 15px !important;
+                        background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%) !important;
+                        border-radius: 16px !important;
+                        padding: 20px !important;
                         text-align: center !important;
-                        border: 2px solid ${canAfford ? 'rgba(255,215,0,0.5)' : 'rgba(255,255,255,0.2)'} !important;
+                        border: 2px solid ${canAfford ? candyColors.borderAccent : 'rgba(255,255,255,0.2)'} !important;
+                        box-shadow: 0 8px 25px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.1) !important;
+                        transition: all 0.3s ease !important;
+                        position: relative !important;
+                        overflow: hidden !important;
                     ">
-                        <div style="font-size: 2em !important; margin-bottom: 8px !important; display: flex !important; justify-content: center !important; align-items: center !important;">
-                            ${getFeatherIcon(item.emoji, { color: '#ffd700', size: 32 })}
+                        <div style="
+                            margin-bottom: 12px !important;
+                            display: flex !important;
+                            justify-content: center !important;
+                            align-items: center !important;
+                            background: ${canAfford ? 'linear-gradient(135deg, ' + candyColors.buttonPrimary + ', ' + candyColors.buttonSecondary + ')' : 'rgba(255,255,255,0.1)'} !important;
+                            border-radius: 50% !important;
+                            width: 60px !important;
+                            height: 60px !important;
+                            margin: 0 auto 12px auto !important;
+                            box-shadow: 0 4px 15px rgba(0,0,0,0.2) !important;
+                        ">
+                            ${getFeatherIcon(item.icon, { color: canAfford ? '#FFFFFF' : '#999999', size: 28 })}
                         </div>
-                        <div style="font-weight: bold !important; margin-bottom: 5px !important;">
+                        <div style="
+                            font-weight: bold !important;
+                            margin-bottom: 8px !important;
+                            color: ${candyColors.textPrimary} !important;
+                            font-size: 1.1em !important;
+                        ">
                             ${item.name}
                         </div>
-                        <div style="font-size: 0.8em !important; color: rgba(255,255,255,0.8) !important; margin-bottom: 8px !important; min-height: 32px !important;">
+                        <div style="
+                            font-size: 0.85em !important;
+                            color: ${candyColors.textSecondary} !important;
+                            margin-bottom: 12px !important;
+                            min-height: 40px !important;
+                            line-height: 1.4 !important;
+                        ">
                             ${item.description}
                         </div>
-                        <div style="color: #ffd700 !important; font-weight: bold !important; margin-bottom: 8px !important; display: flex !important; align-items: center !important; justify-content: center !important; gap: 6px !important;">
-                            ${getFeatherIcon('star', { color: '#ffd700', size: 16 })} ${item.price} 金币
+                        <div style="
+                            color: ${candyColors.gold} !important;
+                            font-weight: bold !important;
+                            margin-bottom: 12px !important;
+                            display: flex !important;
+                            align-items: center !important;
+                            justify-content: center !important;
+                            gap: 6px !important;
+                            font-size: 1.05em !important;
+                        ">
+                            ${getFeatherIcon('star', { color: candyColors.gold, size: 16 })} ${item.price} 金币
                         </div>
                         ${ownedCount > 0 ? `
-                        <div style="color: #4ecdc4 !important; font-size: 0.8em !important; margin-bottom: 8px !important;">
+                        <div style="
+                            color: ${candyColors.success} !important;
+                            font-size: 0.8em !important;
+                            margin-bottom: 12px !important;
+                            background: rgba(76, 175, 80, 0.1) !important;
+                            padding: 4px 8px !important;
+                            border-radius: 12px !important;
+                            display: inline-block !important;
+                        ">
                             拥有: ${ownedCount}
                         </div>
                         ` : ''}
                         <button onclick="buyItem('${itemId}')" style="
-                            padding: 8px 16px !important;
-                            background: ${canAfford ? '#43b581' : '#99aab5'} !important;
-                            color: white !important;
+                            padding: 12px 20px !important;
+                            background: ${canAfford ? 'linear-gradient(135deg, ' + candyColors.buttonPrimary + ', ' + candyColors.buttonSecondary + ')' : candyColors.textMuted} !important;
+                            color: ${canAfford ? candyColors.textWhite : candyColors.textSecondary} !important;
                             border: none !important;
-                            border-radius: 20px !important;
+                            border-radius: 25px !important;
                             cursor: ${canAfford ? 'pointer' : 'not-allowed'} !important;
-                            font-size: 0.9em !important;
+                            font-size: 0.95em !important;
+                            font-weight: bold !important;
                             width: 100% !important;
+                            box-shadow: ${canAfford ? '0 4px 15px rgba(255, 107, 107, 0.3)' : 'none'} !important;
+                            transition: all 0.3s ease !important;
                         " ${!canAfford ? 'disabled' : ''}>
                             ${canAfford ? '购买' : '金币不足'}
                         </button>
@@ -9660,7 +9781,7 @@ async function createNewChatSession(){
         // 食物类
         basic_food: {
             name: "基础食物",
-            emoji: "apple",
+            icon: "apple",
             price: 10,
             category: "food",
             description: "普通的食物，恢复饱食度",
@@ -9668,7 +9789,7 @@ async function createNewChatSession(){
         },
         premium_food: {
             name: "高级食物",
-            emoji: "sandwich",
+            icon: "sandwich",
             price: 25,
             category: "food",
             description: "营养丰富的食物，恢复饱食度和健康",
@@ -9676,7 +9797,7 @@ async function createNewChatSession(){
         },
         special_treat: {
             name: "特殊零食",
-            emoji: "cake",
+            icon: "cake",
             price: 40,
             category: "food",
             description: "美味的零食，大幅提升快乐度",
@@ -9686,7 +9807,7 @@ async function createNewChatSession(){
         // 药品类
         medicine: {
             name: "感冒药",
-            emoji: "pill",
+            icon: "pill",
             price: 30,
             category: "medicine",
             description: "治疗轻微疾病",
@@ -9694,7 +9815,7 @@ async function createNewChatSession(){
         },
         super_medicine: {
             name: "特效药",
-            emoji: "syringe",
+            icon: "syringe",
             price: 80,
             category: "medicine",
             description: "治疗严重疾病，完全恢复健康",
@@ -9704,7 +9825,7 @@ async function createNewChatSession(){
         // 玩具类
         ball: {
             name: "小球",
-            emoji: "ball",
+            icon: "circle",
             price: 20,
             category: "toy",
             description: "简单的玩具，提升快乐度和纪律",
@@ -9712,7 +9833,7 @@ async function createNewChatSession(){
         },
         robot_toy: {
             name: "机器人玩具",
-            emoji: "robot",
+            icon: "cpu",
             price: 60,
             category: "toy",
             description: "高科技玩具，大幅提升纪律和快乐",
@@ -9722,7 +9843,7 @@ async function createNewChatSession(){
         // 特殊道具类
         time_capsule: {
             name: "时间胶囊",
-            emoji: "⏰",
+            icon: "clock",
             price: 100,
             category: "special",
             description: "暂停时间流逝2小时，紧急时使用",
@@ -9730,7 +9851,7 @@ async function createNewChatSession(){
         },
         revival_stone: {
             name: "复活石",
-            emoji: "💎",
+            icon: "gem",
             price: 200,
             category: "special",
             description: "死亡后可以复活宠物，但会降低最大健康值",
@@ -9738,7 +9859,7 @@ async function createNewChatSession(){
         },
         energy_drink: {
             name: "能量饮料",
-            emoji: "🥤",
+            icon: "zap",
             price: 35,
             category: "special",
             description: "快速恢复精力，但会增加疾病风险",
@@ -9748,7 +9869,7 @@ async function createNewChatSession(){
         // 装饰类
         hat: {
             name: "小帽子",
-            emoji: "🎩",
+            icon: "award",
             price: 50,
             category: "decoration",
             description: "可爱的装饰，持续提升快乐度",
@@ -9756,7 +9877,7 @@ async function createNewChatSession(){
         },
         bow_tie: {
             name: "蝴蝶结",
-            emoji: "🎀",
+            icon: "gift",
             price: 45,
             category: "decoration",
             description: "优雅的装饰，提升纪律值",

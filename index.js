@@ -8517,6 +8517,12 @@ async function createNewChatSession(){
         #shop-modal .shop-item:hover{transform: translateY(-2px); box-shadow: 0 10px 24px rgba(0,0,0,.28)}
         #shop-modal .shop-item button{transition:opacity .15s ease, transform .06s ease}
         #shop-modal .shop-item button:active{transform: scale(.98)}
+        #shop-modal .items-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:8px 0 16px}
+        #shop-modal .item-card{position:relative;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:14px;display:grid;grid-template-columns:56px 1fr auto;grid-template-rows:auto auto;gap:8px 12px;align-items:center;backdrop-filter:blur(4px)}
+        #shop-modal .buy-btn{padding:8px 12px;background:#43b581;color:#fff;border:none;border-radius:20px;cursor:pointer}
+        #shop-modal .buy-btn[disabled]{background:#99aab5;cursor:not-allowed}
+        #shop-modal .owned-badge{position:absolute;top:6px;right:6px;background:rgba(78,205,196,.9);color:#fff;font-size:11px;padding:2px 6px;border-radius:999px}
+        #shop-modal .empty{color:rgba(255,255,255,.6);text-align:center;padding:16px}
         `;
         const style=document.createElement('style'); style.id='vp-shop-styles'; style.textContent=css; document.head.appendChild(style);
     }
@@ -8554,6 +8560,20 @@ async function createNewChatSession(){
     };
 
 
+
+        // Shop helpers (define early to avoid TDZ and missing refs)
+        window.getShopItems = function(){ try{ return window.shopItems || window['SHOP_ITEMS'] || {}; }catch{ return {}; } };
+        window.resolveIconName = function(item){
+            try{
+                if (!item) return 'gift';
+                if (item.icon && typeof item.icon === 'string') return item.icon;
+                const v = String(item.emoji || '').trim();
+                const charMap = { '⏰':'clock', '💎':'gem', '🥤':'coffee', '🎩':'award', '🎀':'gift' };
+                if (charMap[v]) return charMap[v];
+                return /^[a-z0-9-]+$/.test(v) ? v : 'gift';
+            }catch{ return 'gift'; }
+        };
+
     // 商店系统功能
     function showShopModal() {
         // 检测移动端状态
@@ -8577,103 +8597,44 @@ async function createNewChatSession(){
                 box-sizing: border-box !important;
             ">
                 <div class="shop-panel" style="
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-                    border-radius: 15px !important;
-                    padding: 20px !important;
+                    border-radius: 16px !important;
+                    padding: 16px !important;
                     max-width: ${containerMaxWidth} !important;
                     width: 100% !important;
-                    max-height: 70vh !important;
+                    max-height: 72vh !important;
                     overflow-y: auto !important;
                     color: white !important;
-                    box-shadow: 0 20px 40px rgba(0,0,0,0.3) !important;
                 ">
-                    <div class="shop-header" style="
-                        display: flex !important;
-                        justify-content: space-between !important;
-                        align-items: center !important;
-                        margin-bottom: 20px !important;
-                        border-bottom: 1px solid rgba(255,255,255,0.2) !important;
-                        padding-bottom: 15px !important;
-                    ">
-                        <h2 style="margin: 0 !important; color: #ffd700 !important; display: flex !important; align-items: center !important; gap: 8px !important;">${getFeatherIcon('shopping-bag', { color: '#ffd700', size: 24 })} 宠物商店</h2>
-                        <div id="shop-coin-display" style="color: #ffd700 !important; font-weight: bold !important; display: flex !important; align-items: center !important; gap: 6px !important;">
-                            ${getFeatherIcon('star', { color: '#ffd700', size: 18 })} ${petData.coins || 100} 金币
-                        </div>
+                    <div class="shop-header">
+                        <div class="shop-title">${getFeatherIcon('shopping-bag', { color: '#ffd700', size: 24 })} 宠物商店</div>
+                        <div id="shop-coin-display" class="shop-coins">${getFeatherIcon('star', { color: '#ffd700', size: 16 })} ${petData.coins || 100} 金币</div>
                     </div>
 
-                    <div id="shop-categories" style="
-                        display: flex !important;
-                        gap: 10px !important;
-                        margin-bottom: 15px !important;
-                        flex-wrap: wrap !important;
-                    ">
-                        <button class="shop-category-btn" data-category="all" style="
-                            padding: 8px 15px !important;
-                            background: #ffd700 !important;
-                            color: #333 !important;
-                            border: none !important;
-                            border-radius: 20px !important;
-                            cursor: pointer !important;
-                            font-size: 0.9em !important;
-                            font-weight: bold !important;
-                        ">全部</button>
-                        <button class="shop-category-btn" data-category="food" style="
-                            padding: 8px 15px !important;
-                            background: rgba(255,255,255,0.2) !important;
-                            color: white !important;
-                            border: none !important;
-                            border-radius: 20px !important;
-                            cursor: pointer !important;
-                            font-size: 0.9em !important;
-                        ">🍎 食物</button>
-                        <button class="shop-category-btn" data-category="medicine" style="
-                            padding: 8px 15px !important;
-                            background: rgba(255,255,255,0.2) !important;
-                            color: white !important;
-                            border: none !important;
-                            border-radius: 20px !important;
-                            cursor: pointer !important;
-                            font-size: 0.9em !important;
-                        ">💊 药品</button>
-                        <button class="shop-category-btn" data-category="toy" style="
-                            padding: 8px 15px !important;
-                            background: rgba(255,255,255,0.2) !important;
-                            color: white !important;
-                            border: none !important;
-                            border-radius: 20px !important;
-                            cursor: pointer !important;
-                            font-size: 0.9em !important;
-                        ">🎮 玩具</button>
-                        <button class="shop-category-btn" data-category="special" style="
-                            padding: 8px 15px !important;
-                            background: rgba(255,255,255,0.2) !important;
-                            color: white !important;
-                            border: none !important;
-                            border-radius: 20px !important;
-                            cursor: pointer !important;
-                            font-size: 0.9em !important;
-                        ">${getFeatherIcon('sparkles', { color: 'currentColor', size: 16 })} 特殊</button>
+                    <div class="shop-tools" style="margin-top:10px;">
+                        <div class="shop-search">${getFeatherIcon('search', { color: '#eaf4ff', size: 14 })}<input id="shop-search-input" placeholder="搜索商品..." /></div>
+                        <select id="shop-sort" class="shop-sort">
+                            <option value="rec">推荐</option>
+                            <option value="price-asc">价格从低到高</option>
+                            <option value="price-desc">价格从高到低</option>
+                        </select>
                     </div>
 
-                    <div id="shop-items" style="
-                        display: grid !important;
-                        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important;
-                        gap: 15px !important;
-                        margin-bottom: 20px !important;
-                    ">
-                        <!-- items will be rendered after modal mounts -->
+                    <div id="shop-categories" class="shop-categories">
+                        <button class="shop-category-btn active" data-category="all">全部</button>
+                        <button class="shop-category-btn" data-category="food">${getFeatherIcon('apple', { color: '#fff', size: 16 })} 食物</button>
+                        <button class="shop-category-btn" data-category="medicine">${getFeatherIcon('pill', { color: '#fff', size: 16 })} 药品</button>
+                        <button class="shop-category-btn" data-category="toy">${getFeatherIcon('gamepad-2', { color: '#fff', size: 16 })} 玩具</button>
+                        <button class="shop-category-btn" data-category="special">${getFeatherIcon('sparkles', { color: '#fff', size: 16 })} 特殊</button>
+                        <button class="shop-category-btn" data-category="decoration">${getFeatherIcon('award', { color: '#fff', size: 16 })} 装饰</button>
                     </div>
 
-
+                    <div id="shop-items" class="items-grid"></div>
                 </div>
             </div>
         // 延后渲染商品列表，避免 SHOP_ITEMS 定义顺序问题
         setTimeout(()=>{
             try{
                 $('#shop-items').html(generateShopItems('all'));
-                // 默认高亮“全部”分类
-                $('.shop-category-btn').removeClass('active');
-                $('.shop-category-btn[data-category="all"]').addClass('active');
             }catch(e){ console.warn('render shop items failed', e); }
         }, 0);
 

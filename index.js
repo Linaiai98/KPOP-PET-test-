@@ -8464,8 +8464,8 @@ async function createNewChatSession(){
     };
 
 
-    // 商店物品定义 - 必须在 generateShopItems 函数之前定义
-    const SHOP_ITEMS = {
+    // 商店物品定义 - 改为全局，避免作用域/TDZ问题
+    window.SHOP_ITEMS = {
         // 食物类
         basic_food: {
             name: "基础食物",
@@ -8577,20 +8577,9 @@ async function createNewChatSession(){
 	    window.SHOP_ITEMS = SHOP_ITEMS;
 
 
-    // 安全访问商店物品，避免初始化顺序导致的引用错误
+    // 安全访问商店物品（统一从全局读取）
     function getShopItems() {
-        try {
-            if (typeof SHOP_ITEMS !== 'undefined' && SHOP_ITEMS && Object.keys(SHOP_ITEMS).length) {
-                return SHOP_ITEMS;
-            }
-        } catch (e) {
-            // 忽略 ReferenceError
-        }
-        if (typeof window !== 'undefined' && window.SHOP_ITEMS && Object.keys(window.SHOP_ITEMS).length) {
-            return window.SHOP_ITEMS;
-        }
-        console.warn('[virtual-pet-system] SHOP_ITEMS 未就绪，返回空集合');
-        return {};
+        return (typeof window !== 'undefined' && window.SHOP_ITEMS) ? window.SHOP_ITEMS : {};
     }
 
 

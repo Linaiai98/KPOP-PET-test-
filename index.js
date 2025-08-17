@@ -8573,13 +8573,28 @@ async function createNewChatSession(){
         }
     };
 
-	    // 暴露到全局，避免作用域问题
-	    window.SHOP_ITEMS = SHOP_ITEMS;
 
 
-    // 安全访问商店物品（统一从全局读取）
+    // 安全访问商店物品（统一从全局读取；未就绪时懒加载默认物品）
     function getShopItems() {
-        return (typeof window !== 'undefined' && window.SHOP_ITEMS) ? window.SHOP_ITEMS : {};
+        if (typeof window === 'undefined') return {};
+        if (!window.SHOP_ITEMS || !Object.keys(window.SHOP_ITEMS).length) {
+            window.SHOP_ITEMS = {
+                basic_food: { name: "基础食物", icon: "apple", price: 10, category: "food", description: "普通的食物，恢复饱食度", effect: { hunger: 15, happiness: 2 } },
+                premium_food: { name: "高级食物", icon: "sandwich", price: 25, category: "food", description: "营养丰富的食物，恢复饱食度和健康", effect: { hunger: 25, happiness: 5, health: 5 } },
+                special_treat: { name: "特殊零食", icon: "cake", price: 40, category: "food", description: "美味的零食，大幅提升快乐度", effect: { hunger: 10, happiness: 20 } },
+                medicine: { name: "感冒药", icon: "pill", price: 30, category: "medicine", description: "治疗轻微疾病", effect: { sickness: -20, health: 10 } },
+                super_medicine: { name: "特效药", icon: "syringe", price: 80, category: "medicine", description: "治疗严重疾病，完全恢复健康", effect: { sickness: -50, health: 30 } },
+                ball: { name: "小球", icon: "circle", price: 20, category: "toy", description: "简单的玩具，提升快乐度和纪律", effect: { happiness: 10, discipline: 5, energy: -5 } },
+                robot_toy: { name: "机器人玩具", icon: "cpu", price: 60, category: "toy", description: "高科技玩具，大幅提升纪律和快乐", effect: { happiness: 15, discipline: 15, energy: -3 } },
+                time_capsule: { name: "时间胶囊", icon: "clock", price: 100, category: "special", description: "暂停时间流逝2小时，紧急时使用", effect: { timeFreeze: 2 } },
+                revival_stone: { name: "复活石", icon: "gem", price: 200, category: "special", description: "死亡后可以复活宠物，但会降低最大健康值", effect: { revive: true, healthPenalty: 20 } },
+                energy_drink: { name: "能量饮料", icon: "zap", price: 35, category: "special", description: "快速恢复精力，但会增加疾病风险", effect: { energy: 30, sickness: 5 } },
+                hat: { name: "小帽子", icon: "award", price: 50, category: "decoration", description: "可爱的装饰，持续提升快乐度", effect: { happinessBonus: 2 } },
+                bow_tie: { name: "蝴蝶结", icon: "gift", price: 45, category: "decoration", description: "优雅的装饰，提升纪律值", effect: { disciplineBonus: 3 } },
+            };
+        }
+        return window.SHOP_ITEMS;
     }
 
 

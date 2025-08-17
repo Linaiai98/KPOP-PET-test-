@@ -8677,9 +8677,14 @@ async function createNewChatSession(){
         }, 0);
 
         `);
-        // 关闭按钮事件与Esc关闭
-        $('#shop-close-btn').on('click', closeShopModal);
-        $(document).off('keydown.shopEsc').on('keydown.shopEsc', function(e){ if(e.key==='Escape'){ closeShopModal(); }});
+        // 关闭按钮事件与Esc关闭（使用本地函数，避免未初始化引用）
+        function closeShopLocal(){
+            try{ $('#shop-modal').remove(); }catch{}
+            $(document).off('keydown.shopEsc');
+            setTimeout(()=>{ try{ $("#shop-modal,#chat-modal-overlay,.virtual-pet-popup-overlay,#virtual-pet-popup-overlay").filter(':hidden').remove(); }catch{} }, 0);
+        }
+        $('#shop-close-btn').on('click', closeShopLocal);
+        $(document).off('keydown.shopEsc').on('keydown.shopEsc', function(e){ if(e.key==='Escape'){ closeShopLocal(); }});
 
         // 更新金币显示函数
         function updateShopCoinDisplay(){ try{ $('#shop-coin-display').html(`${getFeatherIcon('star', { color: '#ffd700', size: 18 })} ${petData.coins || 0} 金币`);}catch{} }
@@ -8727,7 +8732,7 @@ async function createNewChatSession(){
         // 点击外部关闭
         shopModal.on('click', function(e) {
             if (e.target === this) {
-                closeShopModal();
+                closeShopLocal();
             }
         });
     }

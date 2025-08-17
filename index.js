@@ -8704,19 +8704,7 @@ async function createNewChatSession(){
                 itemsHtml += `
                     <div class="shop-item" style="
 
-        // 统一获取商店物品，避免 SHOP_ITEMS 初始化顺序导致的 TDZ 问题
-        function getShopItems(){
-            try{ return window.shopItems || window['SHOP_ITEMS'] || {}; }catch{ return {}; }
-        }
-        function resolveIconName(item){
-            if (!item) return 'gift';
-            if (item.icon && typeof item.icon === 'string') return item.icon;
-            const v = String(item.emoji || '').trim();
-            const charMap = { '⏰':'clock', '💎':'gem', '🥤':'coffee', '🎩':'award', '🎀':'gift' };
-            if (charMap[v]) return charMap[v];
-            // 若 emoji 值本身是我们已内置的图标名
-            return /^[a-z0-9-]+$/.test(v) ? v : 'gift';
-        }
+
 
                         background: rgba(255,255,255,0.08) !important;
                         border-radius: 12px !important;

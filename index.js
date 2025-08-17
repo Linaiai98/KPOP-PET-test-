@@ -8496,6 +8496,19 @@ async function createNewChatSession(){
                 const local = JSON.parse(localData);
                 const sync = typeof syncData === 'object' ? syncData : JSON.parse(syncData);
                 const localTime = local.lastSyncTime || 0;
+    // 注入商店样式（统一样式与移动端优化）
+    function injectShopStyles(){
+        if (document.getElementById('vp-shop-styles')) return;
+        const css = `
+        #shop-modal{z-index:1000001 !important}
+        #shop-modal .shop-panel{padding-bottom: max(20px, env(safe-area-inset-bottom)) !important}
+        #shop-modal .shop-header h2{margin:0 !important}
+        #shop-modal .shop-category-btn{transition:all .15s ease !important}
+        #shop-modal .shop-category-btn.active{background:#ffd700 !important;color:#333 !important}
+        #shop-modal .shop-category-btn:not(.active){background:rgba(255,255,255,.2) !important;color:#fff !important}
+        `;
+        const style=document.createElement('style'); style.id='vp-shop-styles'; style.textContent=css; document.head.appendChild(style);
+    }
                 const syncTime = sync.lastSyncTime || 0;
 
                 if (localTime > syncTime) {
@@ -8552,7 +8565,7 @@ async function createNewChatSession(){
                 padding: 20px !important;
                 box-sizing: border-box !important;
             ">
-                <div style="
+                <div class="shop-panel" style="
                     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
                     border-radius: 15px !important;
                     padding: 20px !important;
@@ -8563,7 +8576,7 @@ async function createNewChatSession(){
                     color: white !important;
                     box-shadow: 0 20px 40px rgba(0,0,0,0.3) !important;
                 ">
-                    <div style="
+                    <div class="shop-header" style="
                         display: flex !important;
                         justify-content: space-between !important;
                         align-items: center !important;
@@ -8572,7 +8585,7 @@ async function createNewChatSession(){
                         padding-bottom: 15px !important;
                     ">
                         <h2 style="margin: 0 !important; color: #ffd700 !important; display: flex !important; align-items: center !important; gap: 8px !important;">${getFeatherIcon('shopping-bag', { color: '#ffd700', size: 24 })} 宠物商店</h2>
-                        <div style="color: #ffd700 !important; font-weight: bold !important; display: flex !important; align-items: center !important; gap: 6px !important;">
+                        <div id="shop-coin-display" style="color: #ffd700 !important; font-weight: bold !important; display: flex !important; align-items: center !important; gap: 6px !important;">
                             ${getFeatherIcon('star', { color: '#ffd700', size: 18 })} ${petData.coins || 100} 金币
                         </div>
                     </div>
@@ -8641,7 +8654,7 @@ async function createNewChatSession(){
                     </div>
 
                     <div style="text-align: center !important;">
-                        <button onclick="closeShopModal()" style="
+                        <button id="shop-close-btn" style="
                             padding: 10px 30px !important;
                             background: #f04747 !important;
                             color: white !important;
@@ -8654,6 +8667,33 @@ async function createNewChatSession(){
                 </div>
             </div>
         `);
+        // 关闭按钮事件与Esc关闭
+        $('#shop-close-btn').on('click', closeShopModal);
+        $(document).off('keydown.shopEsc').on('keydown.shopEsc', function(e){ if(e.key==='Escape'){ closeShopModal(); }});
+
+        // 更新金币显示函数
+        function updateShopCoinDisplay(){ try{ $('#shop-coin-display').html(`${getFeatherIcon('star', { color: '#ffd700', size: 18 })} ${petData.coins || 0} 金币`);}catch{} }
+
+        // 分类按钮点击后也更新金币
+        $('.shop-category-btn').on('click', function(){ setTimeout(updateShopCoinDisplay, 0); });
+
+        // 购买成功后刷新列表并更新金币
+        window.buyItem = function(itemId){
+            const item = SHOP_ITEMS[itemId];
+            if (!item) return;
+            if ((petData.coins || 0) < item.price) { toastr.error('金币不足！'); return; }
+            // 扣款与入库
+            petData.coins = (petData.coins || 0) - item.price;
+            petData.inventory = petData.inventory || {};
+            petData.inventory[itemId] = (petData.inventory[itemId] || 0) + 1;
+            savePetData();
+            // 刷新当前分类与金币显示
+            const currentCategory = ($('.shop-category-btn').filter(function(){ return $(this).css('background-color') === 'rgb(255, 215, 0)'; }).data('category')) || 'all';
+            $('#shop-items').html(generateShopItems(currentCategory));
+            updateShopCoinDisplay();
+            toastr.success(`购买成功！${item.name} 已添加到背包。`);
+        };
+
 
         try { $('#shop-modal').remove(); } catch{}
         $('body').append(shopModal);

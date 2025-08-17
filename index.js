@@ -4384,6 +4384,9 @@ ${currentPersonality}
             console.log(`[${extensionName}] No popup found to close`);
         }
 
+        // 兜底：防止遮罩遗留导致宿主按钮不可点
+        setTimeout(()=>{ try{ $("#shop-modal,#chat-modal-overlay,.virtual-pet-popup-overlay,#virtual-pet-popup-overlay").filter(':hidden').remove(); }catch{} }, 300);
+
         // 强制清理，确保iOS上完全关闭
         setTimeout(() => {
             $(`#${OVERLAY_ID}`).remove();
@@ -6885,6 +6888,27 @@ async function createNewChatSession(){
 
         // 页面卸载时的清理
         window.addEventListener('beforeunload', () => {
+        // 兜底：绑定全局热键 Shift+Esc 清理所有遮罩，防止影响宿主“插件商店”等按钮
+        try{
+            $(document).off('keydown.vp-clear').on('keydown.vp-clear', function(e){
+                if (e.shiftKey && e.key === 'Escape') {
+                    $('#shop-modal,#chat-modal-overlay,.virtual-pet-popup-overlay,#virtual-pet-popup-overlay').remove();
+                    toastr && toastr.info('已清理所有弹窗遮罩');
+                }
+            });
+        }catch{}
+
+        // 页面可见性变化时自动清理隐藏遮罩
+        try{
+            document.removeEventListener('visibilitychange', window.__vpVisHandler);
+            window.__vpVisHandler = function(){
+                if (!document.hidden) {
+                    $("#shop-modal,#chat-modal-overlay,.virtual-pet-popup-overlay,#virtual-pet-popup-overlay").filter(':hidden').remove();
+                }
+            };
+            document.addEventListener('visibilitychange', window.__vpVisHandler);
+        }catch{}
+
             // 简单清理，不显示确认对话框
             $(`#${BUTTON_ID}`).remove();
             $(`#${OVERLAY_ID}`).remove();
@@ -8631,6 +8655,7 @@ async function createNewChatSession(){
             </div>
         `);
 
+        try { $('#shop-modal').remove(); } catch{}
         $('body').append(shopModal);
 
         // 绑定分类按钮事件

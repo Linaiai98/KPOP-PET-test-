@@ -8464,6 +8464,126 @@ async function createNewChatSession(){
     };
 
 
+    // 商店物品定义 - 必须在 generateShopItems 函数之前定义
+    const SHOP_ITEMS = {
+        // 食物类
+        basic_food: {
+            name: "基础食物",
+            icon: "apple",
+            price: 10,
+            category: "food",
+            description: "普通的食物，恢复饱食度",
+            effect: { hunger: 15, happiness: 2 }
+        },
+        premium_food: {
+            name: "高级食物",
+            icon: "sandwich",
+            price: 25,
+            category: "food",
+            description: "营养丰富的食物，恢复饱食度和健康",
+            effect: { hunger: 25, happiness: 5, health: 5 }
+        },
+        special_treat: {
+            name: "特殊零食",
+            icon: "cake",
+            price: 40,
+            category: "food",
+            description: "美味的零食，大幅提升快乐度",
+            effect: { hunger: 10, happiness: 20 }
+        },
+
+        // 药品类
+        medicine: {
+            name: "感冒药",
+            icon: "pill",
+            price: 30,
+            category: "medicine",
+            description: "治疗轻微疾病",
+            effect: { sickness: -20, health: 10 }
+        },
+        super_medicine: {
+            name: "特效药",
+            icon: "syringe",
+            price: 80,
+            category: "medicine",
+            description: "治疗严重疾病，完全恢复健康",
+            effect: { sickness: -50, health: 30 }
+        },
+
+        // 玩具类
+        ball: {
+            name: "小球",
+            icon: "circle",
+            price: 20,
+            category: "toy",
+            description: "简单的玩具，提升快乐度和纪律",
+            effect: { happiness: 10, discipline: 5, energy: -5 }
+        },
+        robot_toy: {
+            name: "机器人玩具",
+            icon: "cpu",
+            price: 60,
+            category: "toy",
+            description: "高科技玩具，大幅提升纪律和快乐",
+            effect: { happiness: 15, discipline: 15, energy: -3 }
+        },
+
+        // 特殊道具类
+        time_capsule: {
+            name: "时间胶囊",
+            icon: "clock",
+            price: 100,
+            category: "special",
+            description: "暂停时间流逝2小时，紧急时使用",
+            effect: { timeFreeze: 2 }
+        },
+        revival_stone: {
+            name: "复活石",
+            icon: "gem",
+            price: 200,
+            category: "special",
+            description: "死亡后可以复活宠物，但会降低最大健康值",
+            effect: { revive: true, healthPenalty: 20 }
+        },
+        energy_drink: {
+            name: "能量饮料",
+            icon: "zap",
+            price: 35,
+            category: "special",
+            description: "快速恢复精力，但会增加疾病风险",
+            effect: { energy: 30, sickness: 5 }
+        },
+
+        // 装饰类
+        hat: {
+            name: "小帽子",
+            icon: "award",
+            price: 50,
+            category: "decoration",
+            description: "可爱的装饰，持续提升快乐度",
+            effect: { happinessBonus: 2 }
+        },
+        bow_tie: {
+            name: "蝴蝶结",
+            icon: "gift",
+            price: 45,
+            category: "decoration",
+            description: "优雅的装饰，提升纪律值",
+            effect: { disciplineBonus: 3 }
+        }
+    };
+
+    // 安全访问商店物品，避免初始化顺序导致的引用错误
+    function getShopItems() {
+        try {
+            return SHOP_ITEMS;
+        } catch (e) {
+            console.warn('[virtual-pet-system] SHOP_ITEMS 暂未初始化，使用空集合占位');
+            return {};
+        }
+    }
+
+
     // 商店系统功能
     function showShopModal() {
         // 检测移动端状态
@@ -8688,7 +8808,7 @@ async function createNewChatSession(){
     function generateShopItems(category) {
         let itemsHtml = '';
 
-        Object.entries(SHOP_ITEMS).forEach(([itemId, item]) => {
+        Object.entries(getShopItems()).forEach(([itemId, item]) => {
             if (category === 'all' || item.category === category) {
                 const canAfford = (petData.coins || 100) >= item.price;
                 const ownedCount = petData.inventory[itemId] || 0;
@@ -8785,7 +8905,7 @@ async function createNewChatSession(){
     }
 
     window.buyItem = function(itemId) {
-        const item = SHOP_ITEMS[itemId];
+        const item = getShopItems()[itemId];
         if (!item) return;
 
         if ((petData.coins || 100) < item.price) {
@@ -8819,7 +8939,7 @@ async function createNewChatSession(){
     };
 
     function useItem(itemId) {
-        const item = SHOP_ITEMS[itemId];
+        const item = getShopItems()[itemId];
         if (!item || !item.effect) return;
 
         const effect = item.effect;
@@ -8992,7 +9112,7 @@ async function createNewChatSession(){
         // 显示背包物品
         Object.entries(inventory).forEach(([itemId, quantity]) => {
             if (quantity > 0) {
-                const item = SHOP_ITEMS[itemId];
+                const item = getShopItems()[itemId];
                 if (item) {
                     const $item = $(`
                         <div class="backpack-item" data-item-id="${itemId}" style="
@@ -9056,7 +9176,7 @@ async function createNewChatSession(){
 
     // 使用背包物品
     function useBackpackItem(itemId) {
-        const item = SHOP_ITEMS[itemId];
+        const item = getShopItems()[itemId];
         const quantity = petData.inventory[itemId] || 0;
 
         if (quantity <= 0) {
@@ -9776,114 +9896,7 @@ async function createNewChatSession(){
 
     // LIFE_STAGES is defined earlier (moved up to avoid TDZ)
 
-    // 商店物品定义
-    const SHOP_ITEMS = {
-        // 食物类
-        basic_food: {
-            name: "基础食物",
-            icon: "apple",
-            price: 10,
-            category: "food",
-            description: "普通的食物，恢复饱食度",
-            effect: { hunger: 15, happiness: 2 }
-        },
-        premium_food: {
-            name: "高级食物",
-            icon: "sandwich",
-            price: 25,
-            category: "food",
-            description: "营养丰富的食物，恢复饱食度和健康",
-            effect: { hunger: 25, happiness: 5, health: 5 }
-        },
-        special_treat: {
-            name: "特殊零食",
-            icon: "cake",
-            price: 40,
-            category: "food",
-            description: "美味的零食，大幅提升快乐度",
-            effect: { hunger: 10, happiness: 20 }
-        },
-
-        // 药品类
-        medicine: {
-            name: "感冒药",
-            icon: "pill",
-            price: 30,
-            category: "medicine",
-            description: "治疗轻微疾病",
-            effect: { sickness: -20, health: 10 }
-        },
-        super_medicine: {
-            name: "特效药",
-            icon: "syringe",
-            price: 80,
-            category: "medicine",
-            description: "治疗严重疾病，完全恢复健康",
-            effect: { sickness: -50, health: 30 }
-        },
-
-        // 玩具类
-        ball: {
-            name: "小球",
-            icon: "circle",
-            price: 20,
-            category: "toy",
-            description: "简单的玩具，提升快乐度和纪律",
-            effect: { happiness: 10, discipline: 5, energy: -5 }
-        },
-        robot_toy: {
-            name: "机器人玩具",
-            icon: "cpu",
-            price: 60,
-            category: "toy",
-            description: "高科技玩具，大幅提升纪律和快乐",
-            effect: { happiness: 15, discipline: 15, energy: -3 }
-        },
-
-        // 特殊道具类
-        time_capsule: {
-            name: "时间胶囊",
-            icon: "clock",
-            price: 100,
-            category: "special",
-            description: "暂停时间流逝2小时，紧急时使用",
-            effect: { timeFreeze: 2 }
-        },
-        revival_stone: {
-            name: "复活石",
-            icon: "gem",
-            price: 200,
-            category: "special",
-            description: "死亡后可以复活宠物，但会降低最大健康值",
-            effect: { revive: true, healthPenalty: 20 }
-        },
-        energy_drink: {
-            name: "能量饮料",
-            icon: "zap",
-            price: 35,
-            category: "special",
-            description: "快速恢复精力，但会增加疾病风险",
-            effect: { energy: 30, sickness: 5 }
-        },
-
-        // 装饰类
-        hat: {
-            name: "小帽子",
-            icon: "award",
-            price: 50,
-            category: "decoration",
-            description: "可爱的装饰，持续提升快乐度",
-            effect: { happinessBonus: 2 }
-        },
-        bow_tie: {
-            name: "蝴蝶结",
-            icon: "gift",
-            price: 45,
-            category: "decoration",
-            description: "优雅的装饰，提升纪律值",
-            effect: { disciplineBonus: 3 }
-        }
-    };
+    // 商店物品定义已移动到文件更早位置避免TDZ错误
 
     // 应用拓麻歌子式系统（内部使用，自动调用）
     function applyTamagotchiSystem() {

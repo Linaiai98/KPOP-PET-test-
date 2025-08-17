@@ -87,10 +87,11 @@ jQuery(async () => {
     };
 
 
-    // 作者信息
+    // 作者信息与水印
     const AUTHOR_NAME = "一禄柒柒";
 
-    // 角落标记
+
+    // 作者水印：可视徽标 + 复制水印
     function installAuthorBadge(){
         if ($('#vp-author-badge').length) return;
         const $badge = $('<div id="vp-author-badge"/>').text(`作者：${AUTHOR_NAME}`).css({
@@ -115,17 +116,14 @@ jQuery(async () => {
                 const text = sel && sel.toString();
                 if (!text) return;
                 const url = location.href;
-                // 零宽隐形水印（对用户不可见），保证复制任意片段都会携带
-                const zwcMap = { '0':'\u200B','1':'\u200C','2':'\u200D','3':'\u2060','4':'\u2062','5':'\u2063','6':'\u2064' };
-                const sig = `${AUTHOR_NAME}|${new Date().getFullYear()}`;
-                const b36 = Array.from(sig).map(c=>c.charCodeAt(0).toString(7)).join('x');
-                const zw = b36.replace(/[0-6]/g, d=>zwcMap[d]);
-                e.clipboardData.setData('text/plain', text + zw);
-                // HTML 版本：把零宽水印放进一个 span（无样式、无尺寸）
+                const mark = `\n\n—— 复制来源：虚拟宠物系统 · 作者：${AUTHOR_NAME} · ${new Date().toLocaleString()} · ${url}`;
+                e.clipboardData.setData('text/plain', text + mark);
+                // HTML版本（在末尾附加一个淡色小字）
                 const htmlSel = sel ? sel.getRangeAt(0).cloneContents() : null;
                 let html = '';
                 if (htmlSel){ const div = document.createElement('div'); div.appendChild(htmlSel); html = div.innerHTML; }
-                e.clipboardData.setData('text/html', html + `<span style="display:inline-block;width:0;height:0;overflow:hidden;">${zw}</span>`);
+                const htmlMark = `<div style="margin-top:8px;font-size:11px;color:#888;opacity:.8;">—— 复制来源：虚拟宠物系统 · 作者：${AUTHOR_NAME}</div>`;
+                e.clipboardData.setData('text/html', html + htmlMark);
                 e.preventDefault();
             }catch(err){ /* 忽略 */ }
         };
@@ -3739,7 +3737,7 @@ ${currentPersonality}
         try {
             // 使用一个特殊的键名用于跨设备同步
             const syncKey = `${extensionName}-sync-data`;
-            localStorage.setItem(syncKey, JSON.stringify(__wmAttach(data)));
+            localStorage.setItem(syncKey, JSON.stringify(data));
 
             // 安全地尝试使用SillyTavern的同步机制
             if (typeof window.saveSettingsDebounced === 'function' &&
@@ -3807,7 +3805,7 @@ ${currentPersonality}
         try {
             // 使用专门的AI设置同步键
             const syncKey = `${extensionName}-ai-settings-sync`;
-            localStorage.setItem(syncKey, JSON.stringify(__wmAttach(settings)));
+            localStorage.setItem(syncKey, JSON.stringify(settings));
 
             // 安全地尝试使用SillyTavern的同步机制
             if (typeof window.saveSettingsDebounced === 'function' &&
@@ -4383,9 +4381,6 @@ ${currentPersonality}
         } else {
             console.log(`[${extensionName}] No popup found to close`);
         }
-
-        // 兜底：防止遮罩遗留导致宿主按钮不可点
-        setTimeout(()=>{ try{ $("#shop-modal,#chat-modal-overlay,.virtual-pet-popup-overlay,#virtual-pet-popup-overlay").filter(':hidden').remove(); }catch{} }, 300);
 
         // 强制清理，确保iOS上完全关闭
         setTimeout(() => {
@@ -5663,49 +5658,6 @@ async function createNewChatSession(){
     }
 
 
-    // ===== 加强版水印（数据 + 算法 + 隐形DOM） =====
-    function __wmSigParts(){ return ['YL','77','·','一','禄','柒','柒','·','LZ','WTZ']; }
-    function __wmSig(){ return __wmSigParts().join(''); }
-    function __wmHash(s){ let x=2166136261>>>0; for(let i=0;i<s.length;i++){ x^=s.charCodeAt(i); x=(x*16777619)>>>0;} return x>>>0; }
-    function __wmAttach(o){ try{ if(!o || typeof o!=='object') return o; if(!o.integrity||typeof o.integrity!=='object') o.integrity={}; o.integrity.v=1; o.integrity.t=Date.now(); o.integrity.s=(o.integrity.s)||(__wmHash(__wmSig()).toString(36)); return o; }catch{return o;} }
-    function __wmHas(o){ try{ return !!(o&&o.integrity&&o.integrity.s===__wmHash(__wmSig()).toString(36)); }catch{ return false; } }
-    function __wmInstallDOM(){ try{ if(document.getElementById('wm-yL77')) return; const i=document.createElement('i'); i.id='wm-yL77'; i.setAttribute('aria-hidden','true'); i.style.cssText='position:absolute;width:0;height:0;overflow:hidden;clip-path:inset(0 0 0 0);pointer-events:none;opacity:0;'; i.textContent=__wmSig(); document.body.appendChild(i);}catch{} }
-    function __wmEnsure(){ try{
-            // 算法水印 seed
-            window.__wm_algo = __wmHash(__wmSig());
-            // 数据水印：检查关键数据并补齐（不影响功能）
-            const keys=[`${extensionName}-sync-data`,`${extensionName}-ai-settings`,`${extensionName}-ai-settings-sync`,`${extensionName}-avatar-sync`];
-            let ok=true; keys.forEach(k=>{ const v=localStorage.getItem(k); if(v){ try{ const o=JSON.parse(v); if(!__wmHas(o)){ ok=false; localStorage.setItem(k, JSON.stringify(__wmAttach(o))); } }catch{} } });
-            __wmInstallDOM();
-            // 将算法 seed 写入 CSS 变量，作为轻微UI随机种子（隐形）
-            try{ document.documentElement.style.setProperty('--vp-seed', String((window.__wm_algo % 7) + 1)); }catch{}
-            // 校验：若检测到数据层未携带水印（ok=false）或算法种子不匹配，则判定为“复制直接使用”，显示显性徽标
-            const algoOK = (typeof window.__wm_algo==='number' && window.__wm_algo===__wmHash(__wmSig()));
-            if (!ok || !algoOK) { __wmShowBadge(); }
-        }catch(e){ console.warn('wm ensure failed', e); }
-    }
-    function __wmShowBadge(){ try{
-            if(document.getElementById('wm-author-badge')) return;
-            const div=document.createElement('div');
-            div.id='wm-author-badge';
-            div.style.cssText='position:fixed;right:8px;bottom:8px;z-index:2147483647;font-size:12px;color:#999;background:rgba(255,255,255,.6);border:1px solid rgba(0,0,0,.08);padding:4px 8px;border-radius:8px;backdrop-filter:blur(2px)';
-            div.textContent='一禄柒柒 / 仅发布于旅程与尾巴镇';
-            document.body.appendChild(div);
-        }catch{}
-    }
-    // 内部验证脚本：输出当前各项水印状态
-    window.__verifyWM = function(verbose=true){
-        const sig=__wmSig(); const h=__wmHash(sig).toString(36);
-        const keys=[`${extensionName}-sync-data`,`${extensionName}-ai-settings`,`${extensionName}-ai-settings-sync`,`${extensionName}-avatar-sync`];
-        const report={sig,hash:h,algo:(window.__wm_algo===__wmHash(sig)), data:{}};
-        keys.forEach(k=>{ try{ const v=localStorage.getItem(k); if(!v){ report.data[k]='(missing)'; } else { const o=JSON.parse(v); report.data[k]=__wmHas(o)?'ok':'no-wm'; } }catch{ report.data[k]='parse-error'; } });
-        if(verbose) console.log('[WM]', report);
-        return report;
-    };
-    // 启动时执行一次检查，并在短延迟后复查（避免首次载入时机问题）
-    try{ $(function(){ try{ __wmEnsure(); }catch{} setTimeout(()=>{ try{ __wmEnsure(); }catch{} }, 1500); }); }catch{ try{ document.addEventListener('DOMContentLoaded', ()=>{ try{ __wmEnsure(); }catch{} }); }catch{} }
-
-
 
     /**
      * 显示API配置提示
@@ -6888,27 +6840,6 @@ async function createNewChatSession(){
 
         // 页面卸载时的清理
         window.addEventListener('beforeunload', () => {
-        // 兜底：绑定全局热键 Shift+Esc 清理所有遮罩，防止影响宿主“插件商店”等按钮
-        try{
-            $(document).off('keydown.vp-clear').on('keydown.vp-clear', function(e){
-                if (e.shiftKey && e.key === 'Escape') {
-                    $('#shop-modal,#chat-modal-overlay,.virtual-pet-popup-overlay,#virtual-pet-popup-overlay').remove();
-                    toastr && toastr.info('已清理所有弹窗遮罩');
-                }
-            });
-        }catch{}
-
-        // 页面可见性变化时自动清理隐藏遮罩
-        try{
-            document.removeEventListener('visibilitychange', window.__vpVisHandler);
-            window.__vpVisHandler = function(){
-                if (!document.hidden) {
-                    $("#shop-modal,#chat-modal-overlay,.virtual-pet-popup-overlay,#virtual-pet-popup-overlay").filter(':hidden').remove();
-                }
-            };
-            document.addEventListener('visibilitychange', window.__vpVisHandler);
-        }catch{}
-
             // 简单清理，不显示确认对话框
             $(`#${BUTTON_ID}`).remove();
             $(`#${OVERLAY_ID}`).remove();
@@ -8496,36 +8427,6 @@ async function createNewChatSession(){
                 const local = JSON.parse(localData);
                 const sync = typeof syncData === 'object' ? syncData : JSON.parse(syncData);
                 const localTime = local.lastSyncTime || 0;
-    // 注入商店样式（统一样式与移动端优化）
-    function injectShopStyles(){
-        if (document.getElementById('vp-shop-styles')) return;
-        const css = `
-        #shop-modal{z-index:1000001 !important; background: rgba(5,8,20,.72) !important}
-        #shop-modal .shop-panel{padding-bottom: max(20px, env(safe-area-inset-bottom)) !important; border:1px solid rgba(255,255,255,.18) !important; backdrop-filter: blur(10px) !important; background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)) !important}
-        #shop-modal .shop-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,.12)}
-        #shop-modal .shop-title{display:flex;align-items:center;gap:10px;color:#fff;font-weight:800;letter-spacing:.5px}
-        #shop-modal .shop-coins{display:flex;align-items:center;gap:6px;color:#ffd700;font-weight:800;background:rgba(255,215,0,.1);border:1px solid rgba(255,215,0,.35);padding:6px 10px;border-radius:999px}
-        #shop-modal .shop-tools{display:flex;align-items:center;gap:8px}
-        #shop-modal .shop-search{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:6px 10px}
-        #shop-modal .shop-search input{background:transparent;border:none;outline:none;color:#fff;font-size:12px;width:140px}
-        #shop-modal .shop-sort{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:6px 10px;color:#eaf4ff}
-        #shop-modal .shop-categories{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
-        #shop-modal .shop-category-btn{transition:all .15s ease; padding:8px 14px;border-radius:999px;border:none}
-        #shop-modal .shop-category-btn.active{background:#ffd700;color:#1d1d1f}
-        #shop-modal .shop-category-btn:not(.active){background:rgba(255,255,255,.18);color:#fff}
-        #shop-modal .shop-item{transition:transform .15s ease, box-shadow .15s ease}
-        #shop-modal .shop-item:hover{transform: translateY(-2px); box-shadow: 0 10px 24px rgba(0,0,0,.28)}
-        #shop-modal .shop-item button{transition:opacity .15s ease, transform .06s ease}
-        #shop-modal .shop-item button:active{transform: scale(.98)}
-        #shop-modal .items-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:8px 0 16px}
-        #shop-modal .item-card{position:relative;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:14px;display:grid;grid-template-columns:56px 1fr auto;grid-template-rows:auto auto;gap:8px 12px;align-items:center;backdrop-filter:blur(4px)}
-        #shop-modal .buy-btn{padding:8px 12px;background:#43b581;color:#fff;border:none;border-radius:20px;cursor:pointer}
-        #shop-modal .buy-btn[disabled]{background:#99aab5;cursor:not-allowed}
-        #shop-modal .owned-badge{position:absolute;top:6px;right:6px;background:rgba(78,205,196,.9);color:#fff;font-size:11px;padding:2px 6px;border-radius:999px}
-        #shop-modal .empty{color:rgba(255,255,255,.6);text-align:center;padding:16px}
-        `;
-        const style=document.createElement('style'); style.id='vp-shop-styles'; style.textContent=css; document.head.appendChild(style);
-    }
                 const syncTime = sync.lastSyncTime || 0;
 
                 if (localTime > syncTime) {
@@ -8560,20 +8461,6 @@ async function createNewChatSession(){
     };
 
 
-
-        // Shop helpers (define early to avoid TDZ and missing refs)
-        window.getShopItems = function(){ try{ return window.shopItems || window['SHOP_ITEMS'] || {}; }catch{ return {}; } };
-        window.resolveIconName = function(item){
-            try{
-                if (!item) return 'gift';
-                if (item.icon && typeof item.icon === 'string') return item.icon;
-                const v = String(item.emoji || '').trim();
-                const charMap = { '⏰':'clock', '💎':'gem', '🥤':'coffee', '🎩':'award', '🎀':'gift' };
-                if (charMap[v]) return charMap[v];
-                return /^[a-z0-9-]+$/.test(v) ? v : 'gift';
-            }catch{ return 'gift'; }
-        };
-
     // 商店系统功能
     function showShopModal() {
         // 检测移动端状态
@@ -8584,10 +8471,11 @@ async function createNewChatSession(){
         const shopModal = $(`
             <div id="shop-modal" style="
                 position: fixed !important;
-                inset: 0 !important;
+                top: 0 !important;
+                left: 0 !important;
                 width: 100vw !important;
                 height: 100vh !important;
-                background: ${candyColors && candyColors.background ? candyColors.background : 'linear-gradient(120deg,#111,#222)'} !important;
+                background-color: rgba(0, 0, 0, 0.8) !important;
                 z-index: 1000000 !important;
                 display: flex !important;
                 align-items: center !important;
@@ -8595,100 +8483,129 @@ async function createNewChatSession(){
                 padding: 20px !important;
                 box-sizing: border-box !important;
             ">
-                <div class="shop-panel" style="
-                    border-radius: 16px !important;
-                    padding: 16px !important;
+                <div style="
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+                    border-radius: 15px !important;
+                    padding: 20px !important;
                     max-width: ${containerMaxWidth} !important;
                     width: 100% !important;
-                    max-height: 72vh !important;
+                    max-height: 70vh !important;
                     overflow-y: auto !important;
                     color: white !important;
+                    box-shadow: 0 20px 40px rgba(0,0,0,0.3) !important;
                 ">
-                    <div class="shop-header">
-                        <div class="shop-title">${getFeatherIcon('shopping-bag', { color: '#ffd700', size: 24 })} 宠物商店</div>
-                        <div id="shop-coin-display" class="shop-coins">${getFeatherIcon('star', { color: '#ffd700', size: 16 })} ${petData.coins || 100} 金币</div>
+                    <div style="
+                        display: flex !important;
+                        justify-content: space-between !important;
+                        align-items: center !important;
+                        margin-bottom: 20px !important;
+                        border-bottom: 1px solid rgba(255,255,255,0.2) !important;
+                        padding-bottom: 15px !important;
+                    ">
+                        <h2 style="margin: 0 !important; color: #ffd700 !important; display: flex !important; align-items: center !important; gap: 8px !important;">${getFeatherIcon('shopping-bag', { color: '#ffd700', size: 24 })} 宠物商店</h2>
+                        <div style="color: #ffd700 !important; font-weight: bold !important; display: flex !important; align-items: center !important; gap: 6px !important;">
+                            ${getFeatherIcon('star', { color: '#ffd700', size: 18 })} ${petData.coins || 100} 金币
+                        </div>
                     </div>
 
-                    <div class="shop-tools" style="margin-top:10px;">
-                        <div class="shop-search">${getFeatherIcon('search', { color: '#eaf4ff', size: 14 })}<input id="shop-search-input" placeholder="搜索商品..." /></div>
-                        <select id="shop-sort" class="shop-sort">
-                            <option value="rec">推荐</option>
-                            <option value="price-asc">价格从低到高</option>
-                            <option value="price-desc">价格从高到低</option>
-                        </select>
+                    <div id="shop-categories" style="
+                        display: flex !important;
+                        gap: 10px !important;
+                        margin-bottom: 15px !important;
+                        flex-wrap: wrap !important;
+                    ">
+                        <button class="shop-category-btn" data-category="all" style="
+                            padding: 8px 15px !important;
+                            background: #ffd700 !important;
+                            color: #333 !important;
+                            border: none !important;
+                            border-radius: 20px !important;
+                            cursor: pointer !important;
+                            font-size: 0.9em !important;
+                            font-weight: bold !important;
+                        ">全部</button>
+                        <button class="shop-category-btn" data-category="food" style="
+                            padding: 8px 15px !important;
+                            background: rgba(255,255,255,0.2) !important;
+                            color: white !important;
+                            border: none !important;
+                            border-radius: 20px !important;
+                            cursor: pointer !important;
+                            font-size: 0.9em !important;
+                        ">🍎 食物</button>
+                        <button class="shop-category-btn" data-category="medicine" style="
+                            padding: 8px 15px !important;
+                            background: rgba(255,255,255,0.2) !important;
+                            color: white !important;
+                            border: none !important;
+                            border-radius: 20px !important;
+                            cursor: pointer !important;
+                            font-size: 0.9em !important;
+                        ">💊 药品</button>
+                        <button class="shop-category-btn" data-category="toy" style="
+                            padding: 8px 15px !important;
+                            background: rgba(255,255,255,0.2) !important;
+                            color: white !important;
+                            border: none !important;
+                            border-radius: 20px !important;
+                            cursor: pointer !important;
+                            font-size: 0.9em !important;
+                        ">🎮 玩具</button>
+                        <button class="shop-category-btn" data-category="special" style="
+                            padding: 8px 15px !important;
+                            background: rgba(255,255,255,0.2) !important;
+                            color: white !important;
+                            border: none !important;
+                            border-radius: 20px !important;
+                            cursor: pointer !important;
+                            font-size: 0.9em !important;
+                        ">${getFeatherIcon('sparkles', { color: 'currentColor', size: 16 })} 特殊</button>
                     </div>
 
-                    <div id="shop-categories" class="shop-categories">
-                        <button class="shop-category-btn active" data-category="all">全部</button>
-                        <button class="shop-category-btn" data-category="food">${getFeatherIcon('apple', { color: '#fff', size: 16 })} 食物</button>
-                        <button class="shop-category-btn" data-category="medicine">${getFeatherIcon('pill', { color: '#fff', size: 16 })} 药品</button>
-                        <button class="shop-category-btn" data-category="toy">${getFeatherIcon('gamepad-2', { color: '#fff', size: 16 })} 玩具</button>
-                        <button class="shop-category-btn" data-category="special">${getFeatherIcon('sparkles', { color: '#fff', size: 16 })} 特殊</button>
-                        <button class="shop-category-btn" data-category="decoration">${getFeatherIcon('award', { color: '#fff', size: 16 })} 装饰</button>
+                    <div id="shop-items" style="
+                        display: grid !important;
+                        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important;
+                        gap: 15px !important;
+                        margin-bottom: 20px !important;
+                    ">
+                        ${generateShopItems('all')}
                     </div>
 
-                    <div id="shop-items" class="items-grid"></div>
+                    <div style="text-align: center !important;">
+                        <button onclick="closeShopModal()" style="
+                            padding: 10px 30px !important;
+                            background: #f04747 !important;
+                            color: white !important;
+                            border: none !important;
+                            border-radius: 25px !important;
+                            cursor: pointer !important;
+                            font-size: 1em !important;
+                        ">关闭商店</button>
+                    </div>
                 </div>
             </div>
-        // 延后渲染商品列表，避免 SHOP_ITEMS 定义顺序问题
-        setTimeout(()=>{
-            try{
-                $('#shop-items').html(generateShopItems('all'));
-            }catch(e){ console.warn('render shop items failed', e); }
-        }, 0);
-
         `);
-        // 关闭逻辑与Esc关闭（不再使用可见按钮）
-        function closeShopLocal(){
-            try{ $('#shop-modal').remove(); }catch{}
-            $(document).off('keydown.shopEsc');
-            setTimeout(()=>{ try{ $("#shop-modal,#chat-modal-overlay,.virtual-pet-popup-overlay,#virtual-pet-popup-overlay").filter(':hidden').remove(); }catch{} }, 0);
-        }
-        $(document).off('keydown.shopEsc').on('keydown.shopEsc', function(e){ if(e.key==='Escape'){ closeShopLocal(); }});
 
-        // 更新金币显示函数
-        function updateShopCoinDisplay(){ try{ $('#shop-coin-display').html(`${getFeatherIcon('star', { color: '#ffd700', size: 18 })} ${petData.coins || 0} 金币`);}catch{} }
-
-        // 分类按钮点击后也更新金币
-        $('.shop-category-btn').on('click', function(){ setTimeout(updateShopCoinDisplay, 0); });
-
-        // 购买成功后刷新列表并更新金币
-        window.buyItem = function(itemId){
-            const item = SHOP_ITEMS[itemId];
-            if (!item) return;
-            if ((petData.coins || 0) < item.price) { toastr.error('金币不足！'); return; }
-            // 扣款与入库
-            petData.coins = (petData.coins || 0) - item.price;
-            petData.inventory = petData.inventory || {};
-            petData.inventory[itemId] = (petData.inventory[itemId] || 0) + 1;
-            savePetData();
-            // 刷新当前分类与金币显示
-            const currentCategory = ($('.shop-category-btn.active').data('category')) || 'all';
-            $('#shop-items').html(generateShopItems(currentCategory));
-            updateShopCoinDisplay();
-            toastr.success(`购买成功！${item.name} 已添加到背包。`);
-            // 背包实时联动：若背包已打开则刷新背包列表
-            try{ if ($('#backpack-modal').length){ renderBackpackItems(); } }catch{}
-        };
-
-
-        try { $('#shop-modal').remove(); } catch{}
-        try{ injectShopStyles(); }catch{}
         $('body').append(shopModal);
 
-        // 绑定分类按钮事件（使用 active 类控制样式）
+        // 绑定分类按钮事件
         $('.shop-category-btn').on('click', function() {
             const category = $(this).data('category');
-            $('.shop-category-btn').removeClass('active');
-            $(this).addClass('active');
+            $('.shop-category-btn').css({
+                'background': 'rgba(255,255,255,0.2)',
+                'color': 'white'
+            });
+            $(this).css({
+                'background': '#ffd700',
+                'color': '#333'
+            });
             $('#shop-items').html(generateShopItems(category));
-            try{ updateShopCoinDisplay(); }catch{}
         });
 
         // 点击外部关闭
         shopModal.on('click', function(e) {
             if (e.target === this) {
-                closeShopLocal();
+                closeShopModal();
             }
         });
     }
@@ -8696,35 +8613,36 @@ async function createNewChatSession(){
     function generateShopItems(category) {
         let itemsHtml = '';
 
-        Object.entries(window.getShopItems ? window.getShopItems() : {}).forEach(([itemId, item]) => {
+        Object.entries(SHOP_ITEMS).forEach(([itemId, item]) => {
             if (category === 'all' || item.category === category) {
                 const canAfford = (petData.coins || 100) >= item.price;
                 const ownedCount = petData.inventory[itemId] || 0;
 
                 itemsHtml += `
                     <div class="shop-item" style="
-
-
-
-                        background: rgba(255,255,255,0.08) !important;
-                        border-radius: 12px !important;
-                        padding: 14px !important;
-                        text-align: left !important;
-                        border: 1px solid ${canAfford ? 'rgba(255,215,0,0.6)' : 'rgba(255,255,255,0.18)'} !important;
-                        backdrop-filter: blur(4px) !important;
-                        display: grid !important;
-                        grid-template-columns: 56px 1fr auto !important;
-                        grid-template-rows: auto auto !important;
-                        gap: 8px 12px !important;
-                        align-items: center !important;
+                        background: rgba(255,255,255,0.1) !important;
+                        border-radius: 10px !important;
+                        padding: 15px !important;
+                        text-align: center !important;
+                        border: 2px solid ${canAfford ? 'rgba(255,215,0,0.5)' : 'rgba(255,255,255,0.2)'} !important;
                     ">
-                        <div style="grid-row: 1 / span 2; display:flex; align-items:center; justify-content:center; width:56px; height:56px; border-radius:10px; background: rgba(255,255,255,0.12);">
-                            ${getFeatherIcon(resolveIconName(item), { color: '#ffd700', size: 28 })}
+                        <div style="font-size: 2em !important; margin-bottom: 8px !important; display: flex !important; justify-content: center !important; align-items: center !important;">
+                            ${getFeatherIcon(item.emoji, { color: '#ffd700', size: 32 })}
                         </div>
-                        <div style="font-weight: 700; font-size: 14px;">${item.name}</div>
-                        <div style="color: #ffd700; font-weight: 700; display:flex; align-items:center; gap:6px;">${getFeatherIcon('star', { color: '#ffd700', size: 14 })} ${item.price}</div>
-                        <div style="grid-column: 2 / span 2; color: rgba(255,255,255,0.85); font-size: 12px; min-height:32px;">${item.description}</div>
-                        ${ownedCount > 0 ? `<div style="grid-column: 2 / span 1; color:#4ecdc4; font-size:12px;">拥有: ${ownedCount}</div>` : '<div></div>'}
+                        <div style="font-weight: bold !important; margin-bottom: 5px !important;">
+                            ${item.name}
+                        </div>
+                        <div style="font-size: 0.8em !important; color: rgba(255,255,255,0.8) !important; margin-bottom: 8px !important; min-height: 32px !important;">
+                            ${item.description}
+                        </div>
+                        <div style="color: #ffd700 !important; font-weight: bold !important; margin-bottom: 8px !important; display: flex !important; align-items: center !important; justify-content: center !important; gap: 6px !important;">
+                            ${getFeatherIcon('star', { color: '#ffd700', size: 16 })} ${item.price} 金币
+                        </div>
+                        ${ownedCount > 0 ? `
+                        <div style="color: #4ecdc4 !important; font-size: 0.8em !important; margin-bottom: 8px !important;">
+                            拥有: ${ownedCount}
+                        </div>
+                        ` : ''}
                         <button onclick="buyItem('${itemId}')" style="
                             padding: 8px 16px !important;
                             background: ${canAfford ? '#43b581' : '#99aab5'} !important;
@@ -8746,7 +8664,7 @@ async function createNewChatSession(){
     }
 
     window.buyItem = function(itemId) {
-        const item = (window.getShopItems ? window.getShopItems() : {})[itemId];
+        const item = SHOP_ITEMS[itemId];
         if (!item) return;
 
         if ((petData.coins || 100) < item.price) {
@@ -8953,7 +8871,7 @@ async function createNewChatSession(){
         // 显示背包物品
         Object.entries(inventory).forEach(([itemId, quantity]) => {
             if (quantity > 0) {
-                const item = (window.getShopItems ? window.getShopItems() : {})[itemId];
+                const item = SHOP_ITEMS[itemId];
                 if (item) {
                     const $item = $(`
                         <div class="backpack-item" data-item-id="${itemId}" style="
@@ -9017,7 +8935,7 @@ async function createNewChatSession(){
 
     // 使用背包物品
     function useBackpackItem(itemId) {
-        const item = (window.getShopItems ? window.getShopItems() : {})[itemId];
+        const item = SHOP_ITEMS[itemId];
         const quantity = petData.inventory[itemId] || 0;
 
         if (quantity <= 0) {
@@ -9738,9 +9656,6 @@ async function createNewChatSession(){
     // LIFE_STAGES is defined earlier (moved up to avoid TDZ)
 
     // 商店物品定义
-    // 将商店物品暴露到全局，确保 UI 任何阶段都能读取
-    try{ window.shopItems = window.shopItems || {}; }catch{}
-
     const SHOP_ITEMS = {
         // 食物类
         basic_food: {
@@ -9849,9 +9764,6 @@ async function createNewChatSession(){
         }
     };
 
-    // 同步到全局供 UI 使用（定义完成后再暴露）
-    try { window.SHOP_ITEMS = SHOP_ITEMS; window.shopItems = SHOP_ITEMS; } catch {}
-
     // 应用拓麻歌子式系统（内部使用，自动调用）
     function applyTamagotchiSystem() {
         console.log('🥚 应用拓麻歌子式系统...');
@@ -9913,8 +9825,6 @@ async function createNewChatSession(){
 
             console.log(`测试后快乐值: ${Math.round(afterHappiness)}`);
             console.log(`快乐值变化: ${Math.round(change * 100) / 100} (预期: -0.8)`);
-
-
             console.log(`衰减是否正常: ${Math.abs(change + 0.8) < 0.1 ? '✅' : '❌'}`);
 
             // 恢复原始时间戳

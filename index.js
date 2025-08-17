@@ -8587,7 +8587,7 @@ async function createNewChatSession(){
                 inset: 0 !important;
                 width: 100vw !important;
                 height: 100vh !important;
-                background: radial-gradient(1200px 800px at 30% -10%, rgba(255,215,0,.14), rgba(0,0,0,0)) , rgba(5,8,20,.78) !important;
+                background: ${candyColors && candyColors.background ? candyColors.background : 'linear-gradient(120deg,#111,#222)'} !important;
                 z-index: 1000000 !important;
                 display: flex !important;
                 align-items: center !important;
@@ -9738,6 +9738,9 @@ async function createNewChatSession(){
     // LIFE_STAGES is defined earlier (moved up to avoid TDZ)
 
     // 商店物品定义
+    // 将商店物品暴露到全局，确保 UI 任何阶段都能读取
+    try{ window.shopItems = window.shopItems || {}; }catch{}
+
     const SHOP_ITEMS = {
         // 食物类
         basic_food: {
@@ -9846,6 +9849,9 @@ async function createNewChatSession(){
         }
     };
 
+    // 同步到全局供 UI 使用（定义完成后再暴露）
+    try { window.SHOP_ITEMS = SHOP_ITEMS; window.shopItems = SHOP_ITEMS; } catch {}
+
     // 应用拓麻歌子式系统（内部使用，自动调用）
     function applyTamagotchiSystem() {
         console.log('🥚 应用拓麻歌子式系统...');
@@ -9908,8 +9914,6 @@ async function createNewChatSession(){
             console.log(`测试后快乐值: ${Math.round(afterHappiness)}`);
             console.log(`快乐值变化: ${Math.round(change * 100) / 100} (预期: -0.8)`);
 
-    // 暴露给全局，保证 getShopItems() 能拿到即使导入顺序不同
-    window.shopItems = SHOP_ITEMS;
 
             console.log(`衰减是否正常: ${Math.abs(change + 0.8) < 0.1 ? '✅' : '❌'}`);
 

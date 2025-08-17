@@ -8584,11 +8584,10 @@ async function createNewChatSession(){
         const shopModal = $(`
             <div id="shop-modal" style="
                 position: fixed !important;
-                top: 0 !important;
-                left: 0 !important;
+                inset: 0 !important;
                 width: 100vw !important;
                 height: 100vh !important;
-                background-color: rgba(0, 0, 0, 0.8) !important;
+                background: radial-gradient(1200px 800px at 30% -10%, rgba(255,215,0,.14), rgba(0,0,0,0)) , rgba(5,8,20,.78) !important;
                 z-index: 1000000 !important;
                 display: flex !important;
                 align-items: center !important;
@@ -8697,7 +8696,7 @@ async function createNewChatSession(){
     function generateShopItems(category) {
         let itemsHtml = '';
 
-        Object.entries(getShopItems()).forEach(([itemId, item]) => {
+        Object.entries(window.getShopItems ? window.getShopItems() : {}).forEach(([itemId, item]) => {
             if (category === 'all' || item.category === category) {
                 const canAfford = (petData.coins || 100) >= item.price;
                 const ownedCount = petData.inventory[itemId] || 0;
@@ -8759,7 +8758,7 @@ async function createNewChatSession(){
     }
 
     window.buyItem = function(itemId) {
-        const item = getShopItems()[itemId];
+        const item = (window.getShopItems ? window.getShopItems() : {})[itemId];
         if (!item) return;
 
         if ((petData.coins || 100) < item.price) {
@@ -8966,7 +8965,7 @@ async function createNewChatSession(){
         // 显示背包物品
         Object.entries(inventory).forEach(([itemId, quantity]) => {
             if (quantity > 0) {
-                const item = getShopItems()[itemId];
+                const item = (window.getShopItems ? window.getShopItems() : {})[itemId];
                 if (item) {
                     const $item = $(`
                         <div class="backpack-item" data-item-id="${itemId}" style="
@@ -9030,7 +9029,7 @@ async function createNewChatSession(){
 
     // 使用背包物品
     function useBackpackItem(itemId) {
-        const item = getShopItems()[itemId];
+        const item = (window.getShopItems ? window.getShopItems() : {})[itemId];
         const quantity = petData.inventory[itemId] || 0;
 
         if (quantity <= 0) {

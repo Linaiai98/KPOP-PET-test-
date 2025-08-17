@@ -8629,7 +8629,7 @@ async function createNewChatSession(){
                     ">
                         <h2 style="
                             margin: 0 !important;
-                            color: ${candyColors.textPrimary} !important;
+                            color: #eaf4ff !important;
                             display: flex !important;
                             align-items: center !important;
                             gap: 10px !important;
@@ -8758,9 +8758,9 @@ async function createNewChatSession(){
             $('.shop-category-btn')
                 .removeAttr('data-selected')
                 .css({
-                    'background': 'rgba(255,255,255,0.15)',
-                    'color': candyColors.textPrimary,
-                    'border': '2px solid rgba(255,255,255,0.2)',
+                    'background': 'rgba(255,255,255,0.12)',
+                    'color': '#eaf4ff',
+                    'border': '1px solid rgba(255,255,255,0.14)',
                     'box-shadow': 'none'
                 });
 
@@ -8771,7 +8771,7 @@ async function createNewChatSession(){
                     'background': `linear-gradient(135deg, ${candyColors.buttonPrimary}, ${candyColors.buttonSecondary})`,
                     'color': candyColors.textWhite,
                     'border': `2px solid ${candyColors.borderAccent}`,
-                    'box-shadow': '0 4px 15px rgba(255, 107, 107, 0.3)'
+                    'box-shadow': '0 6px 16px rgba(0,0,0,0.25)'
                 });
 
             // 渲染商品
@@ -8839,11 +8839,11 @@ async function createNewChatSession(){
                             ${item.name}
                         </div>
                         <div style="
-                            font-size: 0.85em !important;
-                            color: ${candyColors.textSecondary} !important;
+                            font-size: 0.9em !important;
+                            color: #b6c2d9 !important;
                             margin-bottom: 12px !important;
-                            min-height: 40px !important;
-                            line-height: 1.4 !important;
+                            min-height: 44px !important;
+                            line-height: 1.5 !important;
                         ">
                             ${item.description}
                         </div>

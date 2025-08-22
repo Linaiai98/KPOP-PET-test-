@@ -1003,10 +1003,6 @@ jQuery(async () => {
         coins: 100,                   // 金币
         inventory: {},                // 物品库存
 
-
-        // 装备系统（MVP）
-        equipment: { weapon: null, armor: null },
-
         // AI人设系统
         personality: '',              // 当前人设内容
 
@@ -8596,13 +8592,6 @@ async function createNewChatSession(){
                 energy_drink: { name: "能量饮料", icon: "zap", price: 35, category: "special", description: "快速恢复精力，但会增加疾病风险", effect: { energy: 30, sickness: 5 } },
                 hat: { name: "小帽子", icon: "award", price: 50, category: "decoration", description: "可爱的装饰，持续提升快乐度", effect: { happinessBonus: 2 } },
                 bow_tie: { name: "蝴蝶结", icon: "gift", price: 45, category: "decoration", description: "优雅的装饰，提升纪律值", effect: { disciplineBonus: 3 } },
-                // 武器装备
-                wooden_sword: { name: "木剑", icon: "sword", price: 80, category: "weapon", description: "基础武器，提升攻击力", effect: { attackBonus: 5 } },
-                iron_sword: { name: "铁剑", icon: "sword", price: 150, category: "weapon", description: "坚固的铁制武器，大幅提升攻击力", effect: { attackBonus: 12 } },
-                magic_wand: { name: "魔法棒", icon: "sparkles", price: 200, category: "weapon", description: "神秘的魔法武器，提升攻击和快乐度", effect: { attackBonus: 8, happiness: 5 } },
-                leather_armor: { name: "皮甲", icon: "shield", price: 100, category: "armor", description: "轻便的防护装备，提升防御力", effect: { defenseBonus: 8 } },
-                chain_mail: { name: "锁子甲", icon: "shield", price: 180, category: "armor", description: "金属制防具，大幅提升防御力", effect: { defenseBonus: 15 } },
-                magic_cloak: { name: "魔法斗篷", icon: "moon", price: 220, category: "armor", description: "神秘的防护斗篷，提升防御和精力", effect: { defenseBonus: 10, energy: 10 } },
             };
         }
         return window.SHOP_ITEMS;
@@ -8786,26 +8775,6 @@ async function createNewChatSession(){
         shopModal.on('click', '.buy-btn', function(e) {
             e.preventDefault();
             e.stopPropagation();
-        // 购买并装备（武器/防具）
-        shopModal.on('click', '.buy-equip-btn', function(e){
-            e.preventDefault(); e.stopPropagation();
-            const id = String($(this).data('itemId'));
-            const item = getShopItems()[id];
-            if (!item) return;
-            if ((petData.coins||0) < item.price) { toastr.error('金币不足！'); return; }
-            // 购买
-            petData.coins = (petData.coins||0) - item.price;
-            petData.inventory = petData.inventory || {};
-            petData.inventory[id] = (petData.inventory[id]||0) + 1;
-            // 立即装备
-            equipItem(id);
-            savePetData();
-            // 刷新列表与余额
-            shopModal.find('#shop-items').html(generateShopItems(shopModal.find('.shop-category-btn[data-selected="true"]').data('category')||'all'));
-            shopModal.find('h2').next().html(`${getFeatherIcon('star', { color: candyColors.gold, size: 18 })} ${petData.coins} 金币`);
-            toastr.success('已购买并装备');
-        });
-
             const id = $(this).data('itemId');
             try { window.buyItem && window.buyItem(String(id)); } catch(err) { console.warn('buyItem error', err); }
         });
@@ -8952,19 +8921,6 @@ async function createNewChatSession(){
                         " ${!canAfford ? 'disabled' : ''}>
                             ${canAfford ? '购买' : '金币不足'}
                         </button>
-
-                                ${(['weapon','armor'].includes(item.category)) ? `
-                                <button class="buy-equip-btn" data-item-id="${itemId}" style="
-                                    margin-top:8px !important;
-                                    padding: 8px 12px !important;
-                                    background: ${candyColors.secondary} !important;
-                                    color: ${candyColors.textWhite} !important;
-                                    border: none !important;
-                                    border-radius: 16px !important;
-                                    cursor: ${canAfford ? 'pointer' : 'not-allowed'} !important;
-                                " ${!canAfford ? 'disabled' : ''}>购买并装备</button>
-                                ` : ''}
-
                     </div>
                 `;
             }
@@ -9191,7 +9147,7 @@ async function createNewChatSession(){
                             transition: all 0.3s ease !important;
                             position: relative !important;
                         ">
-                            <div style="font-size: 2em !important; margin-bottom: 5px !important; display: flex !important; justify-content: center !important; align-items: center !important;">${getFeatherIcon(item.icon || 'package', { color: 'white', size: 28 })}</div>
+                            <div style="font-size: 2em !important; margin-bottom: 5px !important; display: flex !important; justify-content: center !important; align-items: center !important;">${getFeatherIcon(item.emoji, { color: 'white', size: 28 })}</div>
                             <div style="font-size: 0.8em !important; color: white !important; margin-bottom: 3px !important;">${item.name}</div>
                             <div style="
                                 position: absolute !important;
@@ -9235,58 +9191,10 @@ async function createNewChatSession(){
                     });
 
                     $content.append($item);
-
-                        // 装备/使用按钮（弹出选项）
-                        const $actions = $(`
-                            <div style="margin-top:8px !important; display:flex !important; gap:6px !important; justify-content:center !important;">
-                                <button class="equip-btn" data-item-id="${itemId}" style="padding:4px 8px !important; font-size:12px !important;">装备</button>
-                                <button class="use-btn" data-item-id="${itemId}" style="padding:4px 8px !important; font-size:12px !important;">使用</button>
-                            </div>
-                        `);
-                        $item.append($actions);
-
-                        // 按钮逻辑
-                        $actions.on('click', '.equip-btn', function(e){ e.stopPropagation(); equipItem(itemId); });
-                        $actions.on('click', '.use-btn', function(e){ e.stopPropagation(); useBackpackItem(itemId); });
-
                 }
             }
         });
     }
-
-    // 装备物品
-    function equipItem(itemId){
-        const item = getShopItems()[itemId];
-        if (!item) return;
-        const qty = petData.inventory?.[itemId] || 0;
-        if (qty <= 0) { toastr.error('没有该物品'); return; }
-
-        // 分类到武器或防具
-        const slot = (item.category === 'weapon') ? 'weapon' : (item.category === 'armor') ? 'armor' : null;
-        if (!slot) { toastr.info('该物品不可装备，可尝试“使用”'); return; }
-
-        petData.equipment = petData.equipment || { weapon:null, armor:null };
-
-        // 若已有装备，先退回背包
-        const prev = petData.equipment[slot];
-        if (prev) {
-            petData.inventory[prev] = (petData.inventory[prev] || 0) + 1;
-        }
-
-        // 装备新物品并从背包扣除
-        petData.equipment[slot] = itemId;
-        petData.inventory[itemId] = Math.max(0, (petData.inventory[itemId]||0) - 1);
-        if (petData.inventory[itemId] === 0) delete petData.inventory[itemId];
-
-        // 应用即时效果（如直接属性加成）
-        if (item.effect?.happiness) petData.happiness = Math.min(100, petData.happiness + item.effect.happiness);
-        if (item.effect?.energy) petData.energy = Math.min(100, petData.energy + item.effect.energy);
-
-        // 提示
-        toastr.success(`已装备${item.name}（${slot==='weapon'?'武器':'防具'}）`);
-        validateAndFixValues(); savePetData(); renderBackpackItems();
-    }
-
 
     // 使用背包物品
     function useBackpackItem(itemId) {
@@ -11871,18 +11779,6 @@ async function createNewChatSession(){
         if (canHug && hugFunctionExists) {
             console.log('\n🎯 执行抱抱测试...');
 
-    // 文字战斗叙事（AI辅助，失败则使用本地文案）
-    async function narrateBattle(result){
-        const settings = (typeof loadAISettings==='function') ? loadAISettings() : null;
-        const base = `你与${result.enemy.name}展开了一场较量。${result.win ? '最终你获得胜利！' : '虽败犹荣，你从中汲取了经验。'} 共${result.rounds}个回合。`;
-        try{
-            if (!settings || !settings.apiType || !settings.apiUrl || !settings.apiKey) return base;
-            const prompt = `请用鼓励、轻松、不打击自信的口吻，用2-3句中文纯文字描述一场可爱的宠物回合制战斗过程。\n要求：\n- 不出现血腥或严厉词汇\n- 适度夸张可爱\n- 以玩家为正向反馈\n- 末尾给一句鼓励小结\n\n战斗信息：\n对手：${result.enemy.name}，等级${result.enemy.lv}。\n回合数：${result.rounds}。\n结果：${result.win ? '胜利' : '失败' }。`;
-            const text = await callAIAPI(prompt, 15000);
-            return (typeof text === 'string' && text.trim()) ? text.trim() : base;
-        }catch(e){ return base; }
-    }
-
             // 设置追踪
             let coinsGained = false;
             let expGained = false;
@@ -11948,95 +11844,6 @@ async function createNewChatSession(){
             petData.lastUpdateTime = Date.now() - (hours * 60 * 60 * 1000);
         }
         const before = { health: petData.health, happiness: petData.happiness, hunger: petData.hunger, energy: petData.energy };
-    // 简易冒险/战斗系统（MVP）
-    function openAdventureModal() {
-        if (!petData.isAlive) { toastr.error('宠物已死亡，无法冒险'); return; }
-        const now = Date.now();
-        const last = petData.battle?.lastFightTime || 0;
-        const cooldownMs = 2 * 60 * 1000; // 2 分钟冷却
-        if (now - last < cooldownMs) {
-            const left = Math.ceil((cooldownMs - (now - last))/1000);
-            toastr.warning(`冷却中，${left}s 后可再次冒险`);
-            return;
-        }
-
-        // 随机三选一事件
-        const events = ['battle','rest','chest'];
-        const pick = events[Math.floor(Math.random()*events.length)];
-        if (pick === 'battle') return startRandomBattle();
-        if (pick === 'rest') {
-            petData.energy = Math.min(100, petData.energy + 8);
-            petData.health = Math.min(100, petData.health + 3);
-            toastr.info('路过安静的林地，小憩片刻（精力+8，健康+3）');
-        } else {
-            const coins = 5 + Math.floor(Math.random()*10);
-            gainCoins(coins);
-            toastr.success(`发现一个小宝箱，获得 ${coins} 金币！`);
-        }
-        petData.battle = { ...(petData.battle||{}), lastFightTime: now };
-        validateAndFixValues();
-        savePetData();
-    }
-
-    function startRandomBattle() {
-        const enemy = pickEnemy();
-        const result = simulateBattle(enemy);
-        applyBattleOutcome(result);
-    }
-
-    function pickEnemy() {
-        const lvl = petData.level || 1;
-        const pool = [
-            { id:'slime', name:'史莱姆', lv:lvl, hp: 30+lvl*5, atk: 4+lvl, coins: 6+lvl, exp: 2+Math.floor(lvl/2) },
-            { id:'wolf',  name:'野狼',   lv:lvl+1, hp: 45+lvl*6, atk: 6+lvl, coins: 9+lvl, exp: 3+Math.floor(lvl/2) },
-            { id:'gob',   name:'哥布林', lv:lvl+2, hp: 55+lvl*7, atk: 7+lvl, coins: 12+lvl, exp: 4+Math.floor(lvl/2) },
-        ];
-        return pool[Math.floor(Math.random()*pool.length)];
-    }
-
-    function simulateBattle(enemy) {
-        // 构造战斗属性（带保护）
-        const myATK = Math.max(3, 10 + (petData.level||1)*2 + (petData.discipline||50)/20 + Math.floor(Math.random()*4));
-        let myHP = Math.max(10, Math.min(120, Math.floor(petData.health/2 + petData.energy/1.5)));
-        let eHP = enemy.hp;
-        const log = [];
-        let rounds = 0;
-        while (myHP>0 && eHP>0 && rounds<10) {
-            rounds++;
-            // 我方攻击
-            const dmg = Math.max(1, myATK + Math.floor(Math.random()*3) - 1);
-            eHP -= dmg; log.push(`你对${enemy.name}造成 ${dmg} 伤害`);
-            if (eHP<=0) break;
-            // 敌方反击
-            const edmg = Math.max(1, enemy.atk + Math.floor(Math.random()*3) - 1);
-            myHP -= edmg; log.push(`${enemy.name}对你造成 ${edmg} 伤害`);
-        }
-        return { win: eHP<=0 && myHP>0, myHP: Math.max(0,myHP), eHP: Math.max(0,eHP), enemy, log, rounds };
-    }
-
-    function applyBattleOutcome(r) {
-        const now = Date.now();
-        petData.battle = petData.battle || { wins:0, losses:0, streak:0, lastFightTime:0, fatigue:0 };
-        petData.battle.lastFightTime = now;
-        petData.energy = Math.max(0, petData.energy - 10);
-        let msg = '';
-        if (r.win) {
-            petData.battle.wins++; petData.battle.streak++;
-            gainCoins(r.enemy.coins);
-            gainExperience(r.enemy.exp);
-            petData.happiness = Math.min(100, petData.happiness + 3);
-            msg = `胜利！击败${r.enemy.name}，获得 ${r.enemy.coins} 金币与 ${r.enemy.exp} 经验。`;
-        } else {
-            petData.battle.losses++; petData.battle.streak = 0;
-            petData.health = Math.max(10, petData.health - 5); // 战斗失败最低保 10
-            petData.happiness = Math.max(0, petData.happiness - 3);
-            msg = `战败……${r.enemy.name}过于强大。你受了点伤（健康-5，保底10）。`;
-        }
-        toastr.info(msg);
-        validateAndFixValues();
-        savePetData();
-    }
-
         updatePetStatus();
         const after = { health: petData.health, happiness: petData.happiness, hunger: petData.hunger, energy: petData.energy, isAlive: petData.isAlive };
         console.log(`[TEST] 模拟离线 ${hours}h`, { before, after });
@@ -12878,45 +12685,6 @@ async function createNewChatSession(){
                         align-items: center !important;
                         justify-content: center !important;
                         gap: 4px !important;
-                    </button>
-                    <button class="action-btn adventure-btn" style="
-                        padding: 8px !important;
-                        background: ${candyColors.buttonAccent} !important;
-                        color: ${candyColors.textPrimary} !important;
-                        border: 2px solid ${candyColors.border} !important;
-                        border-radius: 0 !important;
-                        font-family: 'Courier New', monospace !important;
-                        font-size: 11px !important;
-                        font-weight: bold !important;
-                        text-transform: none !important;
-                        cursor: pointer !important;
-                        min-height: 36px !important;
-                        display: flex !important;
-                        align-items: center !important;
-                        justify-content: center !important;
-                        gap: 4px !important;
-                        box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
-                        transition: none !important;
-                    ">
-                        ${getFeatherIcon('sparkles', { color: 'currentColor', size: 18 })}
-                        <span>冒险</span>
-                    </button>
-                    <button class="action-btn shop-btn" style="
-                        padding: 8px !important;
-                        background: ${candyColors.happiness} !important;
-                        color: ${candyColors.textPrimary} !important;
-                        border: 2px solid ${candyColors.border} !important;
-                        border-radius: 0 !important;
-                        font-family: 'Courier New', monospace !important;
-                        font-size: 11px !important;
-                        font-weight: bold !important;
-                        text-transform: none !important;
-                        cursor: pointer !important;
-                        min-height: 36px !important;
-                        display: flex !important;
-                        align-items: center !important;
-                        justify-content: center !important;
-                        gap: 4px !important;
                         box-shadow: 2px 2px 0px ${candyColors.shadow} !important;
                         transition: none !important;
                     ">
@@ -13467,12 +13235,6 @@ async function createNewChatSession(){
             setTimeout(() => {
                 updateUnifiedUIStatus();
             }, 100);
-        });
-
-        // 冒险按钮
-        $container.find(".adventure-btn").on("click touchend", function(e) {
-            e.preventDefault();
-            openAdventureModal();
         });
 
         // 抱抱按钮

@@ -15690,3 +15690,98 @@ async function createNewChatSession(){
     console.log("[VirtualPet] 虚拟宠物系统脚本已加载完成");
     console.log("🎲 智能初始化系统：首次打开随机化到50以下，后续自然衰减到100");
 }); // jQuery ready end
+
+
+    // 诊断Google API连接的专用测试函数
+    window.diagnoseGoogleAPI = async function() {
+        console.log(" KPOP-PET-test [DIAGNOSE] Starting Google API diagnosis...");
+        const statusElement = $('#ai-connection-status');
+
+        try {
+            // Step 1: Load settings
+            console.log(" KPOP-PET-test [DIAGNOSE] Step 1: Loading AI settings...");
+            const settings = loadAISettings();
+            if (!settings || !settings.apiType) {
+                console.error(" KPOP-PET-test [DIAGNOSE] ❌ Could not load AI settings.");
+                statusElement.text('诊断失败: 无法加载设置').css('color', '#f56565');
+                return;
+            }
+            console.log(" KPOP-PET-test [DIAGNOSE] ✅ Settings loaded:", settings);
+
+            if (settings.apiType !== 'google') {
+                console.error(` KPOP-PET-test [DIAGNOSE] ❌ Test is for Google API, but current type is '${settings.apiType}'.`);
+                statusElement.text(`诊断失败: API类型不是Google`).css('color', '#f56565');
+                return;
+            }
+
+            // Step 2: Resolve Target URL
+            console.log(" KPOP-PET-test [DIAGNOSE] Step 2: Resolving target URL...");
+            let targetApiUrl = settings.apiUrl.replace(/\/+$/, '');
+            let modelName = settings.apiModel || 'gemini-1.5-flash';
+            if (modelName.startsWith('models/')) {
+                modelName = modelName.replace('models/', '');
+            }
+            if (!targetApiUrl.includes(':generateContent')) {
+                 if (targetApiUrl.endsWith('/v1beta')) {
+                    targetApiUrl += `/models/${modelName}:generateContent`;
+                } else if (!targetApiUrl.includes('/v1beta')) {
+                    targetApiUrl += `/v1beta/models/${modelName}:generateContent`;
+                } else {
+                    targetApiUrl += `/models/${modelName}:generateContent`;
+                }
+            }
+            if (!/[?&]key=/.test(targetApiUrl)) {
+                targetApiUrl += (targetApiUrl.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(settings.apiKey);
+            }
+            console.log(" KPOP-PET-test [DIAGNOSE] ✅ Target URL resolved:", targetApiUrl);
+
+            // Step 3: Build Headers
+            console.log(" KPOP-PET-test [DIAGNOSE] Step 3: Building request headers...");
+            const headers = { 'Content-Type': 'application/json' };
+            console.log(" KPOP-PET-test [DIAGNOSE] ✅ Headers built:", headers);
+
+            // Step 4: Build Request Body
+            console.log(" KPOP-PET-test [DIAGNOSE] Step 4: Building request body...");
+            const testPrompt = "请只回复'测试成功'";
+            const requestBody = {
+                contents: [{ parts: [{ text: testPrompt }] }],
+                generationConfig: { maxOutputTokens: 64, temperature: 0.2 }
+            };
+            console.log(" KPOP-PET-test [DIAGNOSE] ✅ Request body built:", requestBody);
+
+            // Step 5: Fetch Request
+            console.log(" KPOP-PET-test [DIAGNOSE] Step 5: Sending fetch request...");
+            statusElement.text('🔄 诊断中...').css('color', '#ffa500');
+            const response = await fetch(targetApiUrl, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(requestBody),
+                signal: AbortSignal.timeout(15000) // 15s timeout
+            });
+            console.log(" KPOP-PET-test [DIAGNOSE] ✅ Fetch response received. Status:", response.status);
+
+            const responseText = await response.text();
+            console.log(" KPOP-PET-test [DIAGNOSE] ✅ Response body (text):", responseText);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${responseText}`);
+            }
+
+            // Step 6: Parse Response
+            console.log(" KPOP-PET-test [DIAGNOSE] Step 6: Parsing JSON response...");
+            const data = JSON.parse(responseText);
+            console.log(" KPOP-PET-test [DIAGNOSE] ✅ Response JSON parsed:", data);
+
+            const aiReply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (aiReply) {
+                console.log(` KPOP-PET-test [DIAGNOSE] ✅ SUCCESS! AI Reply: ${aiReply}`);
+                statusElement.text('诊断成功: API连接正常').css('color', '#48bb78');
+            } else {
+                throw new Error("Could not find AI reply in response JSON.");
+            }
+
+        } catch (error) {
+            console.error(" KPOP-PET-test [DIAGNOSE] ❌ An error occurred during diagnosis:", error);
+            statusElement.text(`诊断失败: ${error.message}`).css('color', '#f56565');
+        }
+    };

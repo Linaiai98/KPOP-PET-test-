@@ -932,6 +932,7 @@ jQuery(async () => {
                     }
                 }
 
+
                 // Fallback to recommended
                 if (typeof getRecommendedModels === 'function') {
                     return getRecommendedModels(apiType);
@@ -2691,7 +2692,7 @@ jQuery(async () => {
 
     /**
      * 🚀 统一AI调用函数 - 所有AI请求的唯一入口
-     * 官方API首选直连，失败时自动退回中继服务器
+     * 官方API直连（不使用中继）
      * @param {string} prompt - 要发送给AI的提示词
      * @param {number} timeout - 超时时间（毫秒）
      * @returns {Promise<string>} - AI生成的回复

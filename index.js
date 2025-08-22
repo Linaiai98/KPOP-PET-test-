@@ -2703,7 +2703,7 @@ jQuery(async () => {
 
         try {
             // 1. 获取API配置
-            const settings = loadAISettings();
+            settings = loadAISettings();
             if (!settings.apiType || !settings.apiUrl || !settings.apiKey) {
                 throw new Error('请先在插件设置中配置API信息（类型、URL和密钥）');
             }
@@ -2776,7 +2776,7 @@ jQuery(async () => {
                 }
             } else if (settings.apiType === 'google') {
                 if (!targetApiUrl.includes(':generateContent')) {
-                    let modelName = settings.apiModel || 'gemini-pro';
+                    let modelName = settings.apiModel || 'gemini-1.5-flash';
 
                     // 确保模型名称不包含 models/ 前缀
                     if (modelName.startsWith('models/')) {
@@ -2790,6 +2790,10 @@ jQuery(async () => {
                     } else {
                         targetApiUrl += `/models/${modelName}:generateContent`;
                     }
+                }
+                // 将API Key附加为查询参数，避免某些环境下x-goog-api-key头触发CORS
+                if (!/[?&]key=/.test(targetApiUrl)) {
+                    targetApiUrl += (targetApiUrl.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(settings.apiKey);
                 }
             } else if (settings.apiType === 'custom') {
                 // 自定义API：尝试智能构建端点
@@ -2810,9 +2814,10 @@ jQuery(async () => {
             // 2. 构建请求头
             const headers = { 'Content-Type': 'application/json' };
 
-            // 3. 根据API类型设置认证头
+            // 3. 根据API类型设置认证方式
             if (settings.apiType === 'google') {
-                headers['x-goog-api-key'] = settings.apiKey;
+                // Google Generative Language API 推荐使用查询参数 ?key= 方式，避免自定义请求头引发CORS预检
+                // 因此此处不再设置 x-goog-api-key 头，已在URL中附加了 key 参数
             } else if (settings.apiType === 'claude') {
                 headers['x-api-key'] = settings.apiKey;
                 headers['anthropic-version'] = '2023-06-01';
@@ -2912,7 +2917,7 @@ jQuery(async () => {
             return aiReply.trim();
 
         } catch (error) {
-            console.error(`[${extensionName}] ❌ 统一AI调用失败:`, error);
+            console.error(`[${extensionName}] ❌ 直连API调用失败:`, error);
             throw error;
         }
     }
@@ -5604,19 +5609,7 @@ async function createNewChatSession(){
                     const timestamp = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                     const isUser = item.sender === 'user';
 
-    // 轻量 Markdown/链接 格式化（用于AI消息）
-    function formatMarkdown(text){
-        if (typeof text !== 'string') return '';
-        let s = escapeHtml(text);
-        // 链接高亮
-        s = s.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
-        // 粗体与斜体（简单版）
-        s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1<\/strong>');
-        s = s.replace(/\*([^*]+)\*/g, '<em>$1<\/em>');
-        // 换行
-        s = s.replace(/\n/g, '<br>');
-        return s;
-    }
+
                     const messageHtml = `
                         <div class="chat-message ${isUser ? 'user-message' : 'pet-message'}">
                             <div class="message-avatar" data-sender="${isUser ? 'user' : 'pet'}" style="cursor: pointer !important;">${isUser ? (customUserAvatarData ? `<img src="${customUserAvatarData}" alt="用户头像" style="width:100% !important;height:100% !important;object-fit:cover !important;border-radius:50% !important;">` : getFeatherIcon('user', { color: '#ffffff', size: 18 })) : (customAvatarData ? getAvatarContent() : getDefaultPetIcon(18, '#ffd700'))}</div>

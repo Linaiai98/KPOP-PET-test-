@@ -2362,7 +2362,7 @@ jQuery(async () => {
     /**
      * 加载AI配置设置 - 支持多端同步
      */
-    function loadAISettings() {
+    window.loadAISettings = function() {
         try {
             // 首先尝试从同步存储加载
             const syncSettings = loadAISettingsFromSync();

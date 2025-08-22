@@ -932,7 +932,6 @@ jQuery(async () => {
                     }
                 }
 
-
                 // Fallback to recommended
                 if (typeof getRecommendedModels === 'function') {
                     return getRecommendedModels(apiType);
@@ -2362,7 +2361,7 @@ jQuery(async () => {
     /**
      * 加载AI配置设置 - 支持多端同步
      */
-    window.loadAISettings = function() {
+    function loadAISettings() {
         try {
             // 首先尝试从同步存储加载
             const syncSettings = loadAISettingsFromSync();
@@ -2692,7 +2691,7 @@ jQuery(async () => {
 
     /**
      * 🚀 统一AI调用函数 - 所有AI请求的唯一入口
-     * 官方API直连（不使用中继）
+     * 官方API首选直连，失败时自动退回中继服务器
      * @param {string} prompt - 要发送给AI的提示词
      * @param {number} timeout - 超时时间（毫秒）
      * @returns {Promise<string>} - AI生成的回复
@@ -2704,7 +2703,7 @@ jQuery(async () => {
 
         try {
             // 1. 获取API配置
-            settings = loadAISettings();
+            const settings = loadAISettings();
             if (!settings.apiType || !settings.apiUrl || !settings.apiKey) {
                 throw new Error('请先在插件设置中配置API信息（类型、URL和密钥）');
             }
@@ -2777,7 +2776,7 @@ jQuery(async () => {
                 }
             } else if (settings.apiType === 'google') {
                 if (!targetApiUrl.includes(':generateContent')) {
-                    let modelName = settings.apiModel || 'gemini-1.5-flash';
+                    let modelName = settings.apiModel || 'gemini-pro';
 
                     // 确保模型名称不包含 models/ 前缀
                     if (modelName.startsWith('models/')) {
@@ -2791,10 +2790,6 @@ jQuery(async () => {
                     } else {
                         targetApiUrl += `/models/${modelName}:generateContent`;
                     }
-                }
-                // 将API Key附加为查询参数，避免某些环境下x-goog-api-key头触发CORS
-                if (!/[?&]key=/.test(targetApiUrl)) {
-                    targetApiUrl += (targetApiUrl.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(settings.apiKey);
                 }
             } else if (settings.apiType === 'custom') {
                 // 自定义API：尝试智能构建端点
@@ -2815,10 +2810,9 @@ jQuery(async () => {
             // 2. 构建请求头
             const headers = { 'Content-Type': 'application/json' };
 
-            // 3. 根据API类型设置认证方式
+            // 3. 根据API类型设置认证头
             if (settings.apiType === 'google') {
-                // Google Generative Language API 推荐使用查询参数 ?key= 方式，避免自定义请求头引发CORS预检
-                // 因此此处不再设置 x-goog-api-key 头，已在URL中附加了 key 参数
+                headers['x-goog-api-key'] = settings.apiKey;
             } else if (settings.apiType === 'claude') {
                 headers['x-api-key'] = settings.apiKey;
                 headers['anthropic-version'] = '2023-06-01';
@@ -2918,7 +2912,7 @@ jQuery(async () => {
             return aiReply.trim();
 
         } catch (error) {
-            console.error(`[${extensionName}] ❌ 直连API调用失败:`, error);
+            console.error(`[${extensionName}] ❌ 统一AI调用失败:`, error);
             throw error;
         }
     }
@@ -5610,7 +5604,19 @@ async function createNewChatSession(){
                     const timestamp = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                     const isUser = item.sender === 'user';
 
-
+    // 轻量 Markdown/链接 格式化（用于AI消息）
+    function formatMarkdown(text){
+        if (typeof text !== 'string') return '';
+        let s = escapeHtml(text);
+        // 链接高亮
+        s = s.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+        // 粗体与斜体（简单版）
+        s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1<\/strong>');
+        s = s.replace(/\*([^*]+)\*/g, '<em>$1<\/em>');
+        // 换行
+        s = s.replace(/\n/g, '<br>');
+        return s;
+    }
                     const messageHtml = `
                         <div class="chat-message ${isUser ? 'user-message' : 'pet-message'}">
                             <div class="message-avatar" data-sender="${isUser ? 'user' : 'pet'}" style="cursor: pointer !important;">${isUser ? (customUserAvatarData ? `<img src="${customUserAvatarData}" alt="用户头像" style="width:100% !important;height:100% !important;object-fit:cover !important;border-radius:50% !important;">` : getFeatherIcon('user', { color: '#ffffff', size: 18 })) : (customAvatarData ? getAvatarContent() : getDefaultPetIcon(18, '#ffd700'))}</div>
@@ -13743,7 +13749,6 @@ async function createNewChatSession(){
 
         const apiUrl = $('#ai-url-input').val();
         const apiKey = $('#ai-key-input').val();
-        const apiType = $('#ai-api-select').val() || 'openai'; // 默认为openai
 
         if (!apiUrl) {
             console.log("❌ 未配置API URL");
@@ -13752,34 +13757,83 @@ async function createNewChatSession(){
 
         console.log(`🔗 API URL: ${apiUrl}`);
         console.log(`🔑 API Key: ${apiKey ? '已设置' : '未设置'}`);
-        console.log(`🤖 API 类型: ${apiType}`);
+
+        // 构建模型列表端点
+        let modelsEndpoint = apiUrl;
+        if (!modelsEndpoint.endsWith('/models')) {
+            if (modelsEndpoint.endsWith('/')) {
+                modelsEndpoint += 'models';
+            } else {
+                modelsEndpoint += '/models';
+            }
+        }
+
+        console.log(`📡 尝试获取模型列表: ${modelsEndpoint}`);
 
         try {
-            const models = await AIConnector.fetchModels({
-                apiType: apiType,
-                apiUrl: apiUrl,
-                apiKey: apiKey
+            const headers = {
+                'Content-Type': 'application/json'
+            };
+
+            // 添加认证头
+            if (apiKey) {
+                headers['Authorization'] = `Bearer ${apiKey}`;
+            }
+
+            const response = await fetch(modelsEndpoint, {
+                method: 'GET',
+                headers: headers,
+                signal: AbortSignal.timeout(15000) // 15秒超时
             });
 
-            if (models && models.length > 0) {
-                console.log(`✅ 成功获取并解析了 ${models.length} 个模型:`, models);
-                // 统一模型对象结构
-                return models.map(model => ({
-                    id: model.id,
-                    name: model.name || model.id,
-                    type: 'user_configured',
-                    provider: apiType
-                }));
+            if (response.ok) {
+                const data = await response.json();
+                console.log(`✅ 成功获取模型列表:`, data);
+
+                // 解析模型数据
+                let models = [];
+                if (data.data && Array.isArray(data.data)) {
+                    // OpenAI格式
+                    models = data.data.map(model => ({
+                        id: model.id,
+                        name: model.id,
+                        type: 'user_configured',
+                        status: 'available',
+                        source: modelsEndpoint,
+                        provider: '用户配置API'
+                    }));
+                } else if (data.models && Array.isArray(data.models)) {
+                    // 其他格式
+                    models = data.models.map(model => ({
+                        id: typeof model === 'string' ? model : model.id || model.name,
+                        name: typeof model === 'string' ? model : model.id || model.name,
+                        type: 'user_configured',
+                        status: 'available',
+                        source: modelsEndpoint,
+                        provider: '用户配置API'
+                    }));
+                }
+
+                console.log(`📋 解析出 ${models.length} 个模型:`, models.map(m => m.name));
+                return models;
+
             } else {
-                console.log("🤷‍♂️ 未能从API获取到任何模型，将返回推荐模型列表。");
-                showNotification('未能从您的API获取模型，将显示推荐模型。', 'info');
-                return getRecommendedModels(apiType).map(m => ({ ...m, type: 'recommended' }));
+                console.log(`❌ 获取模型列表失败: HTTP ${response.status}`);
+
+                // 尝试读取错误信息
+                try {
+                    const errorText = await response.text();
+                    console.log(`错误详情:`, errorText.substring(0, 200));
+                } catch (e) {
+                    console.log(`无法读取错误详情`);
+                }
+
+                return [];
             }
+
         } catch (error) {
-            logDetailedError('获取用户配置模型失败', { apiUrl, apiType }, error);
-            showNotification(`获取模型失败: ${error.message}`, 'error');
-            console.log("↪️ 自动回退到推荐模型列表。");
-            return getRecommendedModels(apiType).map(m => ({ ...m, type: 'recommended' }));
+            console.log(`❌ 请求失败: ${error.message}`);
+            return [];
         }
     };
 
@@ -15233,7 +15287,35 @@ async function createNewChatSession(){
         console.log('\n💡 基于你的日志，问题是choices[0].message.content为空字符串');
         console.log('🔍 让我们检查choices[0]的完整结构...');
 
+        // 模拟你的响应数据进行分析
+        const mockResponse = {
+            id: 'chatcmpl-20250708132707348110513aE2tFtcY',
+            model: 'gemini-2.5-pro-preview-06-05',
+            object: 'chat.completion',
+            created: 1751952430,
+            choices: [{
+                // 这里可能有其他字段
+                message: {
+                    content: '', // 这个是空的
+                    // 可能还有其他字段
+                },
+                // 可能还有其他字段
+            }]
+        };
 
+        console.log('🧪 分析可能的响应结构...');
+        console.log('如果choices[0].message.content是空的，可能的原因：');
+        console.log('1. 内容在choices[0].message.text字段');
+        console.log('2. 内容在choices[0].text字段');
+        console.log('3. 内容在choices[0].content字段');
+        console.log('4. 内容在choices[0].delta.content字段');
+        console.log('5. API返回了空内容（可能是模型问题）');
+
+        console.log('\n🔧 建议的修复方案：');
+        console.log('1. 再次运行testThirdPartyAPI()查看详细日志');
+        console.log('2. 检查你的API提供商文档');
+        console.log('3. 尝试不同的模型名称');
+        console.log('4. 检查API配额和权限');
 
         toastr.info('请查看控制台的详细分析', '🔧 快速修复', { timeOut: 5000 });
 
@@ -15689,98 +15771,4 @@ async function createNewChatSession(){
 
     console.log("[VirtualPet] 虚拟宠物系统脚本已加载完成");
     console.log("🎲 智能初始化系统：首次打开随机化到50以下，后续自然衰减到100");
-
-    // 诊断Google API连接的专用测试函数
-    window.diagnoseGoogleAPI = async function() {
-        console.log(" KPOP-PET-test [DIAGNOSE] Starting Google API diagnosis...");
-        const statusElement = $('#ai-connection-status');
-
-        try {
-            // Step 1: Load settings
-            console.log(" KPOP-PET-test [DIAGNOSE] Step 1: Loading AI settings...");
-            const settings = loadAISettings();
-            if (!settings || !settings.apiType) {
-                console.error(" KPOP-PET-test [DIAGNOSE] ❌ Could not load AI settings.");
-                statusElement.text('诊断失败: 无法加载设置').css('color', '#f56565');
-                return;
-            }
-            console.log(" KPOP-PET-test [DIAGNOSE] ✅ Settings loaded:", settings);
-
-            if (settings.apiType !== 'google') {
-                console.error(` KPOP-PET-test [DIAGNOSE] ❌ Test is for Google API, but current type is '${settings.apiType}'.`);
-                statusElement.text(`诊断失败: API类型不是Google`).css('color', '#f56565');
-                return;
-            }
-
-            // Step 2: Resolve Target URL
-            console.log(" KPOP-PET-test [DIAGNOSE] Step 2: Resolving target URL...");
-            let targetApiUrl = settings.apiUrl.replace(/\/+$/, '');
-            let modelName = settings.apiModel || 'gemini-1.5-flash';
-            if (modelName.startsWith('models/')) {
-                modelName = modelName.replace('models/', '');
-            }
-            if (!targetApiUrl.includes(':generateContent')) {
-                 if (targetApiUrl.endsWith('/v1beta')) {
-                    targetApiUrl += `/models/${modelName}:generateContent`;
-                } else if (!targetApiUrl.includes('/v1beta')) {
-                    targetApiUrl += `/v1beta/models/${modelName}:generateContent`;
-                } else {
-                    targetApiUrl += `/models/${modelName}:generateContent`;
-                }
-            }
-            if (!/[?&]key=/.test(targetApiUrl)) {
-                targetApiUrl += (targetApiUrl.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(settings.apiKey);
-            }
-            console.log(" KPOP-PET-test [DIAGNOSE] ✅ Target URL resolved:", targetApiUrl);
-
-            // Step 3: Build Headers
-            console.log(" KPOP-PET-test [DIAGNOSE] Step 3: Building request headers...");
-            const headers = { 'Content-Type': 'application/json' };
-            console.log(" KPOP-PET-test [DIAGNOSE] ✅ Headers built:", headers);
-
-            // Step 4: Build Request Body
-            console.log(" KPOP-PET-test [DIAGNOSE] Step 4: Building request body...");
-            const testPrompt = "请只回复'测试成功'";
-            const requestBody = {
-                contents: [{ parts: [{ text: testPrompt }] }],
-                generationConfig: { maxOutputTokens: 64, temperature: 0.2 }
-            };
-            console.log(" KPOP-PET-test [DIAGNOSE] ✅ Request body built:", requestBody);
-
-            // Step 5: Fetch Request
-            console.log(" KPOP-PET-test [DIAGNOSE] Step 5: Sending fetch request...");
-            statusElement.text('🔄 诊断中...').css('color', '#ffa500');
-            const response = await fetch(targetApiUrl, {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify(requestBody),
-                signal: AbortSignal.timeout(15000) // 15s timeout
-            });
-            console.log(" KPOP-PET-test [DIAGNOSE] ✅ Fetch response received. Status:", response.status);
-
-            const responseText = await response.text();
-            console.log(" KPOP-PET-test [DIAGNOSE] ✅ Response body (text):", responseText);
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${responseText}`);
-            }
-
-            // Step 6: Parse Response
-            console.log(" KPOP-PET-test [DIAGNOSE] Step 6: Parsing JSON response...");
-            const data = JSON.parse(responseText);
-            console.log(" KPOP-PET-test [DIAGNOSE] ✅ Response JSON parsed:", data);
-
-            const aiReply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (aiReply) {
-                console.log(` KPOP-PET-test [DIAGNOSE] ✅ SUCCESS! AI Reply: ${aiReply}`);
-                statusElement.text('诊断成功: API连接正常').css('color', '#48bb78');
-            } else {
-                throw new Error("Could not find AI reply in response JSON.");
-            }
-
-        } catch (error) {
-            console.error(" KPOP-PET-test [DIAGNOSE] ❌ An error occurred during diagnosis:", error);
-            statusElement.text(`诊断失败: ${error.message}`).css('color', '#f56565');
-        }
-    };
 }); // jQuery ready end

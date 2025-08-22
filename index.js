@@ -15689,8 +15689,6 @@ async function createNewChatSession(){
 
     console.log("[VirtualPet] 虚拟宠物系统脚本已加载完成");
     console.log("🎲 智能初始化系统：首次打开随机化到50以下，后续自然衰减到100");
-}); // jQuery ready end
-
 
     // 诊断Google API连接的专用测试函数
     window.diagnoseGoogleAPI = async function() {
@@ -15785,3 +15783,4 @@ async function createNewChatSession(){
             statusElement.text(`诊断失败: ${error.message}`).css('color', '#f56565');
         }
     };
+}); // jQuery ready end

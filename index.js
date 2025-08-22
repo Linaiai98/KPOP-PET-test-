@@ -13749,6 +13749,7 @@ async function createNewChatSession(){
 
         const apiUrl = $('#ai-url-input').val();
         const apiKey = $('#ai-key-input').val();
+        const apiType = $('#ai-api-select').val() || 'openai'; // 默认为openai
 
         if (!apiUrl) {
             console.log("❌ 未配置API URL");
@@ -13757,83 +13758,34 @@ async function createNewChatSession(){
 
         console.log(`🔗 API URL: ${apiUrl}`);
         console.log(`🔑 API Key: ${apiKey ? '已设置' : '未设置'}`);
-
-        // 构建模型列表端点
-        let modelsEndpoint = apiUrl;
-        if (!modelsEndpoint.endsWith('/models')) {
-            if (modelsEndpoint.endsWith('/')) {
-                modelsEndpoint += 'models';
-            } else {
-                modelsEndpoint += '/models';
-            }
-        }
-
-        console.log(`📡 尝试获取模型列表: ${modelsEndpoint}`);
+        console.log(`🤖 API 类型: ${apiType}`);
 
         try {
-            const headers = {
-                'Content-Type': 'application/json'
-            };
-
-            // 添加认证头
-            if (apiKey) {
-                headers['Authorization'] = `Bearer ${apiKey}`;
-            }
-
-            const response = await fetch(modelsEndpoint, {
-                method: 'GET',
-                headers: headers,
-                signal: AbortSignal.timeout(15000) // 15秒超时
+            const models = await AIConnector.fetchModels({
+                apiType: apiType,
+                apiUrl: apiUrl,
+                apiKey: apiKey
             });
 
-            if (response.ok) {
-                const data = await response.json();
-                console.log(`✅ 成功获取模型列表:`, data);
-
-                // 解析模型数据
-                let models = [];
-                if (data.data && Array.isArray(data.data)) {
-                    // OpenAI格式
-                    models = data.data.map(model => ({
-                        id: model.id,
-                        name: model.id,
-                        type: 'user_configured',
-                        status: 'available',
-                        source: modelsEndpoint,
-                        provider: '用户配置API'
-                    }));
-                } else if (data.models && Array.isArray(data.models)) {
-                    // 其他格式
-                    models = data.models.map(model => ({
-                        id: typeof model === 'string' ? model : model.id || model.name,
-                        name: typeof model === 'string' ? model : model.id || model.name,
-                        type: 'user_configured',
-                        status: 'available',
-                        source: modelsEndpoint,
-                        provider: '用户配置API'
-                    }));
-                }
-
-                console.log(`📋 解析出 ${models.length} 个模型:`, models.map(m => m.name));
-                return models;
-
+            if (models && models.length > 0) {
+                console.log(`✅ 成功获取并解析了 ${models.length} 个模型:`, models);
+                // 统一模型对象结构
+                return models.map(model => ({
+                    id: model.id,
+                    name: model.name || model.id,
+                    type: 'user_configured',
+                    provider: apiType
+                }));
             } else {
-                console.log(`❌ 获取模型列表失败: HTTP ${response.status}`);
-
-                // 尝试读取错误信息
-                try {
-                    const errorText = await response.text();
-                    console.log(`错误详情:`, errorText.substring(0, 200));
-                } catch (e) {
-                    console.log(`无法读取错误详情`);
-                }
-
-                return [];
+                console.log("🤷‍♂️ 未能从API获取到任何模型，将返回推荐模型列表。");
+                showNotification('未能从您的API获取模型，将显示推荐模型。', 'info');
+                return getRecommendedModels(apiType).map(m => ({ ...m, type: 'recommended' }));
             }
-
         } catch (error) {
-            console.log(`❌ 请求失败: ${error.message}`);
-            return [];
+            logDetailedError('获取用户配置模型失败', { apiUrl, apiType }, error);
+            showNotification(`获取模型失败: ${error.message}`, 'error');
+            console.log("↪️ 自动回退到推荐模型列表。");
+            return getRecommendedModels(apiType).map(m => ({ ...m, type: 'recommended' }));
         }
     };
 
@@ -15287,35 +15239,7 @@ async function createNewChatSession(){
         console.log('\n💡 基于你的日志，问题是choices[0].message.content为空字符串');
         console.log('🔍 让我们检查choices[0]的完整结构...');
 
-        // 模拟你的响应数据进行分析
-        const mockResponse = {
-            id: 'chatcmpl-20250708132707348110513aE2tFtcY',
-            model: 'gemini-2.5-pro-preview-06-05',
-            object: 'chat.completion',
-            created: 1751952430,
-            choices: [{
-                // 这里可能有其他字段
-                message: {
-                    content: '', // 这个是空的
-                    // 可能还有其他字段
-                },
-                // 可能还有其他字段
-            }]
-        };
 
-        console.log('🧪 分析可能的响应结构...');
-        console.log('如果choices[0].message.content是空的，可能的原因：');
-        console.log('1. 内容在choices[0].message.text字段');
-        console.log('2. 内容在choices[0].text字段');
-        console.log('3. 内容在choices[0].content字段');
-        console.log('4. 内容在choices[0].delta.content字段');
-        console.log('5. API返回了空内容（可能是模型问题）');
-
-        console.log('\n🔧 建议的修复方案：');
-        console.log('1. 再次运行testThirdPartyAPI()查看详细日志');
-        console.log('2. 检查你的API提供商文档');
-        console.log('3. 尝试不同的模型名称');
-        console.log('4. 检查API配额和权限');
 
         toastr.info('请查看控制台的详细分析', '🔧 快速修复', { timeOut: 5000 });
 
